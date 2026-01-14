@@ -1,0 +1,34 @@
+services:
+  mailpilot:
+    image: ghcr.io/youruser/mailpilot:latest
+    # Or build locally:
+    # build: .
+    container_name: mailpilot
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - NODE_ENV=production
+      - LLM_OPENAI_API_KEY=${LLM_OPENAI_API_KEY}
+      - STATUS_API_TOKEN=${STATUS_API_TOKEN}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

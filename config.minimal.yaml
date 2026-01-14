@@ -1,0 +1,15 @@
+# Minimal Mailpilot configuration
+# Copy to config.yaml and fill in your credentials
+
+llm_providers:
+  - name: openai
+    api_url: https://api.openai.com/v1/chat/completions
+    api_key: ${OPENAI_API_KEY}  # or paste key directly
+    default_model: gpt-4o-mini
+
+accounts:
+  - name: my-email
+    imap:
+      host: imap.gmail.com      # change to your provider
+      username: you@example.com
+      password: ${EMAIL_PASSWORD}  # or paste app password

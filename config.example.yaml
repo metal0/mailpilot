@@ -1,0 +1,110 @@
+# Mailpilot Configuration Example
+# Copy to config.yaml and customize for your setup
+
+# Global settings
+polling_interval: 30s     # used when IDLE not supported
+concurrency_limit: 5      # emails processed in parallel per account
+dry_run: false            # log actions without executing
+
+# Backlog handling on startup
+backlog:
+  mode: new_only  # all | recent_count | recent_days | new_only
+  # count: 100    # for recent_count mode: process last N emails
+  # age: 7d       # for recent_days mode: process emails from last N days
+
+# State management
+state:
+  database_path: ./data/mailpilot.db
+  processed_ttl: 24h       # how long to remember processed message IDs
+  audit_retention: 30d     # how long to keep action audit log
+  audit_subjects: false    # store email subjects in audit table (privacy tradeoff)
+
+# =============================================================================
+# LLM PROVIDERS
+# =============================================================================
+
+llm_providers:
+  # OpenAI GPT-4o-mini (fast, cheap, good for most use cases)
+  - name: openai
+    api_url: https://api.openai.com/v1/chat/completions
+    api_key: ${LLM_OPENAI_API_KEY}
+    default_model: gpt-4o-mini
+    max_body_tokens: 4000
+    max_thread_tokens: 2000
+    rate_limit_rpm: 60
+
+  # Local Ollama (no API key needed, runs locally)
+  # - name: ollama
+  #   api_url: http://localhost:11434/v1/chat/completions
+  #   default_model: llama3.2
+  #   max_body_tokens: 4000
+  #   max_thread_tokens: 2000
+
+# Global default prompt
+default_prompt: |
+  You are an email classifier. Analyze the email and decide what action to take.
+  Categorize emails into appropriate folders based on their content and sender.
+
+  Guidelines:
+  - Use noop if unsure where to put an email
+  - Never delete emails unless they are obvious spam
+  - Provide a reason for each action
+
+# Logging configuration
+logging:
+  level: info              # debug | info | warn | error
+  # file: ./logs/mailpilot.log  # optional file logging
+  include_subjects: false  # log subjects at debug level
+
+# HTTP server for health/status
+server:
+  port: 8080
+  auth_token: ${STATUS_API_TOKEN}  # required for /status endpoint
+
+# Antivirus scanning (optional, requires ClamAV daemon)
+antivirus:
+  enabled: false
+  host: localhost
+  port: 3310
+  timeout: 30s
+  on_virus_detected: quarantine  # quarantine | delete | flag_only
+
+# =============================================================================
+# ACCOUNTS
+# =============================================================================
+
+accounts:
+  # Gmail account example
+  - name: personal-gmail
+    imap:
+      host: imap.gmail.com
+      port: 993
+      tls: auto
+      auth: basic
+      username: ${GMAIL_USER}
+      password: ${GMAIL_APP_PASSWORD}  # Use app-specific password
+
+    llm:
+      provider: openai
+      model: gpt-4o-mini  # override provider default
+
+    folders:
+      watch: [INBOX]
+      mode: predefined
+      allowed:
+        - Work
+        - Personal
+        - Finance
+        - Newsletters
+        - Archive
+
+    # Optional webhooks for this account
+    # webhooks:
+    #   - url: https://your-webhook.example.com/mailpilot
+    #     events: [error, action_taken]
+    #     headers:
+    #       Authorization: Bearer ${WEBHOOK_TOKEN}
+
+    # Optional prompt override for this account
+    # prompt_override: |
+    #   Custom classification rules for this account...
