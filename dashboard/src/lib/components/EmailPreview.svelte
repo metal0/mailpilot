@@ -4,6 +4,7 @@
   import type { EmailPreview as EmailPreviewType } from "../api";
   import * as api from "../api";
   import { addToast } from "../stores/toast";
+  import { t } from "../i18n";
 
   interface Props {
     entry: AuditEntry;
@@ -50,8 +51,8 @@
 <div class="modal-backdrop" onclick={handleBackdropClick} onkeydown={handleKeydown} role="dialog" aria-modal="true" tabindex="-1">
   <div class="modal">
     <div class="modal-header">
-      <h2 class="modal-title">Email Details</h2>
-      <button class="close-btn" onclick={onclose} aria-label="Close">
+      <h2 class="modal-title">{$t("emailPreview.title")}</h2>
+      <button class="close-btn" onclick={onclose} aria-label={$t("common.close")}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="18" y1="6" x2="6" y2="18" />
           <line x1="6" y1="6" x2="18" y2="18" />
@@ -61,52 +62,52 @@
 
     <div class="modal-body">
       {#if loading}
-        <div class="loading">Loading...</div>
+        <div class="loading">{$t("common.loading")}</div>
       {:else if error}
         <div class="error">{error}</div>
       {:else}
         <div class="email-details">
           <div class="detail-row">
-            <span class="detail-label">Message ID:</span>
+            <span class="detail-label">{$t("emailPreview.messageId")}:</span>
             <span class="detail-value mono">{entry.messageId}</span>
           </div>
 
           <div class="detail-row">
-            <span class="detail-label">Account:</span>
+            <span class="detail-label">{$t("emailPreview.account")}:</span>
             <span class="detail-value">{entry.accountName}</span>
           </div>
 
           <div class="detail-row">
-            <span class="detail-label">Time:</span>
+            <span class="detail-label">{$t("emailPreview.time")}:</span>
             <span class="detail-value">{formatTime(entry.createdAt)}</span>
           </div>
 
           {#if entry.subject}
             <div class="detail-row">
-              <span class="detail-label">Subject:</span>
+              <span class="detail-label">{$t("emailPreview.subject")}:</span>
               <span class="detail-value">{entry.subject}</span>
             </div>
           {/if}
 
           <div class="detail-row">
-            <span class="detail-label">LLM:</span>
+            <span class="detail-label">{$t("emailPreview.llm")}:</span>
             <span class="detail-value">{entry.llmProvider ?? "-"} / {entry.llmModel ?? "-"}</span>
           </div>
 
           <div class="detail-section">
-            <h3 class="section-title">Actions Taken</h3>
+            <h3 class="section-title">{$t("emailPreview.actionsTaken")}</h3>
             <div class="actions-list">
               {#each entry.actions as action}
                 <div class="action-item">
                   <span class="action-type">{action.type}</span>
                   {#if action.folder}
-                    <span class="action-detail">Folder: {action.folder}</span>
+                    <span class="action-detail">{$t("emailPreview.folder")}: {action.folder}</span>
                   {/if}
                   {#if action.flags}
-                    <span class="action-detail">Flags: {action.flags.join(", ")}</span>
+                    <span class="action-detail">{$t("emailPreview.flags")}: {action.flags.join(", ")}</span>
                   {/if}
                   {#if action.reason}
-                    <span class="action-detail">Reason: {action.reason}</span>
+                    <span class="action-detail">{$t("emailPreview.reason")}: {action.reason}</span>
                   {/if}
                 </div>
               {/each}
@@ -115,14 +116,14 @@
 
           {#if email?.body}
             <div class="detail-section">
-              <h3 class="section-title">Email Body</h3>
+              <h3 class="section-title">{$t("emailPreview.body")}</h3>
               <pre class="email-body">{email.body}</pre>
             </div>
           {/if}
 
           {#if email?.attachments && email.attachments.length > 0}
             <div class="detail-section">
-              <h3 class="section-title">Attachments</h3>
+              <h3 class="section-title">{$t("emailPreview.attachments")}</h3>
               <ul class="attachments-list">
                 {#each email.attachments as att}
                   <li>{att.filename} ({(att.size / 1024).toFixed(1)} KB)</li>

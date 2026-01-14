@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import * as api from "../api";
   import { stats, serviceStatus, type ServicesStatus } from "../stores/data";
+  import { t } from "../i18n";
 
   interface Config {
     polling_interval?: string;
@@ -80,12 +81,49 @@
   }
 
   let config = $state<Config | null>(null);
+  let originalConfig = $state<string>(""); // JSON string for deep comparison
   let configPath = $state<string>("");
   let loading = $state(true);
   let saving = $state(false);
   let error = $state<string | null>(null);
   let saveMessage = $state<{ type: "success" | "error"; text: string } | null>(null);
   let activeSection = $state<string>("global");
+
+  // Track unsaved changes
+  const hasChanges = $derived(() => {
+    if (!config || !originalConfig) return false;
+    return JSON.stringify(config) !== originalConfig;
+  });
+
+  const changeCount = $derived(() => {
+    if (!config || !originalConfig) return 0;
+    try {
+      const original = JSON.parse(originalConfig) as Config;
+      let count = 0;
+
+      // Compare top-level simple fields
+      if (config.polling_interval !== original.polling_interval) count++;
+      if (config.concurrency_limit !== original.concurrency_limit) count++;
+      if (config.dry_run !== original.dry_run) count++;
+      if (config.add_processing_headers !== original.add_processing_headers) count++;
+      if (config.default_prompt !== original.default_prompt) count++;
+
+      // Compare nested objects
+      if (JSON.stringify(config.logging) !== JSON.stringify(original.logging)) count++;
+      if (JSON.stringify(config.server) !== JSON.stringify(original.server)) count++;
+      if (JSON.stringify(config.dashboard) !== JSON.stringify(original.dashboard)) count++;
+      if (JSON.stringify(config.attachments) !== JSON.stringify(original.attachments)) count++;
+      if (JSON.stringify(config.antivirus) !== JSON.stringify(original.antivirus)) count++;
+
+      // Compare arrays
+      if (JSON.stringify(config.accounts) !== JSON.stringify(original.accounts)) count++;
+      if (JSON.stringify(config.llm_providers) !== JSON.stringify(original.llm_providers)) count++;
+
+      return count;
+    } catch {
+      return 0;
+    }
+  });
 
   // YAML editor state
   let yamlMode = $state(false);
@@ -105,14 +143,7 @@
   let showPortWarning = $state(false);
   let pendingPortChange = $state<number | null>(null);
 
-  const sections = [
-    { id: "global", label: "Global Settings", icon: "cog" },
-    { id: "accounts", label: "Email Accounts", icon: "mail" },
-    { id: "providers", label: "LLM Providers", icon: "cpu" },
-    { id: "attachments", label: "Attachments", icon: "paperclip" },
-    { id: "antivirus", label: "Antivirus", icon: "shield" },
-    { id: "dashboard", label: "Dashboard", icon: "layout" },
-  ];
+  const sectionIds = ["global", "accounts", "providers", "attachments", "antivirus", "dashboard"] as const;
 
   const helpTexts: Record<string, string> = {
     polling_interval: "How often to check for new emails when IDLE is not supported (e.g., 30s, 5m)",
@@ -188,6 +219,7 @@
       loadedConfig.antivirus = loadedConfig.antivirus ?? { enabled: false };
 
       config = loadedConfig;
+      originalConfig = JSON.stringify(loadedConfig);
       configPath = result.configPath;
       originalPort = loadedConfig.server.port ?? 8080;
     } catch (e) {
@@ -216,19 +248,23 @@
     try {
       const result = await api.saveConfig(config);
       if (result.success) {
+        // Update original config to reflect saved state
+        originalConfig = JSON.stringify(config);
+        originalPort = config.server?.port ?? 8080;
+
         if (portChanged) {
-          saveMessage = { type: "success", text: "Configuration saved. Restart the server for port change to take effect." };
+          saveMessage = { type: "success", text: $t("settings.savedNeedsRestart") };
         } else {
-          saveMessage = { type: "success", text: "Configuration saved and reloaded successfully" };
+          saveMessage = { type: "success", text: $t("settings.saved") };
           // Refresh stats
           const newStats = await api.fetchStats();
           stats.set(newStats);
         }
       } else {
-        saveMessage = { type: "error", text: "Failed to save configuration" };
+        saveMessage = { type: "error", text: $t("settings.saveError") };
       }
     } catch (e) {
-      saveMessage = { type: "error", text: e instanceof Error ? e.message : "Failed to save" };
+      saveMessage = { type: "error", text: e instanceof Error ? e.message : $t("settings.saveError") };
     } finally {
       saving = false;
       showPortWarning = false;
@@ -368,18 +404,14 @@
     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
     <div class="modal modal-warning" onclick={(e) => e.stopPropagation()}>
       <div class="warning-icon">&#9888;</div>
-      <h3>Port Change Warning</h3>
+      <h3>{$t("settings.portWarning.title")}</h3>
       <p>
-        You are changing the server port from <strong>{originalPort}</strong> to <strong>{pendingPortChange}</strong>.
-      </p>
-      <p class="warning-text">
-        Port changes require a <strong>manual server restart</strong> to take effect.
-        After restarting the server, navigate to:
+        {$t("settings.portWarning.message")}
       </p>
       <code class="new-url">{`${window.location.protocol}//${window.location.hostname}:${pendingPortChange}`}</code>
       <div class="modal-actions">
-        <button class="btn btn-secondary" onclick={cancelPortChange}>Cancel</button>
-        <button class="btn btn-warning" onclick={confirmPortChange}>Change Port</button>
+        <button class="btn btn-secondary" onclick={cancelPortChange}>{$t("common.cancel")}</button>
+        <button class="btn btn-warning" onclick={confirmPortChange}>{$t("settings.portWarning.confirm")}</button>
       </div>
     </div>
   </div>
@@ -387,7 +419,7 @@
 
 <div class="settings">
   <div class="settings-header">
-    <h2>Configuration</h2>
+    <h2>{$t("settings.title")}</h2>
     {#if configPath}
       <div class="config-path-row">
         <span class="config-path">{configPath}</span>
@@ -396,36 +428,40 @@
           class:btn-active={yamlMode}
           onclick={toggleYamlMode}
           disabled={yamlLoading || saving}
-          title={yamlMode ? "Switch to form editor" : "Edit raw YAML"}
+          title={yamlMode ? $t("settings.backToForm") : $t("settings.editYaml")}
         >
-          {yamlLoading ? "Loading..." : yamlMode ? "Form View" : "YAML View"}
+          {yamlLoading ? $t("common.loading") : yamlMode ? $t("settings.backToForm") : $t("settings.editYaml")}
         </button>
       </div>
     {/if}
     <div class="header-actions">
       {#if saveMessage}
         <span class="save-message save-{saveMessage.type}">{saveMessage.text}</span>
+      {:else if !yamlMode && hasChanges()}
+        <span class="unsaved-indicator">
+          {$t("settings.unsavedChanges")} ({changeCount()})
+        </span>
       {/if}
       {#if yamlMode}
         <button class="btn btn-primary" onclick={handleYamlSave} disabled={saving || yamlLoading}>
-          {saving ? "Saving..." : "Save YAML"}
+          {saving ? $t("settings.saving") : $t("common.save")}
         </button>
       {:else}
-        <button class="btn btn-primary" onclick={handleSave} disabled={saving || loading}>
-          {saving ? "Saving..." : "Save & Reload"}
+        <button class="btn btn-primary" onclick={handleSave} disabled={saving || loading || !hasChanges()}>
+          {saving ? $t("settings.saving") : $t("settings.saveChanges")}
         </button>
       {/if}
     </div>
   </div>
 
   {#if loading}
-    <div class="loading">Loading configuration...</div>
+    <div class="loading">{$t("common.loading")}</div>
   {:else if error}
     <div class="error">{error}</div>
   {:else if yamlMode}
     <div class="yaml-editor-container">
       <div class="yaml-warning">
-        Warning: Editing raw YAML may break your configuration if syntax is invalid. Secrets are visible.
+        {$t("settings.yaml.warning")}
       </div>
       <textarea
         class="yaml-editor"
@@ -437,13 +473,13 @@
   {:else if config}
     <div class="settings-layout">
       <nav class="settings-nav">
-        {#each sections as section}
+        {#each sectionIds as sectionId}
           <button
             class="nav-item"
-            class:active={activeSection === section.id}
-            onclick={() => activeSection = section.id}
+            class:active={activeSection === sectionId}
+            onclick={() => activeSection = sectionId}
           >
-            {section.label}
+            {$t(`settings.sections.${sectionId}`)}
           </button>
         {/each}
       </nav>
@@ -451,12 +487,12 @@
       <div class="settings-content">
         {#if activeSection === "global"}
           <section class="config-section">
-            <h3>Global Settings</h3>
+            <h3>{$t("settings.general")}</h3>
 
             <div class="form-group">
               <label>
                 <span class="label-text">
-                  Polling Interval
+                  {$t("settings.global.pollingInterval")}
                   <span class="help-icon" title={helpTexts.polling_interval}>?</span>
                 </span>
                 <input type="text" bind:value={config.polling_interval} placeholder="30s" />
@@ -466,7 +502,7 @@
             <div class="form-group">
               <label>
                 <span class="label-text">
-                  Concurrency Limit
+                  {$t("settings.general.concurrencyLimit")}
                   <span class="help-icon" title={helpTexts.concurrency_limit}>?</span>
                 </span>
                 <input type="number" bind:value={config.concurrency_limit} min="1" max="20" />
@@ -477,7 +513,7 @@
               <label>
                 <input type="checkbox" bind:checked={config.dry_run} />
                 <span class="label-text">
-                  Dry Run Mode
+                  {$t("settings.global.dryRunMode")}
                   <span class="help-icon" title={helpTexts.dry_run}>?</span>
                 </span>
               </label>
@@ -487,7 +523,7 @@
               <label>
                 <input type="checkbox" bind:checked={config.add_processing_headers} />
                 <span class="label-text">
-                  Add Processing Headers
+                  {$t("settings.global.addProcessingHeadersLabel")}
                   <span class="help-icon" title={helpTexts.add_processing_headers}>?</span>
                 </span>
               </label>
@@ -496,7 +532,7 @@
             <div class="form-group">
               <label>
                 <span class="label-text">
-                  Log Level
+                  {$t("settings.global.logLevel")}
                   <span class="help-icon" title={helpTexts["logging.level"]}>?</span>
                 </span>
                 <select
@@ -507,10 +543,10 @@
                     config = { ...config };
                   }}
                 >
-                  <option value="debug">Debug</option>
-                  <option value="info">Info</option>
-                  <option value="warn">Warning</option>
-                  <option value="error">Error</option>
+                  <option value="debug">{$t("logs.debug")}</option>
+                  <option value="info">{$t("logs.info")}</option>
+                  <option value="warn">{$t("logs.warn")}</option>
+                  <option value="error">{$t("logs.error")}</option>
                 </select>
               </label>
             </div>
@@ -518,7 +554,7 @@
             <div class="form-group">
               <label>
                 <span class="label-text">
-                  Server Port
+                  {$t("settings.global.serverPort")}
                   <span class="help-icon" title={helpTexts["server.port"]}>?</span>
                 </span>
                 <input
@@ -534,14 +570,14 @@
               </label>
             </div>
 
-            <h4>Default Prompt</h4>
+            <h4>{$t("settings.global.defaultPromptLabel")}</h4>
             <div class="form-group">
               <label>
                 <span class="label-text">
-                  Classification Prompt
+                  {$t("settings.global.classificationPrompt")}
                   <span class="help-icon" title={helpTexts.default_prompt}>?</span>
                 </span>
-                <textarea bind:value={config.default_prompt} rows="8" placeholder="Enter your classification prompt..."></textarea>
+                <textarea bind:value={config.default_prompt} rows="8" placeholder={$t("settings.prompt.placeholder")}></textarea>
               </label>
             </div>
           </section>
@@ -549,33 +585,33 @@
         {:else if activeSection === "accounts"}
           <section class="config-section">
             <div class="section-header">
-              <h3>Email Accounts</h3>
-              <button class="btn btn-secondary btn-sm" onclick={addAccount}>+ Add Account</button>
+              <h3>{$t("settings.accounts")}</h3>
+              <button class="btn btn-secondary btn-sm" onclick={addAccount}>+ {$t("settings.accounts.add")}</button>
             </div>
 
             {#if editingAccount}
               <div class="modal-overlay" onclick={() => editingAccount = null}>
                 <div class="modal" onclick={(e) => e.stopPropagation()}>
-                  <h3>{editingAccount.name ? `Edit ${editingAccount.name}` : "New Account"}</h3>
+                  <h3>{editingAccount.name ? $t("settings.accounts.editAccountTitle", { name: editingAccount.name }) : $t("settings.accounts.newAccount")}</h3>
 
                   <div class="form-group">
                     <label>
-                      <span class="label-text">Account Name</span>
+                      <span class="label-text">{$t("settings.accounts.name")}</span>
                       <input type="text" bind:value={editingAccount.name} placeholder="personal-gmail" />
                     </label>
                   </div>
 
-                  <h4>IMAP Settings</h4>
+                  <h4>{$t("settings.accounts.imapSettings")}</h4>
                   <div class="form-row">
                     <div class="form-group">
                       <label>
-                        <span class="label-text">Host <span class="help-icon" title={helpTexts["imap.host"]}>?</span></span>
+                        <span class="label-text">{$t("settings.accounts.host")} <span class="help-icon" title={helpTexts["imap.host"]}>?</span></span>
                         <input type="text" bind:value={editingAccount.imap.host} placeholder="imap.gmail.com" />
                       </label>
                     </div>
                     <div class="form-group">
                       <label>
-                        <span class="label-text">Port <span class="help-icon" title={helpTexts["imap.port"]}>?</span></span>
+                        <span class="label-text">{$t("settings.accounts.port")} <span class="help-icon" title={helpTexts["imap.port"]}>?</span></span>
                         <input type="number" bind:value={editingAccount.imap.port} placeholder="993" />
                       </label>
                     </div>
@@ -584,21 +620,21 @@
                   <div class="form-row">
                     <div class="form-group">
                       <label>
-                        <span class="label-text">TLS Mode <span class="help-icon" title={helpTexts["imap.tls"]}>?</span></span>
+                        <span class="label-text">{$t("settings.accounts.tlsMode")} <span class="help-icon" title={helpTexts["imap.tls"]}>?</span></span>
                         <select bind:value={editingAccount.imap.tls}>
-                          <option value="auto">Auto</option>
-                          <option value="tls">TLS</option>
-                          <option value="starttls">STARTTLS</option>
-                          <option value="insecure">Insecure</option>
+                          <option value="auto">{$t("settings.accounts.tlsAuto")}</option>
+                          <option value="tls">{$t("settings.accounts.tlsTls")}</option>
+                          <option value="starttls">{$t("settings.accounts.tlsStarttls")}</option>
+                          <option value="insecure">{$t("settings.accounts.tlsInsecure")}</option>
                         </select>
                       </label>
                     </div>
                     <div class="form-group">
                       <label>
-                        <span class="label-text">Auth Type <span class="help-icon" title={helpTexts["imap.auth"]}>?</span></span>
+                        <span class="label-text">{$t("settings.accounts.authTypeLabel")} <span class="help-icon" title={helpTexts["imap.auth"]}>?</span></span>
                         <select bind:value={editingAccount.imap.auth}>
-                          <option value="basic">Basic (Password)</option>
-                          <option value="oauth2">OAuth2</option>
+                          <option value="basic">{$t("settings.accounts.authBasic")}</option>
+                          <option value="oauth2">{$t("settings.accounts.authOauth2")}</option>
                         </select>
                       </label>
                     </div>
@@ -606,7 +642,7 @@
 
                   <div class="form-group">
                     <label>
-                      <span class="label-text">Username <span class="help-icon" title={helpTexts["imap.username"]}>?</span></span>
+                      <span class="label-text">{$t("settings.accounts.user")} <span class="help-icon" title={helpTexts["imap.username"]}>?</span></span>
                       <input type="text" bind:value={editingAccount.imap.username} placeholder="user@gmail.com" />
                     </label>
                   </div>
@@ -614,35 +650,35 @@
                   {#if editingAccount.imap.auth === "basic"}
                     <div class="form-group">
                       <label>
-                        <span class="label-text">Password <span class="help-icon" title={helpTexts["imap.password"]}>?</span></span>
-                        <input type="password" bind:value={editingAccount.imap.password} placeholder="Enter password or app-specific password" />
+                        <span class="label-text">{$t("settings.accounts.password")} <span class="help-icon" title={helpTexts["imap.password"]}>?</span></span>
+                        <input type="password" bind:value={editingAccount.imap.password} placeholder={$t("settings.accounts.passwordHelp")} />
                       </label>
                     </div>
                   {:else}
                     <div class="form-group">
                       <label>
-                        <span class="label-text">OAuth Client ID</span>
+                        <span class="label-text">{$t("settings.accounts.clientId")}</span>
                         <input type="text" bind:value={editingAccount.imap.oauth_client_id} />
                       </label>
                     </div>
                     <div class="form-group">
                       <label>
-                        <span class="label-text">OAuth Client Secret</span>
+                        <span class="label-text">{$t("settings.accounts.clientSecret")}</span>
                         <input type="password" bind:value={editingAccount.imap.oauth_client_secret} />
                       </label>
                     </div>
                     <div class="form-group">
                       <label>
-                        <span class="label-text">OAuth Refresh Token</span>
+                        <span class="label-text">{$t("settings.accounts.refreshToken")}</span>
                         <input type="password" bind:value={editingAccount.imap.oauth_refresh_token} />
                       </label>
                     </div>
                   {/if}
 
-                  <h4>Folders</h4>
+                  <h4>{$t("settings.accounts.foldersSection")}</h4>
                   <div class="form-group">
                     <label>
-                      <span class="label-text">Watch Folders <span class="help-icon" title={helpTexts["folders.watch"]}>?</span></span>
+                      <span class="label-text">{$t("settings.accounts.watchFolders")} <span class="help-icon" title={helpTexts["folders.watch"]}>?</span></span>
                       <input
                         type="text"
                         value={editingAccount.folders?.watch?.join(", ") ?? "INBOX"}
@@ -657,7 +693,7 @@
                   <div class="form-row">
                     <div class="form-group">
                       <label>
-                        <span class="label-text">Folder Mode <span class="help-icon" title={helpTexts["folders.mode"]}>?</span></span>
+                        <span class="label-text">{$t("settings.accounts.folderMode")} <span class="help-icon" title={helpTexts["folders.mode"]}>?</span></span>
                         <select
                           value={editingAccount.folders?.mode ?? "predefined"}
                           onchange={(e) => {
@@ -665,15 +701,15 @@
                             editingAccount!.folders.mode = (e.target as HTMLSelectElement).value;
                           }}
                         >
-                          <option value="predefined">Predefined only</option>
-                          <option value="auto_create">Auto-create folders</option>
+                          <option value="predefined">{$t("settings.accounts.predefinedOnly")}</option>
+                          <option value="auto_create">{$t("settings.accounts.autoCreateFolders")}</option>
                         </select>
                       </label>
                     </div>
                     {#if (editingAccount.folders?.mode ?? "predefined") === "predefined"}
                       <div class="form-group">
                         <label>
-                          <span class="label-text">Allowed Folders <span class="help-icon" title={helpTexts["folders.allowed"]}>?</span></span>
+                          <span class="label-text">{$t("settings.accounts.allowedFolders")} <span class="help-icon" title={helpTexts["folders.allowed"]}>?</span></span>
                           <input
                             type="text"
                             value={editingAccount.folders?.allowed?.join(", ") ?? ""}
@@ -686,17 +722,17 @@
                           />
                         </label>
                         {#if !editingAccount.folders?.allowed || editingAccount.folders.allowed.length === 0}
-                          <div class="info-note">All existing folders will be auto-discovered via IMAP</div>
+                          <div class="info-note">{$t("settings.accounts.autoDiscoverNote")}</div>
                         {/if}
                       </div>
                     {/if}
                   </div>
 
-                  <h4>LLM Settings</h4>
+                  <h4>{$t("settings.accounts.llmSettings")}</h4>
                   <div class="form-row">
                     <div class="form-group">
                       <label>
-                        <span class="label-text">Provider <span class="help-icon" title={helpTexts["llm.provider"]}>?</span></span>
+                        <span class="label-text">{$t("settings.accounts.provider")} <span class="help-icon" title={helpTexts["llm.provider"]}>?</span></span>
                         <select
                           value={editingAccount.llm?.provider ?? ""}
                           onchange={(e) => {
@@ -704,7 +740,7 @@
                             editingAccount!.llm.provider = (e.target as HTMLSelectElement).value || undefined;
                           }}
                         >
-                          <option value="">Default</option>
+                          <option value="">{$t("settings.accounts.default")}</option>
                           {#each config?.llm_providers ?? [] as provider}
                             <option value={provider.name}>{provider.name}</option>
                           {/each}
@@ -713,7 +749,7 @@
                     </div>
                     <div class="form-group">
                       <label>
-                        <span class="label-text">Model <span class="help-icon" title={helpTexts["llm.model"]}>?</span></span>
+                        <span class="label-text">{$t("settings.accounts.model")} <span class="help-icon" title={helpTexts["llm.model"]}>?</span></span>
                         <input
                           type="text"
                           value={editingAccount.llm?.model ?? ""}
@@ -721,29 +757,29 @@
                             editingAccount!.llm = editingAccount!.llm ?? {};
                             editingAccount!.llm.model = (e.target as HTMLInputElement).value || undefined;
                           }}
-                          placeholder="Use provider default"
+                          placeholder={$t("settings.accounts.useProviderDefault")}
                         />
                       </label>
                     </div>
                   </div>
                   <div class="form-group">
                     <label>
-                      <span class="label-text">Custom Prompt <span class="help-icon" title={helpTexts.prompt_override}>?</span></span>
+                      <span class="label-text">{$t("settings.accounts.promptOverride")} <span class="help-icon" title={helpTexts.prompt_override}>?</span></span>
                       <textarea
                         value={editingAccount.prompt_override ?? ""}
                         oninput={(e) => {
                           editingAccount!.prompt_override = (e.target as HTMLTextAreaElement).value || undefined;
                         }}
                         rows="4"
-                        placeholder="Leave empty to use the default prompt"
+                        placeholder={$t("settings.accounts.leaveEmptyForDefault")}
                       ></textarea>
                     </label>
-                    <p class="help-text">Overrides the global default prompt for this account only.</p>
+                    <p class="help-text">{$t("settings.accounts.promptOverrideHelp")}</p>
                   </div>
 
                   <div class="modal-actions">
-                    <button class="btn btn-secondary" onclick={() => editingAccount = null}>Cancel</button>
-                    <button class="btn btn-primary" onclick={saveAccount}>Save Account</button>
+                    <button class="btn btn-secondary" onclick={() => editingAccount = null}>{$t("common.cancel")}</button>
+                    <button class="btn btn-primary" onclick={saveAccount}>{$t("settings.accounts.saveAccount")}</button>
                   </div>
                 </div>
               </div>
@@ -757,8 +793,8 @@
                     <span class="item-meta">{account.imap.username} @ {account.imap.host}</span>
                   </div>
                   <div class="item-actions">
-                    <button class="btn btn-sm" onclick={() => editAccount(account)}>Edit</button>
-                    <button class="btn btn-sm btn-danger" onclick={() => removeAccount(account.name)}>Remove</button>
+                    <button class="btn btn-sm" onclick={() => editAccount(account)}>{$t("common.edit")}</button>
+                    <button class="btn btn-sm btn-danger" onclick={() => removeAccount(account.name)}>{$t("common.remove")}</button>
                   </div>
                 </div>
               {/each}
@@ -768,32 +804,32 @@
         {:else if activeSection === "providers"}
           <section class="config-section">
             <div class="section-header">
-              <h3>LLM Providers</h3>
-              <button class="btn btn-secondary btn-sm" onclick={addProvider}>+ Add Provider</button>
+              <h3>{$t("settings.providers")}</h3>
+              <button class="btn btn-secondary btn-sm" onclick={addProvider}>+ {$t("settings.providers.add")}</button>
             </div>
 
             {#if editingProvider}
               <div class="modal-overlay" onclick={() => editingProvider = null}>
                 <div class="modal" onclick={(e) => e.stopPropagation()}>
-                  <h3>{editingProvider.name ? `Edit ${editingProvider.name}` : "New Provider"}</h3>
+                  <h3>{editingProvider.name ? $t("settings.providers.editProviderTitle", { name: editingProvider.name }) : $t("settings.providers.newProvider")}</h3>
 
                   <div class="form-group">
                     <label>
-                      <span class="label-text">Provider Name</span>
+                      <span class="label-text">{$t("settings.providers.name")}</span>
                       <input type="text" bind:value={editingProvider.name} placeholder="openai" />
                     </label>
                   </div>
 
                   <div class="form-group">
                     <label>
-                      <span class="label-text">API URL <span class="help-icon" title={helpTexts["provider.api_url"]}>?</span></span>
+                      <span class="label-text">{$t("settings.providers.apiUrl")} <span class="help-icon" title={helpTexts["provider.api_url"]}>?</span></span>
                       <input type="text" bind:value={editingProvider.api_url} placeholder="https://api.openai.com/v1/chat/completions" />
                     </label>
                   </div>
 
                   <div class="form-group">
                     <label>
-                      <span class="label-text">API Key <span class="help-icon" title={helpTexts["provider.api_key"]}>?</span></span>
+                      <span class="label-text">{$t("settings.providers.apiKey")} <span class="help-icon" title={helpTexts["provider.api_key"]}>?</span></span>
                       <input type="password" bind:value={editingProvider.api_key} placeholder="sk-..." />
                     </label>
                   </div>
@@ -801,21 +837,21 @@
                   <div class="form-row">
                     <div class="form-group">
                       <label>
-                        <span class="label-text">Default Model <span class="help-icon" title={helpTexts["provider.default_model"]}>?</span></span>
+                        <span class="label-text">{$t("settings.providers.defaultModel")} <span class="help-icon" title={helpTexts["provider.default_model"]}>?</span></span>
                         <input type="text" bind:value={editingProvider.default_model} placeholder="gpt-4o" />
                       </label>
                     </div>
                     <div class="form-group">
                       <label>
-                        <span class="label-text">Rate Limit (RPM) <span class="help-icon" title={helpTexts["provider.rate_limit"]}>?</span></span>
+                        <span class="label-text">{$t("settings.providers.rateLimit")} <span class="help-icon" title={helpTexts["provider.rate_limit"]}>?</span></span>
                         <input type="number" bind:value={editingProvider.rate_limit} placeholder="60" />
                       </label>
                     </div>
                   </div>
 
                   <div class="modal-actions">
-                    <button class="btn btn-secondary" onclick={() => editingProvider = null}>Cancel</button>
-                    <button class="btn btn-primary" onclick={saveProvider}>Save Provider</button>
+                    <button class="btn btn-secondary" onclick={() => editingProvider = null}>{$t("common.cancel")}</button>
+                    <button class="btn btn-primary" onclick={saveProvider}>{$t("settings.providers.saveProvider")}</button>
                   </div>
                 </div>
               </div>
@@ -829,8 +865,8 @@
                     <span class="item-meta">{provider.default_model} - {provider.api_url}</span>
                   </div>
                   <div class="item-actions">
-                    <button class="btn btn-sm" onclick={() => editProvider(provider)}>Edit</button>
-                    <button class="btn btn-sm btn-danger" onclick={() => removeProvider(provider.name)}>Remove</button>
+                    <button class="btn btn-sm" onclick={() => editProvider(provider)}>{$t("common.edit")}</button>
+                    <button class="btn btn-sm btn-danger" onclick={() => removeProvider(provider.name)}>{$t("common.remove")}</button>
                   </div>
                 </div>
               {/each}
@@ -840,11 +876,11 @@
         {:else if activeSection === "attachments"}
           <section class="config-section">
             <div class="section-header">
-              <h3>Attachment Extraction</h3>
+              <h3>{$t("settings.attachments.sectionTitle")}</h3>
               {#if services?.tika?.enabled}
                 <span class="service-status" class:healthy={services.tika.healthy}>
                   <span class="status-dot"></span>
-                  Tika {services.tika.healthy ? "Connected" : "Unreachable"}
+                  {services.tika.healthy ? $t("settings.attachments.tikaConnected") : $t("settings.attachments.tikaUnreachable")}
                 </span>
               {/if}
             </div>
@@ -853,7 +889,7 @@
               <label>
                 <input type="checkbox" bind:checked={config.attachments.enabled} />
                 <span class="label-text">
-                  Enable Attachment Extraction
+                  {$t("settings.attachments.enableLabel")}
                   <span class="help-icon" title={helpTexts["attachments.enabled"]}>?</span>
                 </span>
               </label>
@@ -863,7 +899,7 @@
               <div class="form-group">
                 <label>
                   <span class="label-text">
-                    Tika Server URL
+                    {$t("settings.attachments.tikaUrl")}
                     <span class="help-icon" title={helpTexts["attachments.tika_url"]}>?</span>
                   </span>
                   <input type="text" bind:value={config.attachments.tika_url} placeholder="http://tika:9998" />
@@ -874,7 +910,7 @@
                 <div class="form-group">
                   <label>
                     <span class="label-text">
-                      Max Size (MB)
+                      {$t("settings.attachments.maxSizeMb")}
                       <span class="help-icon" title={helpTexts["attachments.max_size_mb"]}>?</span>
                     </span>
                     <input type="number" bind:value={config.attachments.max_size_mb} placeholder="10" />
@@ -883,7 +919,7 @@
                 <div class="form-group">
                   <label>
                     <span class="label-text">
-                      Max Extracted Chars
+                      {$t("settings.attachments.maxExtractedChars")}
                       <span class="help-icon" title={helpTexts["attachments.max_extracted_chars"]}>?</span>
                     </span>
                     <input type="number" bind:value={config.attachments.max_extracted_chars} placeholder="10000" />
@@ -895,7 +931,7 @@
                 <label>
                   <input type="checkbox" bind:checked={config.attachments.extract_images} />
                   <span class="label-text">
-                    Extract Images for Vision LLMs
+                    {$t("settings.attachments.extractImagesForVision")}
                     <span class="help-icon" title={helpTexts["attachments.extract_images"]}>?</span>
                   </span>
                 </label>
@@ -906,11 +942,11 @@
         {:else if activeSection === "antivirus"}
           <section class="config-section">
             <div class="section-header">
-              <h3>Antivirus Scanning</h3>
+              <h3>{$t("settings.antivirus.sectionTitle")}</h3>
               {#if services?.clamav?.enabled}
                 <span class="service-status" class:healthy={services.clamav.healthy}>
                   <span class="status-dot"></span>
-                  ClamAV {services.clamav.healthy ? "Connected" : "Unreachable"}
+                  {services.clamav.healthy ? $t("settings.antivirus.clamavConnected") : $t("settings.antivirus.clamavUnreachable")}
                 </span>
               {/if}
             </div>
@@ -919,7 +955,7 @@
               <label>
                 <input type="checkbox" bind:checked={config.antivirus.enabled} />
                 <span class="label-text">
-                  Enable Virus Scanning
+                  {$t("settings.antivirus.enableVirusScanning")}
                   <span class="help-icon" title={helpTexts["antivirus.enabled"]}>?</span>
                 </span>
               </label>
@@ -930,7 +966,7 @@
                 <div class="form-group">
                   <label>
                     <span class="label-text">
-                      ClamAV Host
+                      {$t("settings.antivirus.host")}
                       <span class="help-icon" title={helpTexts["antivirus.host"]}>?</span>
                     </span>
                     <input type="text" bind:value={config.antivirus.host} placeholder="localhost" />
@@ -939,7 +975,7 @@
                 <div class="form-group">
                   <label>
                     <span class="label-text">
-                      ClamAV Port
+                      {$t("settings.antivirus.port")}
                       <span class="help-icon" title={helpTexts["antivirus.port"]}>?</span>
                     </span>
                     <input type="number" bind:value={config.antivirus.port} placeholder="3310" />
@@ -950,13 +986,13 @@
               <div class="form-group">
                 <label>
                   <span class="label-text">
-                    On Virus Detected
+                    {$t("settings.antivirus.onVirusDetected")}
                     <span class="help-icon" title={helpTexts["antivirus.on_virus_detected"]}>?</span>
                   </span>
                   <select bind:value={config.antivirus.on_virus_detected}>
-                    <option value="quarantine">Quarantine</option>
-                    <option value="delete">Delete</option>
-                    <option value="flag_only">Flag Only</option>
+                    <option value="quarantine">{$t("settings.antivirus.quarantine")}</option>
+                    <option value="delete">{$t("settings.antivirus.delete")}</option>
+                    <option value="flag_only">{$t("settings.antivirus.flagOnly")}</option>
                   </select>
                 </label>
               </div>
@@ -965,13 +1001,13 @@
 
         {:else if activeSection === "dashboard"}
           <section class="config-section">
-            <h3>Dashboard Settings</h3>
-            <p class="section-note">Note: The dashboard cannot be disabled from here to prevent lockout. Edit config.yaml directly to disable.</p>
+            <h3>{$t("settings.dashboard.sectionTitle")}</h3>
+            <p class="section-note">{$t("settings.dashboard.lockoutNote")}</p>
 
             <div class="form-group">
               <label>
                 <span class="label-text">
-                  Session TTL
+                  {$t("settings.dashboard.sessionTtl")}
                   <span class="help-icon" title={helpTexts["dashboard.session_ttl"]}>?</span>
                 </span>
                 <input type="text" bind:value={config.dashboard.session_ttl} placeholder="24h" />
@@ -1102,6 +1138,15 @@
   .save-error {
     background: color-mix(in srgb, var(--error) 20%, transparent);
     color: var(--error);
+  }
+
+  .unsaved-indicator {
+    font-size: 0.875rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    background: color-mix(in srgb, var(--warning) 20%, transparent);
+    color: var(--warning);
+    font-weight: 500;
   }
 
   .loading, .error {

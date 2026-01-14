@@ -1,5 +1,6 @@
 <script lang="ts">
   import { login } from "../lib/stores/auth";
+  import { t } from "../lib/i18n";
 
   let username = $state("");
   let password = $state("");
@@ -10,7 +11,7 @@
     e.preventDefault();
 
     if (!username || !password) {
-      error = "Please enter username and password";
+      error = $t("login.enterCredentials");
       return;
     }
 
@@ -22,7 +23,7 @@
     if (result.success) {
       window.location.reload();
     } else {
-      error = result.error ?? "Login failed";
+      error = result.error ?? $t("login.error");
       loading = false;
     }
   }
@@ -35,9 +36,9 @@
         <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
         <polyline points="22,6 12,13 2,6" />
       </svg>
-      <h1 class="logo-text">Mailpilot</h1>
+      <h1 class="logo-text">{$t("login.title")}</h1>
     </div>
-    <p class="subtitle">Sign in to your account</p>
+    <p class="subtitle">{$t("login.subtitle")}</p>
 
     {#if error}
       <div class="error">{error}</div>
@@ -45,7 +46,7 @@
 
     <form onsubmit={handleSubmit}>
       <div class="form-group">
-        <label for="username">Username</label>
+        <label for="username">{$t("login.username")}</label>
         <input
           type="text"
           id="username"
@@ -58,7 +59,7 @@
       </div>
 
       <div class="form-group">
-        <label for="password">Password</label>
+        <label for="password">{$t("login.password")}</label>
         <input
           type="password"
           id="password"
@@ -71,7 +72,7 @@
       </div>
 
       <button type="submit" class="btn btn-primary" disabled={loading}>
-        {loading ? "Signing in..." : "Sign In"}
+        {loading ? $t("login.loggingIn") : $t("login.submit")}
       </button>
     </form>
   </div>

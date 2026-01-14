@@ -1,42 +1,21 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { t, locale, locales, setLocale } from "../i18n";
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
-  interface UserPreferences {
-    locale: string;
-  }
+  const LOCALE_NAMES: Record<string, string> = {
+    en: "English",
+  };
 
-  const STORAGE_KEY = "mailpilot_user_prefs";
-  const SUPPORTED_LOCALES = [
-    { code: "en", name: "English" },
-  ];
-
-  let preferences = $state<UserPreferences>({
-    locale: "en",
-  });
+  let selectedLocale = $state<string>("en");
 
   onMount(() => {
-    loadPreferences();
+    selectedLocale = $locale;
   });
 
-  function loadPreferences() {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        preferences = { ...preferences, ...JSON.parse(stored) };
-      }
-    } catch {
-      // Ignore storage errors
-    }
-  }
-
   function savePreferences() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
-    } catch {
-      // Ignore storage errors
-    }
+    setLocale(selectedLocale);
     open = false;
   }
 
@@ -50,23 +29,22 @@
   <div class="modal-overlay" onclick={handleClose}>
     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
     <div class="modal" onclick={(e) => e.stopPropagation()}>
-      <h3>User Settings</h3>
+      <h3>{$t("userSettings.title")}</h3>
 
       <div class="form-group">
         <label>
           <span class="label-text">Language</span>
-          <select bind:value={preferences.locale}>
-            {#each SUPPORTED_LOCALES as locale}
-              <option value={locale.code}>{locale.name}</option>
+          <select bind:value={selectedLocale}>
+            {#each locales as code}
+              <option value={code}>{LOCALE_NAMES[code] ?? code}</option>
             {/each}
           </select>
         </label>
-        <p class="help-text">More languages coming soon.</p>
       </div>
 
       <div class="modal-actions">
-        <button class="btn btn-secondary" onclick={handleClose}>Cancel</button>
-        <button class="btn btn-primary" onclick={savePreferences}>Save</button>
+        <button class="btn btn-secondary" onclick={handleClose}>{$t("common.cancel")}</button>
+        <button class="btn btn-primary" onclick={savePreferences}>{$t("common.save")}</button>
       </div>
     </div>
   </div>

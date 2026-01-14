@@ -1,5 +1,6 @@
 <script lang="ts">
   import { setup } from "../lib/stores/auth";
+  import { t } from "../lib/i18n";
 
   let username = $state("");
   let password = $state("");
@@ -11,17 +12,17 @@
     e.preventDefault();
 
     if (!username || username.length < 3) {
-      error = "Username must be at least 3 characters";
+      error = $t("setup.usernameMinLength");
       return;
     }
 
     if (!password || password.length < 8) {
-      error = "Password must be at least 8 characters";
+      error = $t("setup.passwordMinLength");
       return;
     }
 
     if (password !== confirm) {
-      error = "Passwords do not match";
+      error = $t("setup.passwordMismatch");
       return;
     }
 
@@ -33,7 +34,7 @@
     if (result.success) {
       window.location.reload();
     } else {
-      error = result.error ?? "Setup failed";
+      error = result.error ?? $t("setup.error");
       loading = false;
     }
   }
@@ -46,9 +47,9 @@
         <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
         <polyline points="22,6 12,13 2,6" />
       </svg>
-      <h1 class="logo-text">Mailpilot Setup</h1>
+      <h1 class="logo-text">{$t("setup.title")}</h1>
     </div>
-    <p class="subtitle">Create your admin account</p>
+    <p class="subtitle">{$t("setup.subtitle")}</p>
 
     {#if error}
       <div class="error">{error}</div>
@@ -56,7 +57,7 @@
 
     <form onsubmit={handleSubmit}>
       <div class="form-group">
-        <label for="username">Username</label>
+        <label for="username">{$t("setup.username")}</label>
         <input
           type="text"
           id="username"
@@ -70,7 +71,7 @@
       </div>
 
       <div class="form-group">
-        <label for="password">Password</label>
+        <label for="password">{$t("setup.password")}</label>
         <input
           type="password"
           id="password"
@@ -84,7 +85,7 @@
       </div>
 
       <div class="form-group">
-        <label for="confirm">Confirm Password</label>
+        <label for="confirm">{$t("setup.confirmPassword")}</label>
         <input
           type="password"
           id="confirm"
@@ -98,7 +99,7 @@
       </div>
 
       <button type="submit" class="btn btn-primary" disabled={loading}>
-        {loading ? "Creating Account..." : "Create Account"}
+        {loading ? $t("setup.creating") : $t("setup.submit")}
       </button>
     </form>
   </div>

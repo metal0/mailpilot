@@ -268,6 +268,75 @@ const en = {
   "settings.saveError": "Failed to save configuration",
   "settings.loadError": "Failed to load config",
 
+  // Settings - Navigation Sections
+  "settings.sections.global": "Global Settings",
+  "settings.sections.accounts": "Email Accounts",
+  "settings.sections.providers": "LLM Providers",
+  "settings.sections.attachments": "Attachments",
+  "settings.sections.antivirus": "Antivirus",
+  "settings.sections.dashboard": "Dashboard",
+
+  // Settings - Global Form Fields
+  "settings.global.pollingInterval": "Polling Interval",
+  "settings.global.serverPort": "Server Port",
+  "settings.global.logLevel": "Log Level",
+  "settings.global.dryRunMode": "Dry Run Mode",
+  "settings.global.addProcessingHeadersLabel": "Add Processing Headers",
+  "settings.global.classificationPrompt": "Classification Prompt",
+  "settings.global.defaultPromptLabel": "Default Prompt",
+
+  // Settings - Account Modal
+  "settings.accounts.newAccount": "New Account",
+  "settings.accounts.editAccountTitle": "Edit {name}",
+  "settings.accounts.imapSettings": "IMAP Settings",
+  "settings.accounts.tlsMode": "TLS Mode",
+  "settings.accounts.authTypeLabel": "Auth Type",
+  "settings.accounts.tlsAuto": "Auto",
+  "settings.accounts.tlsTls": "TLS",
+  "settings.accounts.tlsStarttls": "STARTTLS",
+  "settings.accounts.tlsInsecure": "Insecure",
+  "settings.accounts.authBasic": "Basic (Password)",
+  "settings.accounts.authOauth2": "OAuth2",
+  "settings.accounts.foldersSection": "Folders",
+  "settings.accounts.llmSettings": "LLM Settings",
+  "settings.accounts.default": "Default",
+  "settings.accounts.predefinedOnly": "Predefined only",
+  "settings.accounts.autoCreateFolders": "Auto-create folders",
+  "settings.accounts.useProviderDefault": "Use provider default",
+  "settings.accounts.leaveEmptyForDefault": "Leave empty to use the default prompt",
+  "settings.accounts.autoDiscoverNote": "All existing folders will be auto-discovered via IMAP",
+  "settings.accounts.saveAccount": "Save Account",
+  "settings.accounts.removeConfirm": "Remove account \"{name}\"? This cannot be undone.",
+  "settings.accounts.model": "Model",
+
+  // Settings - Provider Modal
+  "settings.providers.newProvider": "New Provider",
+  "settings.providers.editProviderTitle": "Edit {name}",
+  "settings.providers.saveProvider": "Save Provider",
+  "settings.providers.removeConfirm": "Remove provider \"{name}\"? This cannot be undone.",
+  "settings.providers.rateLimit": "Rate Limit (RPM)",
+
+  // Settings - Attachments Section
+  "settings.attachments.sectionTitle": "Attachment Extraction",
+  "settings.attachments.enableLabel": "Enable Attachment Extraction",
+  "settings.attachments.tikaConnected": "Tika Connected",
+  "settings.attachments.tikaUnreachable": "Tika Unreachable",
+  "settings.attachments.maxExtractedChars": "Max Extracted Chars",
+  "settings.attachments.extractImagesForVision": "Extract Images for Vision LLMs",
+
+  // Settings - Antivirus Section
+  "settings.antivirus.sectionTitle": "Antivirus Scanning",
+  "settings.antivirus.enableVirusScanning": "Enable Virus Scanning",
+  "settings.antivirus.clamavConnected": "ClamAV Connected",
+  "settings.antivirus.clamavUnreachable": "ClamAV Unreachable",
+  "settings.antivirus.quarantine": "Quarantine",
+  "settings.antivirus.delete": "Delete",
+  "settings.antivirus.flagOnly": "Flag Only",
+
+  // Settings - Dashboard Section
+  "settings.dashboard.sectionTitle": "Dashboard Settings",
+  "settings.dashboard.lockoutNote": "Note: The dashboard cannot be disabled from here to prevent lockout. Edit config.yaml directly to disable.",
+
   // Debug
   "debug.title": "Debug Information",
   "debug.systemInfo": "System Info",
@@ -302,25 +371,36 @@ const en = {
   "userSettings.passwordMismatch": "Passwords do not match",
 
   // Email Preview
-  "emailPreview.title": "Email Preview",
+  "emailPreview.title": "Email Details",
   "emailPreview.from": "From",
   "emailPreview.to": "To",
   "emailPreview.subject": "Subject",
   "emailPreview.date": "Date",
   "emailPreview.attachments": "Attachments",
-  "emailPreview.body": "Body",
+  "emailPreview.body": "Email Body",
   "emailPreview.loadError": "Failed to load preview",
+  "emailPreview.messageId": "Message ID",
+  "emailPreview.account": "Account",
+  "emailPreview.time": "Time",
+  "emailPreview.llm": "LLM",
+  "emailPreview.actionsTaken": "Actions Taken",
+  "emailPreview.folder": "Folder",
+  "emailPreview.flags": "Flags",
+  "emailPreview.reason": "Reason",
 
   // Login
-  "login.title": "Login",
+  "login.title": "Mailpilot",
+  "login.subtitle": "Sign in to your account",
   "login.username": "Username",
   "login.password": "Password",
-  "login.submit": "Login",
+  "login.submit": "Sign In",
   "login.error": "Invalid username or password",
-  "login.loggingIn": "Logging in...",
+  "login.loggingIn": "Signing in...",
+  "login.enterCredentials": "Please enter username and password",
 
   // Setup
-  "setup.title": "Initial Setup",
+  "setup.title": "Mailpilot Setup",
+  "setup.subtitle": "Create your admin account",
   "setup.createAdmin": "Create Admin Account",
   "setup.username": "Username",
   "setup.password": "Password",
@@ -329,6 +409,8 @@ const en = {
   "setup.creating": "Creating Account...",
   "setup.error": "Failed to create account",
   "setup.passwordMismatch": "Passwords do not match",
+  "setup.usernameMinLength": "Username must be at least 3 characters",
+  "setup.passwordMinLength": "Password must be at least 8 characters",
 
   // Footer
   "footer.viewOnGithub": "View on GitHub",
