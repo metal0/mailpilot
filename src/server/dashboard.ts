@@ -26,7 +26,8 @@ import {
   requireAuthOrApiKey,
 } from "./auth.js";
 import { getAccountStatuses, getUptime, getVersion } from "./status.js";
-import { getDetailedProviderStats, getAllProviders } from "../llm/providers.js";
+import { broadcastStats } from "./websocket.js";
+import { getDetailedProviderStats, getAllProviders, updateProviderHealth } from "../llm/providers.js";
 import { testConnection as testLlmConnection } from "../llm/client.js";
 import { getRecentLogs, type LogLevel } from "../utils/logger.js";
 import {
@@ -472,6 +473,8 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       const providers = getAllProviders();
       for (const provider of providers) {
         const healthy = await testLlmConnection(provider, provider.default_model);
+        // Persist health status so it shows on overview page
+        updateProviderHealth(provider.name, healthy);
         llmProviders.push({
           name: provider.name,
           model: provider.default_model,
@@ -479,6 +482,28 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
           healthy,
         });
       }
+
+      // Broadcast updated stats to all WebSocket clients so Overview page updates
+      const pausedAccountsList = getPausedAccounts();
+      const allAccounts = getAccountStatuses();
+      broadcastStats({
+        version: getVersion(),
+        uptime: getUptime(),
+        dryRun: currentConfig?.dry_run ?? dryRun,
+        totals: {
+          emailsProcessed: getProcessedCount(),
+          actionsTaken: getActionCount(),
+          errors: allAccounts.reduce((sum, a) => sum + a.errors, 0),
+        },
+        accounts: allAccounts.map((a) => ({
+          ...a,
+          paused: pausedAccountsList.includes(a.name),
+        })),
+        actionBreakdown: getActionBreakdown(),
+        providerStats: getDetailedProviderStats(),
+        queueStatus: getQueueStatus(),
+        deadLetterCount: getDeadLetterCount(),
+      });
     }
 
     // IMAP account status (uses existing connection status)

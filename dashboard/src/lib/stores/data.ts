@@ -11,6 +11,8 @@ export interface AccountStatus {
   emailsProcessed: number;
   actionsTaken: number;
   errors: number;
+  imapHost: string;
+  imapPort: number;
 }
 
 export interface ActionBreakdown {

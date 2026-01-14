@@ -68,6 +68,14 @@ export function createImapClient(options: ImapClientOptions): ImapClient {
     logger: false,
   });
 
+  // Set up error handler to prevent uncaught exceptions from socket errors
+  client.on("error", (error: Error) => {
+    log.error("IMAP client error", {
+      error: error.message,
+      stack: error.stack,
+    });
+  });
+
   return {
     client,
     providerInfo,

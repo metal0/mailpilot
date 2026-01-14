@@ -211,14 +211,8 @@
     try {
       const result = await api.saveConfig(config);
       if (result.success) {
-        // Handle port change redirect
         if (portChanged) {
-          saveMessage = { type: "success", text: `Configuration saved. Redirecting to port ${newPort}...` };
-          setTimeout(() => {
-            const currentUrl = new URL(window.location.href);
-            currentUrl.port = String(newPort);
-            window.location.href = currentUrl.toString();
-          }, 2000);
+          saveMessage = { type: "success", text: "Configuration saved. Restart the server for port change to take effect." };
         } else {
           saveMessage = { type: "success", text: "Configuration saved and reloaded successfully" };
           // Refresh stats
@@ -332,8 +326,8 @@
         You are changing the server port from <strong>{originalPort}</strong> to <strong>{pendingPortChange}</strong>.
       </p>
       <p class="warning-text">
-        After saving, the server will restart on the new port. Your browser will be automatically
-        redirected to the new address. If the redirect fails, manually navigate to:
+        Port changes require a <strong>manual server restart</strong> to take effect.
+        After restarting the server, navigate to:
       </p>
       <code class="new-url">{`${window.location.protocol}//${window.location.hostname}:${pendingPortChange}`}</code>
       <div class="modal-actions">
@@ -600,21 +594,23 @@
                         </select>
                       </label>
                     </div>
-                    <div class="form-group">
-                      <label>
-                        <span class="label-text">Allowed Folders <span class="help-icon" title={helpTexts["folders.allowed"]}>?</span></span>
-                        <input
-                          type="text"
-                          value={editingAccount.folders?.allowed?.join(", ") ?? ""}
-                          oninput={(e) => {
-                            editingAccount!.folders = editingAccount!.folders ?? {};
-                            const value = (e.target as HTMLInputElement).value;
-                            editingAccount!.folders.allowed = value ? value.split(",").map(s => s.trim()).filter(Boolean) : undefined;
-                          }}
-                          placeholder="Archive, Work/Important"
-                        />
-                      </label>
-                    </div>
+                    {#if (editingAccount.folders?.mode ?? "predefined") === "predefined"}
+                      <div class="form-group">
+                        <label>
+                          <span class="label-text">Allowed Folders <span class="help-icon" title={helpTexts["folders.allowed"]}>?</span></span>
+                          <input
+                            type="text"
+                            value={editingAccount.folders?.allowed?.join(", ") ?? ""}
+                            oninput={(e) => {
+                              editingAccount!.folders = editingAccount!.folders ?? {};
+                              const value = (e.target as HTMLInputElement).value;
+                              editingAccount!.folders.allowed = value ? value.split(",").map(s => s.trim()).filter(Boolean) : undefined;
+                            }}
+                            placeholder="Archive, Work/Important"
+                          />
+                        </label>
+                      </div>
+                    {/if}
                   </div>
 
                   <h4>LLM Settings</h4>

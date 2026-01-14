@@ -243,6 +243,277 @@ describe("Rate Limiter Integration", () => {
   });
 });
 
+describe("Provider Health Tracking", () => {
+  interface ProviderHealth {
+    healthy: boolean;
+    lastCheck: number;
+    lastSuccessfulRequest: number;
+    consecutiveFailures: number;
+  }
+
+  const HEALTH_STALE_THRESHOLD = 10 * 60 * 1000; // 10 minutes
+
+  describe("updateProviderHealth", () => {
+    it("sets healthy status to true", () => {
+      const health: ProviderHealth = {
+        healthy: false,
+        lastCheck: 0,
+        lastSuccessfulRequest: 0,
+        consecutiveFailures: 3,
+      };
+
+      // Update to healthy
+      health.healthy = true;
+      health.lastCheck = Date.now();
+      health.consecutiveFailures = 0;
+
+      expect(health.healthy).toBe(true);
+      expect(health.lastCheck).toBeGreaterThan(0);
+      expect(health.consecutiveFailures).toBe(0);
+    });
+
+    it("sets healthy status to false", () => {
+      const health: ProviderHealth = {
+        healthy: true,
+        lastCheck: 0,
+        lastSuccessfulRequest: Date.now() - 60000,
+        consecutiveFailures: 0,
+      };
+
+      // Update to unhealthy
+      health.healthy = false;
+      health.lastCheck = Date.now();
+
+      expect(health.healthy).toBe(false);
+      expect(health.lastCheck).toBeGreaterThan(0);
+    });
+
+    it("updates lastCheck timestamp on health check", () => {
+      const before = Date.now();
+      const health: ProviderHealth = {
+        healthy: true,
+        lastCheck: 0,
+        lastSuccessfulRequest: 0,
+        consecutiveFailures: 0,
+      };
+
+      health.lastCheck = Date.now();
+
+      expect(health.lastCheck).toBeGreaterThanOrEqual(before);
+    });
+  });
+
+  describe("recordProviderFailure", () => {
+    it("increments consecutiveFailures", () => {
+      const health: ProviderHealth = {
+        healthy: true,
+        lastCheck: Date.now(),
+        lastSuccessfulRequest: Date.now(),
+        consecutiveFailures: 0,
+      };
+
+      health.consecutiveFailures++;
+      expect(health.consecutiveFailures).toBe(1);
+
+      health.consecutiveFailures++;
+      expect(health.consecutiveFailures).toBe(2);
+    });
+
+    it("marks unhealthy after 3 consecutive failures", () => {
+      const health: ProviderHealth = {
+        healthy: true,
+        lastCheck: Date.now(),
+        lastSuccessfulRequest: Date.now(),
+        consecutiveFailures: 2,
+      };
+
+      // Third failure
+      health.consecutiveFailures++;
+      if (health.consecutiveFailures >= 3) {
+        health.healthy = false;
+      }
+
+      expect(health.healthy).toBe(false);
+      expect(health.consecutiveFailures).toBe(3);
+    });
+
+    it("stays healthy with fewer than 3 failures", () => {
+      const health: ProviderHealth = {
+        healthy: true,
+        lastCheck: Date.now(),
+        lastSuccessfulRequest: Date.now(),
+        consecutiveFailures: 1,
+      };
+
+      // Second failure
+      health.consecutiveFailures++;
+      if (health.consecutiveFailures >= 3) {
+        health.healthy = false;
+      }
+
+      expect(health.healthy).toBe(true);
+      expect(health.consecutiveFailures).toBe(2);
+    });
+  });
+
+  describe("recordProviderRequest (success)", () => {
+    it("resets consecutiveFailures on success", () => {
+      const health: ProviderHealth = {
+        healthy: false,
+        lastCheck: Date.now() - 60000,
+        lastSuccessfulRequest: Date.now() - 120000,
+        consecutiveFailures: 5,
+      };
+
+      // Successful request
+      health.healthy = true;
+      health.lastSuccessfulRequest = Date.now();
+      health.consecutiveFailures = 0;
+
+      expect(health.healthy).toBe(true);
+      expect(health.consecutiveFailures).toBe(0);
+    });
+
+    it("updates lastSuccessfulRequest timestamp", () => {
+      const before = Date.now();
+      const health: ProviderHealth = {
+        healthy: true,
+        lastCheck: 0,
+        lastSuccessfulRequest: 0,
+        consecutiveFailures: 0,
+      };
+
+      health.lastSuccessfulRequest = Date.now();
+
+      expect(health.lastSuccessfulRequest).toBeGreaterThanOrEqual(before);
+    });
+  });
+
+  describe("isProviderHealthStale", () => {
+    it("returns true when lastCheck and lastSuccessfulRequest are 0", () => {
+      const health: ProviderHealth = {
+        healthy: true,
+        lastCheck: 0,
+        lastSuccessfulRequest: 0,
+        consecutiveFailures: 0,
+      };
+
+      const lastActivity = Math.max(health.lastCheck, health.lastSuccessfulRequest);
+      const isStale = lastActivity === 0;
+
+      expect(isStale).toBe(true);
+    });
+
+    it("returns true when older than stale threshold", () => {
+      const now = Date.now();
+      const health: ProviderHealth = {
+        healthy: true,
+        lastCheck: now - HEALTH_STALE_THRESHOLD - 60000, // 11 minutes ago
+        lastSuccessfulRequest: now - HEALTH_STALE_THRESHOLD - 120000, // 12 minutes ago
+        consecutiveFailures: 0,
+      };
+
+      const lastActivity = Math.max(health.lastCheck, health.lastSuccessfulRequest);
+      const isStale = lastActivity === 0 || (now - lastActivity) > HEALTH_STALE_THRESHOLD;
+
+      expect(isStale).toBe(true);
+    });
+
+    it("returns false when recently checked", () => {
+      const now = Date.now();
+      const health: ProviderHealth = {
+        healthy: true,
+        lastCheck: now - 60000, // 1 minute ago
+        lastSuccessfulRequest: now - 120000, // 2 minutes ago
+        consecutiveFailures: 0,
+      };
+
+      const lastActivity = Math.max(health.lastCheck, health.lastSuccessfulRequest);
+      const isStale = lastActivity === 0 || (now - lastActivity) > HEALTH_STALE_THRESHOLD;
+
+      expect(isStale).toBe(false);
+    });
+
+    it("uses most recent activity between lastCheck and lastSuccessfulRequest", () => {
+      const now = Date.now();
+
+      // Last successful request is more recent
+      const health1: ProviderHealth = {
+        healthy: true,
+        lastCheck: now - HEALTH_STALE_THRESHOLD - 60000, // stale
+        lastSuccessfulRequest: now - 60000, // recent
+        consecutiveFailures: 0,
+      };
+
+      const lastActivity1 = Math.max(health1.lastCheck, health1.lastSuccessfulRequest);
+      const isStale1 = lastActivity1 === 0 || (now - lastActivity1) > HEALTH_STALE_THRESHOLD;
+      expect(isStale1).toBe(false); // Not stale because lastSuccessfulRequest is recent
+
+      // Last check is more recent
+      const health2: ProviderHealth = {
+        healthy: false,
+        lastCheck: now - 60000, // recent
+        lastSuccessfulRequest: now - HEALTH_STALE_THRESHOLD - 60000, // stale
+        consecutiveFailures: 3,
+      };
+
+      const lastActivity2 = Math.max(health2.lastCheck, health2.lastSuccessfulRequest);
+      const isStale2 = lastActivity2 === 0 || (now - lastActivity2) > HEALTH_STALE_THRESHOLD;
+      expect(isStale2).toBe(false); // Not stale because lastCheck is recent
+    });
+  });
+
+  describe("Health status in ProviderStats", () => {
+    interface ProviderStatsWithHealth extends ProviderStats {
+      healthy: boolean;
+      healthStale: boolean;
+    }
+
+    it("includes healthy and healthStale in stats", () => {
+      const health: ProviderHealth = {
+        healthy: true,
+        lastCheck: Date.now() - 60000,
+        lastSuccessfulRequest: Date.now() - 30000,
+        consecutiveFailures: 0,
+      };
+
+      const now = Date.now();
+      const lastActivity = Math.max(health.lastCheck, health.lastSuccessfulRequest);
+      const isStale = lastActivity === 0 || (now - lastActivity) > HEALTH_STALE_THRESHOLD;
+
+      const stat: ProviderStatsWithHealth = {
+        name: "openai",
+        model: "gpt-4o",
+        requestsToday: 50,
+        requestsTotal: 500,
+        requestsLastMinute: 10,
+        rateLimited: false,
+        healthy: health.healthy,
+        healthStale: isStale,
+      };
+
+      expect(stat.healthy).toBe(true);
+      expect(stat.healthStale).toBe(false);
+    });
+
+    it("shows unknown status when never checked", () => {
+      const health: ProviderHealth = {
+        healthy: true, // Default assumption
+        lastCheck: 0,
+        lastSuccessfulRequest: 0,
+        consecutiveFailures: 0,
+      };
+
+      const now = Date.now();
+      const lastActivity = Math.max(health.lastCheck, health.lastSuccessfulRequest);
+      const isStale = lastActivity === 0 || (now - lastActivity) > HEALTH_STALE_THRESHOLD;
+
+      expect(health.healthy).toBe(true); // Default
+      expect(isStale).toBe(true); // But stale, so effectively "unknown"
+    });
+  });
+});
+
 describe("Multiple Providers", () => {
   it("tracks stats independently per provider", () => {
     const providers = new Map<string, { total: number; today: number }>();

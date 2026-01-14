@@ -1,9 +1,119 @@
 <script lang="ts">
-  import { stats, selectedAccount, type AccountStatus } from "../stores/data";
+  import { stats, type AccountStatus } from "../stores/data";
   import { addToast } from "../stores/toast";
   import * as api from "../api";
 
+  let openDropdown = $state<string | null>(null);
+  let dropdownPosition = $state<{ top: number; right: number } | null>(null);
+  let selectedAccounts = $state<Set<string>>(new Set());
+  let bulkActionLoading = $state(false);
+
+  function toggleDropdown(accountName: string, event: MouseEvent) {
+    if (openDropdown === accountName) {
+      openDropdown = null;
+      dropdownPosition = null;
+    } else {
+      const button = event.currentTarget as HTMLElement;
+      const rect = button.getBoundingClientRect();
+      dropdownPosition = {
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      };
+      openDropdown = accountName;
+    }
+  }
+
+  function closeDropdown() {
+    openDropdown = null;
+    dropdownPosition = null;
+  }
+
+  function toggleAccountSelection(name: string) {
+    const newSet = new Set(selectedAccounts);
+    if (newSet.has(name)) {
+      newSet.delete(name);
+    } else {
+      newSet.add(name);
+    }
+    selectedAccounts = newSet;
+  }
+
+  function toggleSelectAll() {
+    const accounts = $stats?.accounts ?? [];
+
+    if (selectedAccounts.size === accounts.length && accounts.length > 0) {
+      selectedAccounts = new Set();
+    } else {
+      selectedAccounts = new Set(accounts.map(a => a.name));
+    }
+  }
+
+  function clearSelection() {
+    selectedAccounts = new Set();
+  }
+
+  async function bulkPause() {
+    bulkActionLoading = true;
+    const names = Array.from(selectedAccounts);
+    let succeeded = 0;
+    for (const name of names) {
+      try {
+        await api.pauseAccount(name);
+        succeeded++;
+      } catch { /* continue */ }
+    }
+    addToast(`Paused ${succeeded}/${names.length} accounts`, succeeded === names.length ? "success" : "warning");
+    bulkActionLoading = false;
+    clearSelection();
+  }
+
+  async function bulkResume() {
+    bulkActionLoading = true;
+    const names = Array.from(selectedAccounts);
+    let succeeded = 0;
+    for (const name of names) {
+      try {
+        await api.resumeAccount(name);
+        succeeded++;
+      } catch { /* continue */ }
+    }
+    addToast(`Resumed ${succeeded}/${names.length} accounts`, succeeded === names.length ? "success" : "warning");
+    bulkActionLoading = false;
+    clearSelection();
+  }
+
+  async function bulkReconnect() {
+    bulkActionLoading = true;
+    const names = Array.from(selectedAccounts);
+    let succeeded = 0;
+    for (const name of names) {
+      try {
+        await api.reconnectAccount(name);
+        succeeded++;
+      } catch { /* continue */ }
+    }
+    addToast(`Reconnected ${succeeded}/${names.length} accounts`, succeeded === names.length ? "success" : "warning");
+    bulkActionLoading = false;
+    clearSelection();
+  }
+
+  async function bulkProcess() {
+    bulkActionLoading = true;
+    const names = Array.from(selectedAccounts);
+    let succeeded = 0;
+    for (const name of names) {
+      try {
+        await api.triggerProcess(name);
+        succeeded++;
+      } catch { /* continue */ }
+    }
+    addToast(`Triggered processing for ${succeeded}/${names.length} accounts`, succeeded === names.length ? "success" : "warning");
+    bulkActionLoading = false;
+    clearSelection();
+  }
+
   async function handlePause(account: AccountStatus) {
+    closeDropdown();
     try {
       const result = account.paused
         ? await api.resumeAccount(account.name)
@@ -20,6 +130,7 @@
   }
 
   async function handleReconnect(name: string) {
+    closeDropdown();
     try {
       addToast(`Reconnecting ${name}...`, "info");
       const result = await api.reconnectAccount(name);
@@ -34,6 +145,7 @@
   }
 
   async function handleProcess(name: string) {
+    closeDropdown();
     try {
       addToast(`Triggering processing for ${name}...`, "info");
       const result = await api.triggerProcess(name);
@@ -51,20 +163,29 @@
 <div class="card">
   <div class="card-header">
     <h2 class="card-title">Accounts</h2>
-    <select class="filter-select" bind:value={$selectedAccount}>
-      <option value={null}>All Accounts</option>
-      {#each $stats?.accounts ?? [] as account}
-        <option value={account.name}>{account.name}</option>
-      {/each}
-    </select>
   </div>
+
+  {#if selectedAccounts.size > 0}
+    <div class="bulk-actions-bar">
+      <span class="selection-count">{selectedAccounts.size} selected</span>
+      <div class="bulk-buttons">
+        <button class="btn-sm" onclick={bulkPause} disabled={bulkActionLoading}>Pause All</button>
+        <button class="btn-sm" onclick={bulkResume} disabled={bulkActionLoading}>Resume All</button>
+        <button class="btn-sm btn-secondary" onclick={bulkReconnect} disabled={bulkActionLoading}>Reconnect All</button>
+        <button class="btn-sm btn-secondary" onclick={bulkProcess} disabled={bulkActionLoading}>Process All</button>
+        <button class="btn-sm btn-secondary" onclick={clearSelection}>Clear</button>
+      </div>
+    </div>
+  {/if}
 
   <div class="table-container">
     <table>
       <thead>
         <tr>
+          <th class="checkbox-cell">
+            <input type="checkbox" checked={selectedAccounts.size > 0} onchange={toggleSelectAll} />
+          </th>
           <th>Name</th>
-          <th>Status</th>
           <th>LLM</th>
           <th>Last Scan</th>
           <th class="num">Processed</th>
@@ -75,14 +196,22 @@
       </thead>
       <tbody>
         {#each $stats?.accounts ?? [] as account}
-          {#if !$selectedAccount || $selectedAccount === account.name}
-            <tr>
-              <td class="name-cell">{account.name}</td>
-              <td>
-                <span class="status status-{account.connected ? 'connected' : 'disconnected'}">
-                  <span class="status-dot"></span>
-                  {account.connected ? "Connected" : "Disconnected"}
-                </span>
+          <tr class:selected={selectedAccounts.has(account.name)}>
+              <td class="checkbox-cell">
+                <input
+                  type="checkbox"
+                  checked={selectedAccounts.has(account.name)}
+                  onchange={() => toggleAccountSelection(account.name)}
+                />
+              </td>
+              <td class="name-cell">
+                <span
+                  class="status-indicator"
+                  class:connected={account.connected}
+                  class:paused={account.paused}
+                  title={account.paused ? "Paused" : account.connected ? "Connected" : "Disconnected"}
+                ></span>
+                {account.name}
                 {#if account.idleSupported}
                   <span class="badge">IDLE</span>
                 {/if}
@@ -96,18 +225,31 @@
               <td class="num">{account.actionsTaken}</td>
               <td class="num errors">{account.errors}</td>
               <td class="actions-cell">
-                <button class="btn-sm" onclick={() => handlePause(account)}>
-                  {account.paused ? "Resume" : "Pause"}
-                </button>
-                <button class="btn-sm btn-secondary" onclick={() => handleReconnect(account.name)}>
-                  Reconnect
-                </button>
-                <button class="btn-sm btn-secondary" onclick={() => handleProcess(account.name)}>
-                  Process
-                </button>
+                <div class="dropdown">
+                  <button class="btn-sm btn-secondary dropdown-toggle" onclick={(e) => toggleDropdown(account.name, e)}>
+                    Manage
+                  </button>
+                  {#if openDropdown === account.name && dropdownPosition}
+                    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                    <div class="dropdown-backdrop" onclick={closeDropdown}></div>
+                    <div
+                      class="dropdown-menu"
+                      style="position: fixed; top: {dropdownPosition.top}px; right: {dropdownPosition.right}px;"
+                    >
+                      <button class="dropdown-item" onclick={() => handlePause(account)}>
+                        {account.paused ? "Resume" : "Pause"}
+                      </button>
+                      <button class="dropdown-item" onclick={() => handleReconnect(account.name)}>
+                        Reconnect
+                      </button>
+                      <button class="dropdown-item" onclick={() => handleProcess(account.name)}>
+                        Process Now
+                      </button>
+                    </div>
+                  {/if}
+                </div>
               </td>
-            </tr>
-          {/if}
+          </tr>
         {/each}
       </tbody>
     </table>
@@ -135,13 +277,37 @@
     margin: 0;
   }
 
-  .filter-select {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
+  .bulk-actions-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .selection-count {
+    font-size: 0.8125rem;
+    font-weight: 500;
     color: var(--text-primary);
-    padding: 0.375rem 0.75rem;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
+  }
+
+  .bulk-buttons {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .checkbox-cell {
+    width: 2.5rem;
+    text-align: center;
+  }
+
+  .checkbox-cell input {
+    cursor: pointer;
+  }
+
+  tr.selected {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
   }
 
   .table-container {
@@ -174,6 +340,25 @@
 
   .name-cell {
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .status-indicator {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--error);
+    flex-shrink: 0;
+  }
+
+  .status-indicator.connected {
+    background: var(--success);
+  }
+
+  .status-indicator.paused {
+    background: var(--warning);
   }
 
   .llm-cell,
@@ -184,26 +369,6 @@
 
   .errors {
     color: var(--error);
-  }
-
-  .status {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-  }
-
-  .status-dot {
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 50%;
-  }
-
-  .status-connected .status-dot {
-    background: var(--success);
-  }
-
-  .status-disconnected .status-dot {
-    background: var(--error);
   }
 
   .badge {
@@ -249,6 +414,53 @@
 
   .btn-sm.btn-secondary:hover {
     background: var(--border-color);
+  }
+
+  .dropdown {
+    position: relative;
+    display: inline-block;
+  }
+
+  .dropdown-toggle::after {
+    content: "";
+    display: inline-block;
+    margin-left: 0.375rem;
+    border-top: 0.3em solid;
+    border-right: 0.3em solid transparent;
+    border-left: 0.3em solid transparent;
+  }
+
+  .dropdown-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+  }
+
+  .dropdown-menu {
+    min-width: 120px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    overflow: hidden;
+  }
+
+  .dropdown-item {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    text-align: left;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .dropdown-item:hover {
+    background: var(--bg-tertiary);
   }
 
   @media (max-width: 1024px) {

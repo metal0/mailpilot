@@ -59,6 +59,8 @@ export async function startAccount(
       idleSupported: imapClient.providerInfo.supportsIdle,
       llmProvider: account.llm?.provider ?? "default",
       llmModel: account.llm?.model ?? "default",
+      imapHost: account.imap.host,
+      imapPort: account.imap.port,
     });
 
     const ctx = createAccountContext(config, account, imapClient);
@@ -200,6 +202,7 @@ export function pauseAccount(accountName: string): boolean {
     return false;
   }
   pausedAccounts.add(accountName);
+  updateAccountStatus(accountName, { paused: true });
   logger.info("Account paused", { accountName });
   return true;
 }
@@ -209,6 +212,7 @@ export function resumeAccount(accountName: string): boolean {
     return false;
   }
   pausedAccounts.delete(accountName);
+  updateAccountStatus(accountName, { paused: false });
   logger.info("Account resumed", { accountName });
   return true;
 }

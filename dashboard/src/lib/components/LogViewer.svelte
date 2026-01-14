@@ -4,6 +4,17 @@
   import * as api from "../api";
 
   let loading = $state(false);
+  let searchQuery = $state("");
+
+  const searchedLogs = $derived(
+    searchQuery
+      ? $filteredLogs.filter(log =>
+          log.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          log.context.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (log.meta && JSON.stringify(log.meta).toLowerCase().includes(searchQuery.toLowerCase()))
+        )
+      : $filteredLogs
+  );
 
   async function loadLogs() {
     loading = true;
@@ -38,6 +49,12 @@
   <div class="card-header">
     <h2 class="card-title">System Logs</h2>
     <div class="filters">
+      <input
+        type="text"
+        class="search-input"
+        placeholder="Search logs..."
+        bind:value={searchQuery}
+      />
       <select class="filter-select" bind:value={$selectedAccount}>
         <option value={null}>All Accounts</option>
         {#each $accountList as name}
@@ -58,10 +75,10 @@
   <div class="logs-container">
     {#if loading}
       <div class="loading">Loading logs...</div>
-    {:else if $filteredLogs.length === 0}
-      <div class="empty">No logs available</div>
+    {:else if searchedLogs.length === 0}
+      <div class="empty">{searchQuery ? "No matching logs found" : "No logs available"}</div>
     {:else}
-      {#each $filteredLogs as log}
+      {#each searchedLogs as log}
         <div class="log-entry {getLevelClass(log.level)}">
           <span class="log-time">{formatTime(log.timestamp)}</span>
           <span class="log-level">{log.level.toUpperCase()}</span>
@@ -103,6 +120,21 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    width: 200px;
+  }
+
+  .search-input::placeholder {
+    color: var(--text-muted);
   }
 
   .filter-select {

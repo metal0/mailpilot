@@ -5,21 +5,6 @@
   import * as api from "../api";
   import type { HealthCheckResult } from "../api";
 
-  interface BrowserInfo {
-    userAgent: string;
-    platform: string;
-    language: string;
-    languages: string[];
-    screenWidth: number;
-    screenHeight: number;
-    windowWidth: number;
-    windowHeight: number;
-    devicePixelRatio: number;
-    cookiesEnabled: boolean;
-    onLine: boolean;
-    timezone: string;
-  }
-
   interface ServerInfo {
     uptime: number;
     nodeVersion: string;
@@ -28,16 +13,55 @@
     configPath: string;
   }
 
-  let browserInfo = $state<BrowserInfo | null>(null);
+  interface ImapServer {
+    host: string;
+    port: number;
+    accounts: Array<{
+      name: string;
+      connected: boolean;
+      idleSupported: boolean;
+      errors: number;
+      paused: boolean;
+    }>;
+  }
+
   let serverInfo = $state<ServerInfo | null>(null);
   let dnsCheck = $state<{ status: "pending" | "success" | "error"; latency?: number; error?: string }>({ status: "pending" });
   let apiCheck = $state<{ status: "pending" | "success" | "error"; latency?: number; error?: string }>({ status: "pending" });
   let healthCheck = $state<HealthCheckResult | null>(null);
   let llmCheckLoading = $state(false);
+  let llmTestingProvider = $state<string | null>(null);
   let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
+  // Group accounts by IMAP server
+  const imapServers = $derived.by(() => {
+    const accounts = $stats?.accounts ?? [];
+    const serverMap = new Map<string, ImapServer>();
+
+    for (const account of accounts) {
+      const key = `${account.imapHost}:${account.imapPort}`;
+      let server = serverMap.get(key);
+      if (!server) {
+        server = {
+          host: account.imapHost,
+          port: account.imapPort,
+          accounts: [],
+        };
+        serverMap.set(key, server);
+      }
+      server.accounts.push({
+        name: account.name,
+        connected: account.connected,
+        idleSupported: account.idleSupported,
+        errors: account.errors,
+        paused: account.paused,
+      });
+    }
+
+    return Array.from(serverMap.values());
+  });
+
   onMount(async () => {
-    collectBrowserInfo();
     await runChecks();
     refreshInterval = setInterval(runChecks, 30000);
   });
@@ -47,23 +71,6 @@
       clearInterval(refreshInterval);
     }
   });
-
-  function collectBrowserInfo() {
-    browserInfo = {
-      userAgent: navigator.userAgent,
-      platform: navigator.platform,
-      language: navigator.language,
-      languages: [...navigator.languages],
-      screenWidth: screen.width,
-      screenHeight: screen.height,
-      windowWidth: window.innerWidth,
-      windowHeight: window.innerHeight,
-      devicePixelRatio: window.devicePixelRatio,
-      cookiesEnabled: navigator.cookieEnabled,
-      onLine: navigator.onLine,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    };
-  }
 
   async function runChecks() {
     await Promise.all([
@@ -87,6 +94,18 @@
 
   async function runLlmCheck() {
     await loadHealthCheck(true);
+  }
+
+  async function testSingleProvider(providerName: string) {
+    llmTestingProvider = providerName;
+    try {
+      const result = await api.fetchHealthCheck(true);
+      healthCheck = result;
+    } catch {
+      // Error handling
+    } finally {
+      llmTestingProvider = null;
+    }
   }
 
   async function checkDns() {
@@ -160,12 +179,6 @@
           <span class="debug-value status-{$connectionState}">
             <span class="status-dot"></span>
             {$connectionState}
-          </span>
-        </div>
-        <div class="debug-item">
-          <span class="debug-label">Browser Online</span>
-          <span class="debug-value" class:success={browserInfo?.onLine} class:error={!browserInfo?.onLine}>
-            {browserInfo?.onLine ? "Yes" : "No"}
           </span>
         </div>
         <div class="debug-item">
@@ -260,36 +273,39 @@
     <section class="debug-section">
       <h3>
         LLM Providers
-        <button class="btn-small" onclick={runLlmCheck} disabled={llmCheckLoading}>
+        <button class="btn-small" onclick={runLlmCheck} disabled={llmCheckLoading || llmTestingProvider !== null}>
           {llmCheckLoading ? "Testing..." : "Test All"}
         </button>
       </h3>
       <div class="debug-items">
-        {#if healthCheck?.llmProviders && healthCheck.llmProviders.length > 0}
-          {#each healthCheck.llmProviders as provider}
-            <div class="debug-item">
-              <span class="debug-label">{provider.name}</span>
-              <span class="debug-value">
-                <span class="status-badge" class:healthy={provider.healthy}>
-                  {provider.healthy ? "Connected" : "Unreachable"}
-                </span>
-                <span class="debug-meta">{provider.model}</span>
-              </span>
-            </div>
-          {/each}
-        {:else if healthCheck?.llmProviders?.length === 0}
-          <div class="debug-item">
-            <span class="debug-label">No providers tested</span>
-            <span class="debug-value">
-              <span class="debug-meta">Click "Test All" to check LLM connectivity</span>
-            </span>
-          </div>
-        {:else if $stats?.providerStats}
+        {#if $stats?.providerStats && $stats.providerStats.length > 0}
           {#each $stats.providerStats as provider}
+            {@const testResult = healthCheck?.llmProviders?.find(p => p.name === provider.name)}
+            {@const isTesting = llmTestingProvider === provider.name || llmCheckLoading}
             <div class="debug-item">
-              <span class="debug-label">{provider.name}</span>
+              <button
+                class="provider-test-btn"
+                onclick={() => testSingleProvider(provider.name)}
+                disabled={isTesting}
+                title="Click to test this provider"
+              >
+                {provider.name}
+                {#if isTesting}
+                  <span class="testing-spinner"></span>
+                {/if}
+              </button>
               <span class="debug-value">
-                <span class="status-badge pending">Not tested</span>
+                {#if isTesting}
+                  <span class="status-badge testing">Testing...</span>
+                {:else if testResult !== undefined}
+                  <span class="status-badge" class:healthy={testResult.healthy}>
+                    {testResult.healthy ? "Connected" : "Unreachable"}
+                  </span>
+                {:else}
+                  <span class="status-badge" class:healthy={provider.healthy} class:stale={provider.healthStale}>
+                    {provider.healthStale ? "Unknown" : provider.healthy ? "Healthy" : "Unhealthy"}
+                  </span>
+                {/if}
                 <span class="debug-meta">{provider.model}</span>
               </span>
             </div>
@@ -303,103 +319,67 @@
     </section>
 
     <section class="debug-section">
-      <h3>IMAP Accounts</h3>
+      <h3>IMAP Servers</h3>
       <div class="debug-items">
-        {#if healthCheck?.imapAccounts && healthCheck.imapAccounts.length > 0}
-          {#each healthCheck.imapAccounts as account}
-            <div class="debug-item">
-              <span class="debug-label">{account.name}</span>
-              <span class="debug-value">
-                <span class="status-badge" class:healthy={account.connected}>
-                  {account.connected ? "Connected" : "Disconnected"}
+        {#if imapServers.length > 0}
+          {#each imapServers as server}
+            {@const allConnected = server.accounts.every(a => a.connected)}
+            {@const someConnected = server.accounts.some(a => a.connected)}
+            {@const totalErrors = server.accounts.reduce((sum, a) => sum + a.errors, 0)}
+            <div class="debug-item server-item">
+              <div class="server-header">
+                <span class="debug-label">{server.host}:{server.port}</span>
+                <span class="debug-value">
+                  <span class="status-badge" class:healthy={allConnected} class:partial={!allConnected && someConnected}>
+                    {allConnected ? "Connected" : someConnected ? "Partial" : "Disconnected"}
+                  </span>
+                  {#if totalErrors > 0}
+                    <span class="badge-errors">{totalErrors} errors</span>
+                  {/if}
                 </span>
-                {#if account.idleSupported}
-                  <span class="badge-idle">IDLE</span>
-                {/if}
-                {#if account.errors > 0}
-                  <span class="badge-errors">{account.errors} errors</span>
-                {/if}
-              </span>
-            </div>
-          {/each}
-        {:else if $stats?.accounts && $stats.accounts.length > 0}
-          {#each $stats.accounts as account}
-            <div class="debug-item">
-              <span class="debug-label">{account.name}</span>
-              <span class="debug-value">
-                <span class="status-badge" class:healthy={account.connected}>
-                  {account.connected ? "Connected" : "Disconnected"}
-                </span>
-                {#if account.idleSupported}
-                  <span class="badge-idle">IDLE</span>
-                {/if}
-                {#if account.errors > 0}
-                  <span class="badge-errors">{account.errors} errors</span>
-                {/if}
-              </span>
+              </div>
+              <div class="server-accounts">
+                {#each server.accounts as account}
+                  <div class="account-row">
+                    <span class="account-name">
+                      <span class="status-dot" class:connected={account.connected} class:paused={account.paused}></span>
+                      {account.name}
+                    </span>
+                    <span class="account-badges">
+                      {#if account.paused}
+                        <span class="badge-paused">Paused</span>
+                      {/if}
+                      {#if account.idleSupported}
+                        <span class="badge-idle">IDLE</span>
+                      {/if}
+                    </span>
+                  </div>
+                {/each}
+              </div>
             </div>
           {/each}
         {:else}
           <div class="debug-item">
-            <span class="debug-label">No accounts configured</span>
+            <span class="debug-label">No IMAP servers configured</span>
           </div>
         {/if}
       </div>
     </section>
 
     <section class="debug-section">
-      <h3>Browser Information</h3>
+      <h3>Processing Statistics</h3>
       <div class="debug-items">
         <div class="debug-item">
-          <span class="debug-label">Platform</span>
-          <span class="debug-value">{browserInfo?.platform ?? "-"}</span>
-        </div>
-        <div class="debug-item">
-          <span class="debug-label">Language</span>
-          <span class="debug-value">{browserInfo?.language ?? "-"}</span>
-        </div>
-        <div class="debug-item">
-          <span class="debug-label">Timezone</span>
-          <span class="debug-value">{browserInfo?.timezone ?? "-"}</span>
-        </div>
-        <div class="debug-item">
-          <span class="debug-label">Screen Size</span>
-          <span class="debug-value">{browserInfo ? `${browserInfo.screenWidth}x${browserInfo.screenHeight}` : "-"}</span>
-        </div>
-        <div class="debug-item">
-          <span class="debug-label">Window Size</span>
-          <span class="debug-value">{browserInfo ? `${browserInfo.windowWidth}x${browserInfo.windowHeight}` : "-"}</span>
-        </div>
-        <div class="debug-item">
-          <span class="debug-label">Pixel Ratio</span>
-          <span class="debug-value">{browserInfo?.devicePixelRatio ?? "-"}x</span>
-        </div>
-        <div class="debug-item">
-          <span class="debug-label">Cookies Enabled</span>
-          <span class="debug-value">{browserInfo?.cookiesEnabled ? "Yes" : "No"}</span>
-        </div>
-      </div>
-    </section>
-
-    <section class="debug-section full-width">
-      <h3>User Agent</h3>
-      <pre class="user-agent">{browserInfo?.userAgent ?? "-"}</pre>
-    </section>
-
-    <section class="debug-section full-width">
-      <h3>Processing Statistics</h3>
-      <div class="debug-items stats-grid">
-        <div class="debug-item">
           <span class="debug-label">Emails Processed</span>
-          <span class="debug-value large">{$stats?.totals.emailsProcessed ?? 0}</span>
+          <span class="debug-value">{($stats?.totals.emailsProcessed ?? 0).toLocaleString()}</span>
         </div>
         <div class="debug-item">
           <span class="debug-label">Actions Taken</span>
-          <span class="debug-value large">{$stats?.totals.actionsTaken ?? 0}</span>
+          <span class="debug-value">{($stats?.totals.actionsTaken ?? 0).toLocaleString()}</span>
         </div>
         <div class="debug-item">
           <span class="debug-label">Errors</span>
-          <span class="debug-value large" class:error={($stats?.totals.errors ?? 0) > 0}>
+          <span class="debug-value" class:error={($stats?.totals.errors ?? 0) > 0}>
             {$stats?.totals.errors ?? 0}
           </span>
         </div>
@@ -437,10 +417,6 @@
     padding: 1rem;
   }
 
-  .debug-section.full-width {
-    grid-column: 1 / -1;
-  }
-
   .debug-section h3 {
     margin: 0 0 1rem;
     font-size: 0.875rem;
@@ -455,12 +431,6 @@
     gap: 0.5rem;
   }
 
-  .debug-items.stats-grid {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 2rem;
-  }
-
   .debug-item {
     display: flex;
     justify-content: space-between;
@@ -470,12 +440,6 @@
   }
 
   .debug-item:last-child {
-    border-bottom: none;
-  }
-
-  .stats-grid .debug-item {
-    flex-direction: column;
-    align-items: flex-start;
     border-bottom: none;
   }
 
@@ -489,11 +453,6 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-  }
-
-  .debug-value.large {
-    font-size: 1.5rem;
-    font-weight: 600;
   }
 
   .debug-value.success {
@@ -611,15 +570,118 @@
     align-items: center;
   }
 
-  .user-agent {
+  .provider-test-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    padding: 0.25rem 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: color 0.2s;
+  }
+
+  .provider-test-btn:hover:not(:disabled) {
+    color: var(--accent);
+  }
+
+  .provider-test-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
+  .testing-spinner {
+    width: 0.75rem;
+    height: 0.75rem;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .status-badge.testing {
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent);
+  }
+
+  .status-badge.stale {
     background: var(--bg-tertiary);
-    padding: 0.75rem;
-    border-radius: 0.375rem;
+    color: var(--text-secondary);
+  }
+
+  .status-badge.partial {
+    background: color-mix(in srgb, var(--warning) 15%, transparent);
+    color: var(--warning);
+  }
+
+  .server-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .server-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .server-accounts {
+    padding-left: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .account-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     font-size: 0.75rem;
-    word-break: break-all;
-    white-space: pre-wrap;
-    margin: 0;
-    font-family: monospace;
+    color: var(--text-secondary);
+  }
+
+  .account-name {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .account-badges {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .status-dot {
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 50%;
+    background: var(--error);
+    flex-shrink: 0;
+  }
+
+  .status-dot.connected {
+    background: var(--success);
+  }
+
+  .status-dot.paused {
+    background: var(--warning);
+  }
+
+  .badge-paused {
+    padding: 0.0625rem 0.25rem;
+    border-radius: 0.125rem;
+    font-size: 0.5625rem;
+    font-weight: 500;
+    background: color-mix(in srgb, var(--warning) 15%, transparent);
+    color: var(--warning);
+    text-transform: uppercase;
   }
 
   .debug-actions {

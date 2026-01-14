@@ -62,8 +62,8 @@
   {/if}
 </div>
 
-{#if $stats?.actionBreakdown && $stats.actionBreakdown.length > 0}
-  <div class="charts-row">
+<div class="charts-row">
+  {#if $stats?.actionBreakdown && $stats.actionBreakdown.length > 0}
     <div class="chart-card">
       <h3>Actions by Type</h3>
       <div class="bar-chart">
@@ -81,52 +81,52 @@
         {/each}
       </div>
     </div>
+  {/if}
 
-    {#if $stats.providerStats && $stats.providerStats.length > 0}
-      <div class="chart-card">
-        <h3>LLM Provider Usage</h3>
-        <div class="provider-stats">
-          {#each $stats.providerStats as provider}
-            <div class="provider-item">
-              <div class="provider-header">
-                <span class="provider-name">
-                  <span
-                    class="health-indicator"
-                    class:healthy={provider.healthy}
-                    class:stale={provider.healthStale}
-                    title={provider.healthStale ? "Status unknown" : provider.healthy ? "Connected" : "Connection issues"}
-                  ></span>
-                  {provider.name}
-                </span>
-                <span class="provider-model">{provider.model}</span>
-              </div>
-              <div class="provider-metrics">
-                <div class="metric">
-                  <span class="metric-value">{provider.requestsToday.toLocaleString()}</span>
-                  <span class="metric-label">Today</span>
-                </div>
-                <div class="metric">
-                  <span class="metric-value">{provider.requestsTotal.toLocaleString()}</span>
-                  <span class="metric-label">Total</span>
-                </div>
-                <div class="metric">
-                  <span class="metric-value" class:rate-limited={provider.rateLimited}>
-                    {provider.requestsLastMinute}
-                    {#if provider.rpmLimit}/ {provider.rpmLimit}{/if}
-                  </span>
-                  <span class="metric-label">RPM</span>
-                </div>
-              </div>
-              {#if provider.rateLimited}
-                <div class="rate-limit-warning">Rate limited</div>
-              {/if}
+  {#if $stats?.providerStats && $stats.providerStats.length > 0}
+    <div class="chart-card">
+      <h3>LLM Providers</h3>
+      <div class="provider-stats">
+        {#each $stats.providerStats as provider}
+          <div class="provider-item">
+            <div class="provider-header">
+              <span class="provider-name">
+                <span
+                  class="health-indicator"
+                  class:healthy={provider.healthy}
+                  class:stale={provider.healthStale}
+                  title={provider.healthStale ? "Status unknown" : provider.healthy ? "Healthy" : "Unhealthy"}
+                ></span>
+                {provider.name}
+              </span>
+              <span class="provider-model">{provider.model}</span>
             </div>
-          {/each}
-        </div>
+            <div class="provider-metrics">
+              <div class="metric">
+                <span class="metric-value">{provider.requestsToday.toLocaleString()}</span>
+                <span class="metric-label">Today</span>
+              </div>
+              <div class="metric">
+                <span class="metric-value">{provider.requestsTotal.toLocaleString()}</span>
+                <span class="metric-label">Total</span>
+              </div>
+              <div class="metric">
+                <span class="metric-value" class:rate-limited={provider.rateLimited}>
+                  {provider.requestsLastMinute}
+                  {#if provider.rpmLimit}/ {provider.rpmLimit}{/if}
+                </span>
+                <span class="metric-label">RPM</span>
+              </div>
+            </div>
+            {#if provider.rateLimited}
+              <div class="rate-limit-warning">Rate limited</div>
+            {/if}
+          </div>
+        {/each}
       </div>
-    {/if}
-  </div>
-{/if}
+    </div>
+  {/if}
+</div>
 
 <style>
   .stats-grid {

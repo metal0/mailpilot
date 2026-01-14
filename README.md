@@ -265,12 +265,16 @@ Then visit `http://localhost:8080/`. On first visit, you'll create an admin acco
 **Features**:
 - **Visual Configuration Editor** - Edit all settings through the UI with helpful tooltips
 - **Live Config Reload** - Apply configuration changes without restarting
+- **Bulk Account Operations** - Select multiple accounts and pause/resume/reconnect/process all at once
+- **Log Search** - Search through system logs by message, context, or metadata
+- **LLM Health Indicators** - Visual health status for each LLM provider on the overview page
+- **IMAP Server View** - Debug page groups accounts by IMAP server for easier troubleshooting
 - Real-time updates via WebSocket (no page refresh needed)
 - Dark/light mode toggle
 - Email preview before manual processing
 - Search and filter audit logs
 - Dead letter queue management
-- Account pause/resume/reconnect controls
+- Account pause/resume/reconnect controls via dropdown menus
 
 **Development Mode**: When `dry_run: true` is set, authentication is bypassed and a banner indicates no actions are being taken. This is ideal for testing classification rules.
 

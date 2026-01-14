@@ -29,6 +29,9 @@ export interface AccountStatus {
   emailsProcessed: number;
   actionsTaken: number;
   errors: number;
+  imapHost: string;
+  imapPort: number;
+  paused: boolean;
 }
 
 const accountStatuses = new Map<
@@ -40,6 +43,9 @@ const accountStatuses = new Map<
     errors: number;
     llmProvider: string;
     llmModel: string;
+    imapHost: string;
+    imapPort: number;
+    paused: boolean;
   }
 >();
 
@@ -61,6 +67,9 @@ export function updateAccountStatus(
     errors: number;
     llmProvider: string;
     llmModel: string;
+    imapHost: string;
+    imapPort: number;
+    paused: boolean;
   }>
 ): void {
   const current = accountStatuses.get(accountName) ?? {
@@ -70,6 +79,9 @@ export function updateAccountStatus(
     errors: 0,
     llmProvider: "unknown",
     llmModel: "unknown",
+    imapHost: "unknown",
+    imapPort: 993,
+    paused: false,
   };
 
   const updated = { ...current, ...status };
@@ -85,6 +97,9 @@ export function updateAccountStatus(
       errors: updated.errors,
       llmProvider: updated.llmProvider,
       llmModel: updated.llmModel,
+      imapHost: updated.imapHost,
+      imapPort: updated.imapPort,
+      paused: updated.paused,
     });
   }
 }
@@ -118,6 +133,9 @@ export function getAccountStatuses(): AccountStatus[] {
       emailsProcessed: getProcessedCount(name),
       actionsTaken: getActionCount(name),
       errors: status.errors,
+      imapHost: status.imapHost,
+      imapPort: status.imapPort,
+      paused: status.paused,
     });
   }
 
@@ -165,6 +183,9 @@ export function initializeAccountStatuses(accounts: AccountConfig[]): void {
       errors: 0,
       llmProvider: account.llm?.provider ?? "default",
       llmModel: account.llm?.model ?? "default",
+      imapHost: account.imap.host,
+      imapPort: account.imap.port,
+      paused: false,
     });
   }
 }
