@@ -1,0 +1,48 @@
+# ClamAV Antivirus Scanner for Mailpilot
+#
+# Usage:
+#   docker compose -f docker-compose.yaml -f docker-compose.clamav.yaml up -d
+#
+# Requirements:
+#   - Memory: 1-2GB (virus definitions loaded into RAM)
+#   - Disk: ~500MB for virus definitions
+#   - Startup time: 2-5 minutes (loading definitions)
+#
+# Configuration (add to config.yaml):
+#   antivirus:
+#     enabled: true
+#     host: clamav
+#     port: 3310
+
+services:
+  mailpilot:
+    depends_on:
+      clamav:
+        condition: service_healthy
+
+  clamav:
+    image: clamav/clamav:latest
+    container_name: mailpilot-clamav
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+    volumes:
+      - clamav-db:/var/lib/clamav
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  clamav-db:

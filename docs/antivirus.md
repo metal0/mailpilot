@@ -31,40 +31,18 @@ The Docker health check is configured with a 5-minute `start_period` to accommod
 
 ## Configuration
 
-### 1. Enable ClamAV in docker-compose.yaml
+### 1. Enable ClamAV with Docker Compose
 
-Uncomment the ClamAV service in `docker-compose.yaml`:
+Use the ClamAV override file alongside the main compose file:
 
-```yaml
-services:
-  mailpilot:
-    # ... existing config ...
-    depends_on:
-      clamav:
-        condition: service_healthy
-
-  clamav:
-    image: clamav/clamav:latest
-    container_name: mailpilot-clamav
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "clamdscan", "--ping", "1"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 300s
-    volumes:
-      - clamav-db:/var/lib/clamav
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 1G
-
-volumes:
-  clamav-db:
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.clamav.yaml up -d
 ```
+
+This automatically:
+- Adds the ClamAV service with proper resource limits
+- Configures Mailpilot to wait for ClamAV to be healthy
+- Creates a persistent volume for virus definitions
 
 ### 2. Enable in config.yaml
 
@@ -82,14 +60,20 @@ antivirus:
 ### 3. Start the services
 
 ```bash
-docker compose up -d
+docker compose -f docker-compose.yaml -f docker-compose.clamav.yaml up -d
 ```
 
 Wait for ClamAV to become healthy (2-5 minutes):
 
 ```bash
-docker compose ps
+docker compose -f docker-compose.yaml -f docker-compose.clamav.yaml ps
 # Wait until clamav shows "healthy"
+```
+
+**Tip**: Create an alias or shell script to avoid typing the full command:
+
+```bash
+alias mailpilot-up='docker compose -f docker-compose.yaml -f docker-compose.clamav.yaml up -d'
 ```
 
 ## Actions on Virus Detection
@@ -142,11 +126,11 @@ antivirus:
 ### Check ClamAV Status
 
 ```bash
-# Docker
-docker compose exec clamav clamdscan --version
+# Docker (when using ClamAV override)
+docker compose -f docker-compose.yaml -f docker-compose.clamav.yaml exec clamav clamdscan --version
 
 # Check if responsive
-docker compose exec clamav clamdscan --ping 1
+docker compose -f docker-compose.yaml -f docker-compose.clamav.yaml exec clamav clamdscan --ping 1
 ```
 
 ### View Scan Logs
@@ -200,7 +184,7 @@ antivirus:
 **Cause**: ClamAV not running or wrong host/port.
 
 **Fix**:
-1. Check ClamAV is running: `docker compose ps`
+1. Check ClamAV is running: `docker compose -f docker-compose.yaml -f docker-compose.clamav.yaml ps`
 2. Verify host/port in config matches your setup
 3. If using Docker, use service name (`clamav`) not `localhost`
 
@@ -211,7 +195,7 @@ antivirus:
 **If excessive**: Check for memory leaks by restarting:
 
 ```bash
-docker compose restart clamav
+docker compose -f docker-compose.yaml -f docker-compose.clamav.yaml restart clamav
 ```
 
 ## Performance Considerations

@@ -132,7 +132,7 @@ async function sendCommand(
   });
 }
 
-function parseResponse(response: string): ScanResult {
+export function parseResponse(response: string): ScanResult {
   const trimmed = response.trim().replace(/\0/g, "");
 
   // Response format: "stream: OK" or "stream: VirusName FOUND"

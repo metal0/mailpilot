@@ -31,55 +31,7 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    # Uncomment if using ClamAV antivirus scanning
-    # depends_on:
-    #   clamav:
-    #     condition: service_healthy
 
-  # =============================================================================
-  # OPTIONAL: ClamAV Antivirus Scanner
-  # =============================================================================
-  # Uncomment to enable antivirus scanning of email attachments.
-  #
-  # RESOURCE REQUIREMENTS:
-  #   - Memory: 1-2GB minimum (virus definitions are loaded into RAM)
-  #   - Disk: ~500MB for virus definitions
-  #   - CPU: Low usage during idle, moderate during scans
-  #   - Startup time: 2-5 minutes (loading virus definitions)
-  #
-  # To enable:
-  #   1. Uncomment the clamav service below
-  #   2. Uncomment the depends_on in mailpilot service above
-  #   3. Add antivirus config to your config.yaml:
-  #      antivirus:
-  #        enabled: true
-  #        host: clamav
-  #        port: 3310
-  #
-  # clamav:
-  #   image: clamav/clamav:latest
-  #   container_name: mailpilot-clamav
-  #   restart: unless-stopped
-  #   healthcheck:
-  #     test: ["CMD", "clamdscan", "--ping", "1"]
-  #     interval: 60s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 300s  # 5 min - ClamAV needs time to load virus definitions
-  #   volumes:
-  #     - clamav-db:/var/lib/clamav
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 2G
-  #       reservations:
-  #         memory: 1G
-  #   logging:
-  #     driver: json-file
-  #     options:
-  #       max-size: "10m"
-  #       max-file: "3"
-
-# Uncomment if using ClamAV
-# volumes:
-#   clamav-db:
+# For ClamAV antivirus scanning, use the override file:
+#   docker compose -f docker-compose.yaml -f docker-compose.clamav.yaml up -d
+# See docs/antivirus.md for configuration details.
