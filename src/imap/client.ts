@@ -43,7 +43,9 @@ export function createImapClient(options: ImapClientOptions): ImapClient {
   const { config, accountName } = options;
   const log = logger.child(accountName);
 
-  const providerInfo = detectProvider(config.host, config.port);
+  const detectedProvider = detectProvider(config.host, config.port);
+  // Create mutable copy - supportsIdle will be updated after connection
+  const providerInfo: ProviderInfo = { ...detectedProvider };
 
   let authConfig: { user: string; pass?: string; accessToken?: string };
 
@@ -99,6 +101,16 @@ export function createImapClient(options: ImapClientOptions): ImapClient {
 
         await client.connect();
       });
+
+      // Check actual IDLE capability from server
+      const serverSupportsIdle = client.capabilities.has("IDLE");
+      if (serverSupportsIdle !== providerInfo.supportsIdle) {
+        log.info("IDLE capability differs from detection", {
+          detected: providerInfo.supportsIdle,
+          actual: serverSupportsIdle,
+        });
+        providerInfo.supportsIdle = serverSupportsIdle;
+      }
 
       log.info("Connected to IMAP server", {
         provider: providerInfo.name,
