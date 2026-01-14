@@ -176,13 +176,11 @@ dashboard:
 
 | Permission | Endpoints | Description |
 |------------|-----------|-------------|
-| `read:stats` | `/api/stats` | Access metrics and account status |
+| `read:stats` | `/api/stats`, `/api/config` (read) | Access metrics, account status, and config |
 | `read:activity` | `/api/activity` | Access audit log |
 | `read:logs` | `/api/logs` | Access system logs |
 | `read:export` | `/api/export` | Export audit data as CSV/JSON |
-| `read:config` | `/api/config` | Read configuration |
-| `write:accounts` | `/api/accounts/*` | Pause/resume/reconnect/process |
-| `write:config` | `/api/config` | Update configuration |
+| `write:accounts` | `/api/accounts/*`, `/api/config` (write) | Pause/resume/reconnect/process, update config |
 | `read:*` | All read endpoints | Wildcard for all read permissions |
 | `write:*` | All write endpoints | Wildcard for all write permissions |
 | `*` | All endpoints | Full access |
@@ -311,8 +309,8 @@ When the dashboard is enabled but no account exists:
 | `/api/activity` | GET | Session/Key | `read:activity` | Get audit log |
 | `/api/logs` | GET | Session/Key | `read:logs` | Get system logs |
 | `/api/export` | GET | Session/Key | `read:export` | Export audit data |
-| `/api/config` | GET | Session/Key | `read:config` | Get configuration |
-| `/api/config` | PUT | Session/Key | `write:config` | Update configuration |
+| `/api/config` | GET | Session/Key | `read:stats` | Get configuration |
+| `/api/config` | PUT | Session/Key | `write:accounts` | Update configuration |
 | `/api/config/raw` | GET | Session/Key | `write:accounts` | Get raw YAML config |
 | `/api/config/raw` | PUT | Session/Key | `write:accounts` | Save raw YAML config |
 | `/api/dead-letter` | GET | Session/Key | `read:activity` | Get dead letters |
