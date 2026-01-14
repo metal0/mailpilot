@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import * as api from "../api";
-  import { stats } from "../stores/data";
+  import { stats, serviceStatus, type ServicesStatus } from "../stores/data";
 
   interface Config {
     polling_interval?: string;
@@ -92,6 +92,10 @@
   let editingAccount = $state<Account | null>(null);
   let editingProvider = $state<LlmProvider | null>(null);
 
+  // Service status
+  let services = $state<ServicesStatus | null>(null);
+  let serviceCheckInterval: ReturnType<typeof setInterval> | null = null;
+
   const sections = [
     { id: "global", label: "Global Settings", icon: "cog" },
     { id: "accounts", label: "Email Accounts", icon: "mail" },
@@ -141,14 +145,41 @@
 
   onMount(async () => {
     await loadConfig();
+    await checkServices();
+    // Poll service status every 30 seconds
+    serviceCheckInterval = setInterval(checkServices, 30000);
   });
+
+  onDestroy(() => {
+    if (serviceCheckInterval) {
+      clearInterval(serviceCheckInterval);
+    }
+  });
+
+  async function checkServices() {
+    try {
+      services = await api.fetchServices();
+      serviceStatus.set(services);
+    } catch {
+      // Silently fail - services might not be available
+    }
+  }
 
   async function loadConfig() {
     loading = true;
     error = null;
     try {
       const result = await api.fetchConfig();
-      config = result.config as Config;
+      const loadedConfig = result.config as Config;
+
+      // Initialize nested objects to avoid bind issues
+      loadedConfig.logging = loadedConfig.logging ?? { level: "info" };
+      loadedConfig.server = loadedConfig.server ?? { port: 8080 };
+      loadedConfig.dashboard = loadedConfig.dashboard ?? { enabled: true, session_ttl: "24h" };
+      loadedConfig.attachments = loadedConfig.attachments ?? { enabled: false };
+      loadedConfig.antivirus = loadedConfig.antivirus ?? { enabled: false };
+
+      config = loadedConfig;
       configPath = result.configPath;
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to load config";
@@ -333,7 +364,14 @@
                   Log Level
                   <span class="help-icon" title={helpTexts["logging.level"]}>?</span>
                 </span>
-                <select bind:value={config.logging ??= {}, config.logging.level}>
+                <select
+                  value={config.logging?.level ?? "info"}
+                  onchange={(e) => {
+                    config.logging = config.logging ?? {};
+                    config.logging.level = (e.target as HTMLSelectElement).value;
+                    config = { ...config };
+                  }}
+                >
                   <option value="debug">Debug</option>
                   <option value="info">Info</option>
                   <option value="warn">Warning</option>
@@ -348,7 +386,16 @@
                   Server Port
                   <span class="help-icon" title={helpTexts["server.port"]}>?</span>
                 </span>
-                <input type="number" bind:value={config.server ??= {}, config.server.port} placeholder="8080" />
+                <input
+                  type="number"
+                  value={config.server?.port ?? 8080}
+                  oninput={(e) => {
+                    config.server = config.server ?? {};
+                    config.server.port = parseInt((e.target as HTMLInputElement).value) || 8080;
+                    config = { ...config };
+                  }}
+                  placeholder="8080"
+                />
               </label>
             </div>
 
@@ -486,13 +533,29 @@
                     <div class="form-group">
                       <label>
                         <span class="label-text">Spam Folder <span class="help-icon" title={helpTexts["folders.spam"]}>?</span></span>
-                        <input type="text" bind:value={editingAccount.folders ??= {}, editingAccount.folders.spam} placeholder="Spam" />
+                        <input
+                          type="text"
+                          value={editingAccount.folders?.spam ?? ""}
+                          oninput={(e) => {
+                            editingAccount!.folders = editingAccount!.folders ?? {};
+                            editingAccount!.folders.spam = (e.target as HTMLInputElement).value;
+                          }}
+                          placeholder="Spam"
+                        />
                       </label>
                     </div>
                     <div class="form-group">
                       <label>
                         <span class="label-text">Archive Folder <span class="help-icon" title={helpTexts["folders.archive"]}>?</span></span>
-                        <input type="text" bind:value={editingAccount.folders ??= {}, editingAccount.folders.archive} placeholder="Archive" />
+                        <input
+                          type="text"
+                          value={editingAccount.folders?.archive ?? ""}
+                          oninput={(e) => {
+                            editingAccount!.folders = editingAccount!.folders ?? {};
+                            editingAccount!.folders.archive = (e.target as HTMLInputElement).value;
+                          }}
+                          placeholder="Archive"
+                        />
                       </label>
                     </div>
                   </div>
@@ -502,7 +565,13 @@
                     <div class="form-group">
                       <label>
                         <span class="label-text">Provider <span class="help-icon" title={helpTexts["llm.provider"]}>?</span></span>
-                        <select bind:value={editingAccount.llm ??= {}, editingAccount.llm.provider}>
+                        <select
+                          value={editingAccount.llm?.provider ?? ""}
+                          onchange={(e) => {
+                            editingAccount!.llm = editingAccount!.llm ?? {};
+                            editingAccount!.llm.provider = (e.target as HTMLSelectElement).value || undefined;
+                          }}
+                        >
                           <option value="">Default</option>
                           {#each config?.llm_providers ?? [] as provider}
                             <option value={provider.name}>{provider.name}</option>
@@ -513,7 +582,15 @@
                     <div class="form-group">
                       <label>
                         <span class="label-text">Model <span class="help-icon" title={helpTexts["llm.model"]}>?</span></span>
-                        <input type="text" bind:value={editingAccount.llm ??= {}, editingAccount.llm.model} placeholder="Use provider default" />
+                        <input
+                          type="text"
+                          value={editingAccount.llm?.model ?? ""}
+                          oninput={(e) => {
+                            editingAccount!.llm = editingAccount!.llm ?? {};
+                            editingAccount!.llm.model = (e.target as HTMLInputElement).value || undefined;
+                          }}
+                          placeholder="Use provider default"
+                        />
                       </label>
                     </div>
                   </div>
@@ -616,11 +693,19 @@
 
         {:else if activeSection === "attachments"}
           <section class="config-section">
-            <h3>Attachment Extraction</h3>
+            <div class="section-header">
+              <h3>Attachment Extraction</h3>
+              {#if services?.tika?.enabled}
+                <span class="service-status" class:healthy={services.tika.healthy}>
+                  <span class="status-dot"></span>
+                  Tika {services.tika.healthy ? "Connected" : "Unreachable"}
+                </span>
+              {/if}
+            </div>
 
             <div class="form-group checkbox">
               <label>
-                <input type="checkbox" bind:checked={config.attachments ??= {}, config.attachments.enabled} />
+                <input type="checkbox" bind:checked={config.attachments.enabled} />
                 <span class="label-text">
                   Enable Attachment Extraction
                   <span class="help-icon" title={helpTexts["attachments.enabled"]}>?</span>
@@ -674,11 +759,19 @@
 
         {:else if activeSection === "antivirus"}
           <section class="config-section">
-            <h3>Antivirus Scanning</h3>
+            <div class="section-header">
+              <h3>Antivirus Scanning</h3>
+              {#if services?.clamav?.enabled}
+                <span class="service-status" class:healthy={services.clamav.healthy}>
+                  <span class="status-dot"></span>
+                  ClamAV {services.clamav.healthy ? "Connected" : "Unreachable"}
+                </span>
+              {/if}
+            </div>
 
             <div class="form-group checkbox">
               <label>
-                <input type="checkbox" bind:checked={config.antivirus ??= {}, config.antivirus.enabled} />
+                <input type="checkbox" bind:checked={config.antivirus.enabled} />
                 <span class="label-text">
                   Enable Virus Scanning
                   <span class="help-icon" title={helpTexts["antivirus.enabled"]}>?</span>
@@ -727,28 +820,17 @@
         {:else if activeSection === "dashboard"}
           <section class="config-section">
             <h3>Dashboard Settings</h3>
+            <p class="section-note">Note: The dashboard cannot be disabled from here to prevent lockout. Edit config.yaml directly to disable.</p>
 
-            <div class="form-group checkbox">
+            <div class="form-group">
               <label>
-                <input type="checkbox" bind:checked={config.dashboard ??= {}, config.dashboard.enabled} />
                 <span class="label-text">
-                  Enable Dashboard
-                  <span class="help-icon" title={helpTexts["dashboard.enabled"]}>?</span>
+                  Session TTL
+                  <span class="help-icon" title={helpTexts["dashboard.session_ttl"]}>?</span>
                 </span>
+                <input type="text" bind:value={config.dashboard.session_ttl} placeholder="24h" />
               </label>
             </div>
-
-            {#if config.dashboard?.enabled}
-              <div class="form-group">
-                <label>
-                  <span class="label-text">
-                    Session TTL
-                    <span class="help-icon" title={helpTexts["dashboard.session_ttl"]}>?</span>
-                  </span>
-                  <input type="text" bind:value={config.dashboard.session_ttl} placeholder="24h" />
-                </label>
-              </div>
-            {/if}
           </section>
         {/if}
       </div>
@@ -876,6 +958,16 @@
     letter-spacing: 0.05em;
   }
 
+  .section-note {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    padding: 0.75rem 1rem;
+    border-radius: 0.375rem;
+    margin-bottom: 1rem;
+    border-left: 3px solid var(--warning);
+  }
+
   .section-header {
     display: flex;
     align-items: center;
@@ -885,6 +977,30 @@
 
   .section-header h3 {
     margin: 0;
+  }
+
+  .service-status {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--error);
+    background: color-mix(in srgb, var(--error) 15%, transparent);
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+  }
+
+  .service-status.healthy {
+    color: var(--success);
+    background: color-mix(in srgb, var(--success) 15%, transparent);
+  }
+
+  .service-status .status-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: currentColor;
   }
 
   .form-group {

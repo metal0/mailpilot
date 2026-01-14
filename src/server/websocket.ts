@@ -9,7 +9,7 @@ import type { DashboardConfig, ApiKeyConfig } from "../config/schema.js";
 const logger = createLogger("websocket");
 
 export interface WebSocketMessage {
-  type: "stats" | "activity" | "logs" | "account_update" | "toast";
+  type: "stats" | "activity" | "logs" | "account_update" | "toast" | "service_status";
   data: unknown;
 }
 
@@ -159,6 +159,10 @@ export function broadcastAccountUpdate(data: unknown): void {
 
 export function broadcastToast(data: { message: string; type: "info" | "success" | "warning" | "error" }): void {
   broadcast({ type: "toast", data });
+}
+
+export function broadcastServiceStatus(data: unknown): void {
+  broadcast({ type: "service_status", data });
 }
 
 export function getConnectedClientsCount(): number {

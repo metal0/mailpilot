@@ -152,6 +152,22 @@ export async function saveConfig(config: unknown, reload = true): Promise<{ succ
   });
 }
 
+// Service Health
+export interface ServiceStatus {
+  enabled: boolean;
+  healthy: boolean;
+  url?: string;
+}
+
+export interface ServicesStatus {
+  tika: ServiceStatus;
+  clamav: ServiceStatus;
+}
+
+export async function fetchServices(): Promise<ServicesStatus> {
+  return fetchJson(`${BASE_URL}/services`);
+}
+
 // Export
 export function exportCsvUrl(params: ActivityParams = {}): string {
   const searchParams = new URLSearchParams();

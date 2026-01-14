@@ -1,5 +1,5 @@
 import { Hono, type Context } from "hono";
-import type { DashboardConfig, ApiKeyPermission } from "../config/schema.js";
+import type { DashboardConfig, ApiKeyPermission, Config } from "../config/schema.js";
 import {
   getUserCount,
   createUser,
@@ -49,6 +49,8 @@ import {
   resolveDeadLetter,
   removeDeadLetter,
 } from "../storage/dead-letter.js";
+import { createTikaClient } from "../attachments/tika.js";
+import { createAntivirusScanner } from "../processor/antivirus.js";
 
 export interface DashboardRouterOptions {
   dashboardConfig: DashboardConfig;
@@ -334,7 +336,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     }
 
     // Deep clone to avoid mutating original
-    const safeConfig = JSON.parse(JSON.stringify(currentConfig));
+    const safeConfig = JSON.parse(JSON.stringify(currentConfig)) as Config;
 
     // Mask sensitive fields in accounts
     for (const account of safeConfig.accounts) {
@@ -393,6 +395,40 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         error: error instanceof Error ? error.message : String(error),
       }, 500);
     }
+  });
+
+  // Service health endpoint (Tika, ClamAV)
+  router.get("/api/services", requireAuthOrApiKeyWithDryRun("read:stats"), async (c) => {
+    const currentConfig = getCurrentConfig();
+    const services: Record<string, { enabled: boolean; healthy: boolean; url?: string }> = {};
+
+    // Check Tika
+    if (currentConfig?.attachments?.enabled) {
+      const tikaClient = createTikaClient(currentConfig.attachments);
+      const tikaHealthy = await tikaClient.isHealthy();
+      services.tika = {
+        enabled: true,
+        healthy: tikaHealthy,
+        url: currentConfig.attachments.tika_url ?? "http://localhost:9998",
+      };
+    } else {
+      services.tika = { enabled: false, healthy: false };
+    }
+
+    // Check ClamAV
+    if (currentConfig?.antivirus?.enabled) {
+      const scanner = createAntivirusScanner(currentConfig.antivirus);
+      const clamHealthy = await scanner.ping();
+      services.clamav = {
+        enabled: true,
+        healthy: clamHealthy,
+        url: `${currentConfig.antivirus.host}:${currentConfig.antivirus.port}`,
+      };
+    } else {
+      services.clamav = { enabled: false, healthy: false };
+    }
+
+    return c.json(services);
   });
 
   // Dead letter queue endpoints

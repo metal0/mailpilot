@@ -1,62 +1,17 @@
 <script lang="ts">
-  import { theme } from "../stores/theme";
   import { auth, logout } from "../stores/auth";
   import { connectionState } from "../stores/websocket";
-  import { stats } from "../stores/data";
-  import * as api from "../api";
   import ThemeToggle from "./ThemeToggle.svelte";
 
-  let reloading = $state(false);
-  let reloadMessage = $state<{ type: "success" | "error"; text: string } | null>(null);
+  let userMenuOpen = $state(false);
 
   async function handleLogout() {
     await logout();
     window.location.reload();
   }
 
-  async function handleReloadConfig() {
-    if (reloading) return;
-
-    reloading = true;
-    reloadMessage = null;
-
-    try {
-      const result = await api.reloadConfig();
-
-      if (result.success) {
-        const parts: string[] = [];
-        if (result.added.length > 0) parts.push(`${result.added.length} added`);
-        if (result.removed.length > 0) parts.push(`${result.removed.length} removed`);
-        if (result.restarted.length > 0) parts.push(`${result.restarted.length} restarted`);
-        if (result.unchanged.length > 0) parts.push(`${result.unchanged.length} unchanged`);
-
-        reloadMessage = {
-          type: "success",
-          text: parts.length > 0 ? `Config reloaded: ${parts.join(", ")}` : "Config reloaded (no changes)",
-        };
-
-        // Refresh stats after reload
-        const newStats = await api.fetchStats();
-        stats.set(newStats);
-      } else {
-        reloadMessage = {
-          type: "error",
-          text: result.errors?.join(", ") || "Failed to reload config",
-        };
-      }
-    } catch (error) {
-      reloadMessage = {
-        type: "error",
-        text: error instanceof Error ? error.message : "Failed to reload config",
-      };
-    } finally {
-      reloading = false;
-
-      // Clear message after 5 seconds
-      setTimeout(() => {
-        reloadMessage = null;
-      }, 5000);
-    }
+  function closeMenu() {
+    userMenuOpen = false;
   }
 </script>
 
@@ -78,52 +33,36 @@
   </div>
 
   <div class="header-right">
-    <a
-      href="https://github.com/metal0/mailpilot"
-      target="_blank"
-      rel="noopener noreferrer"
-      class="github-link"
-      title="View on GitHub"
-    >
-      <svg class="github-icon" viewBox="0 0 24 24" fill="currentColor">
-        <path
-          d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
-        />
-      </svg>
-    </a>
-
-    <button
-      class="btn btn-secondary btn-sm reload-btn"
-      onclick={handleReloadConfig}
-      disabled={reloading}
-      title="Reload configuration from disk"
-    >
-      <svg
-        class="reload-icon"
-        class:spinning={reloading}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-      >
-        <path d="M23 4v6h-6" />
-        <path d="M1 20v-6h6" />
-        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-      </svg>
-      {reloading ? "Reloading..." : "Reload Config"}
-    </button>
-
-    {#if reloadMessage}
-      <div class="reload-message reload-{reloadMessage.type}">
-        {reloadMessage.text}
-      </div>
-    {/if}
-
     <ThemeToggle />
 
-    <div class="user-info">
-      <span class="username">{$auth.username}</span>
-      <button class="btn btn-secondary btn-sm" onclick={handleLogout}>Logout</button>
+    <div class="user-menu">
+      <button
+        class="user-menu-trigger"
+        onclick={() => userMenuOpen = !userMenuOpen}
+        onblur={() => setTimeout(closeMenu, 200)}
+      >
+        <svg class="user-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+        <span class="username">{$auth.username}</span>
+        <svg class="chevron" class:open={userMenuOpen} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {#if userMenuOpen}
+        <div class="user-dropdown">
+          <button class="dropdown-item" onclick={handleLogout}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            Log out
+          </button>
+        </div>
+      {/if}
     </div>
   </div>
 </header>
@@ -204,104 +143,85 @@
     }
   }
 
-  .github-link {
+  .user-menu {
+    position: relative;
+  }
+
+  .user-menu-trigger {
     display: flex;
     align-items: center;
-    color: var(--text-secondary);
-    transition: color 0.2s;
-  }
-
-  .github-link:hover {
-    color: var(--text-primary);
-  }
-
-  .github-icon {
-    width: 1.5rem;
-    height: 1.5rem;
-  }
-
-  .reload-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-  }
-
-  .reload-btn:disabled {
-    opacity: 0.7;
-    cursor: not-allowed;
-  }
-
-  .reload-icon {
-    width: 1rem;
-    height: 1rem;
-  }
-
-  .reload-icon.spinning {
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  .reload-message {
+    gap: 0.5rem;
     padding: 0.375rem 0.75rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
     border-radius: 0.375rem;
-    font-size: 0.75rem;
-    white-space: nowrap;
-  }
-
-  .reload-success {
-    background: color-mix(in srgb, var(--success) 20%, transparent);
-    color: var(--success);
-  }
-
-  .reload-error {
-    background: color-mix(in srgb, var(--error) 20%, transparent);
-    color: var(--error);
-  }
-
-  .user-info {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .username {
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-  }
-
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.5rem 1rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    border: none;
-    border-radius: 0.375rem;
+    color: var(--text-primary);
     cursor: pointer;
     transition: background 0.2s;
   }
 
-  .btn-secondary {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-  }
-
-  .btn-secondary:hover {
+  .user-menu-trigger:hover {
     background: var(--border-color);
   }
 
-  .btn-sm {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.75rem;
+  .user-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: var(--text-secondary);
+  }
+
+  .username {
+    font-size: 0.875rem;
+  }
+
+  .chevron {
+    width: 1rem;
+    height: 1rem;
+    color: var(--text-secondary);
+    transition: transform 0.2s;
+  }
+
+  .chevron.open {
+    transform: rotate(180deg);
+  }
+
+  .user-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.25rem;
+    min-width: 150px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 50;
+    overflow: hidden;
+  }
+
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .dropdown-item:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .dropdown-item svg {
+    width: 1rem;
+    height: 1rem;
+    color: var(--text-secondary);
   }
 
   @media (max-width: 640px) {

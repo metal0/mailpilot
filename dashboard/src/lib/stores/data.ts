@@ -80,11 +80,23 @@ export interface DashboardStats {
   deadLetterCount: number;
 }
 
+export interface ServiceStatus {
+  enabled: boolean;
+  healthy: boolean;
+  url?: string;
+}
+
+export interface ServicesStatus {
+  tika: ServiceStatus;
+  clamav: ServiceStatus;
+}
+
 // Main data stores
 export const stats = writable<DashboardStats | null>(null);
 export const activity = writable<AuditEntry[]>([]);
 export const logs = writable<LogEntry[]>([]);
 export const deadLetters = writable<DeadLetterEntry[]>([]);
+export const serviceStatus = writable<ServicesStatus | null>(null);
 
 // Filter stores
 export const selectedAccount = writable<string | null>(null);

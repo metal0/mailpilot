@@ -1,5 +1,5 @@
 import { writable, get } from "svelte/store";
-import { stats, activity, logs } from "./data";
+import { stats, activity, logs, serviceStatus, type ServicesStatus } from "./data";
 import { addToast } from "./toast";
 
 export type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
@@ -13,7 +13,7 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_RECONNECT_DELAY = 1000;
 
 interface WebSocketMessage {
-  type: "stats" | "activity" | "logs" | "account_update" | "toast";
+  type: "stats" | "activity" | "logs" | "account_update" | "toast" | "service_status";
   data: unknown;
 }
 
@@ -49,6 +49,10 @@ function handleMessage(event: MessageEvent): void {
       case "toast":
         const toast = message.data as { message: string; type?: "info" | "success" | "error" };
         addToast(toast.message, toast.type ?? "info");
+        break;
+
+      case "service_status":
+        serviceStatus.set(message.data as ServicesStatus);
         break;
     }
   } catch (e) {
