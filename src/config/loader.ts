@@ -1,5 +1,6 @@
-import { readFileSync, existsSync } from "node:fs";
-import { parse } from "yaml";
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
+import { parse, stringify } from "yaml";
+import { dirname } from "node:path";
 import { type Config, configSchema, resolveEnvVars } from "./schema.js";
 import { createLogger } from "../utils/logger.js";
 
@@ -30,9 +31,25 @@ function resolveEnvVarsInObject(obj: unknown): unknown {
   return obj;
 }
 
+const MINIMAL_CONFIG = {
+  dry_run: true,
+  logging: { level: "debug" },
+  server: { port: 8085 },
+  dashboard: { enabled: true },
+  llm_providers: [],
+  accounts: [],
+};
+
 export function loadConfig(configPath = "./config.yaml"): Config {
   if (!existsSync(configPath)) {
-    throw new Error(`Config file not found: ${configPath}`);
+    logger.info("Config file not found, creating minimal config", { path: configPath });
+    const dir = dirname(configPath);
+    if (dir && dir !== "." && !existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+    const yaml = stringify(MINIMAL_CONFIG);
+    writeFileSync(configPath, yaml, "utf-8");
+    logger.info("Minimal config created - configure via dashboard", { path: configPath });
   }
 
   logger.info("Loading configuration", { path: configPath });
@@ -63,6 +80,17 @@ export function loadConfig(configPath = "./config.yaml"): Config {
 
 function validateConfig(config: Config): void {
   const providerNames = new Set(config.llm_providers.map((p) => p.name));
+
+  // Allow empty accounts/providers for initial setup via dashboard
+  if (config.accounts.length === 0 && config.llm_providers.length === 0) {
+    logger.info("No accounts or providers configured - use dashboard to add them");
+    return;
+  }
+
+  // If we have accounts but no providers, warn but don't fail
+  if (config.accounts.length > 0 && config.llm_providers.length === 0) {
+    logger.warn("Accounts configured but no LLM providers - emails will not be processed");
+  }
 
   for (const account of config.accounts) {
     if (account.llm?.provider && !providerNames.has(account.llm.provider)) {
