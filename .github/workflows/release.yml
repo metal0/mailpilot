@@ -46,20 +46,26 @@ jobs:
         run: |
           # Create a test container with CI config
           docker run -d --name mailpilot-test \
+            -p 18080:8080 \
             -v ${{ github.workspace }}/config.ci.yaml:/app/config.yaml:ro \
             ${{ env.IMAGE_NAME }}:test
 
-          # Wait a moment for startup
-          sleep 5
+          # Wait for server to start (up to 30 seconds)
+          for i in {1..30}; do
+            if curl -s http://localhost:18080/health > /dev/null 2>&1; then
+              echo "✓ Health endpoint responding"
+              break
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 1
+          done
 
-          # Check logs - should see "Configuration loaded successfully"
-          docker logs mailpilot-test 2>&1 | tee startup.log
-
-          # Verify it got past the config loading (proves native modules work)
-          if grep -q "Configuration loaded successfully" startup.log; then
-            echo "✓ Startup test passed - native modules working"
+          # Check health endpoint - proves database and server work
+          if curl -s http://localhost:18080/health | grep -q '"status":"ok"'; then
+            echo "✓ Startup test passed - server healthy"
           else
             echo "✗ Startup test failed"
+            docker logs mailpilot-test
             exit 1
           fi
 

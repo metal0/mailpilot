@@ -69,17 +69,26 @@ jobs:
       - name: Test startup
         run: |
           docker run -d --name mailpilot-test \
+            -p 18080:8080 \
             -v ${{ github.workspace }}/config.ci.yaml:/app/config.yaml:ro \
             mailpilot:test
 
-          sleep 5
-          docker logs mailpilot-test 2>&1 | tee startup.log
+          # Wait for server to start
+          for i in {1..30}; do
+            if curl -s http://localhost:18080/health > /dev/null 2>&1; then
+              echo "✓ Health endpoint responding"
+              break
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 1
+          done
 
-          if grep -q "Configuration loaded successfully" startup.log; then
-            echo "✓ Startup test passed"
+          # Check health endpoint
+          if curl -s http://localhost:18080/health | grep -q '"status":"ok"'; then
+            echo "✓ Startup test passed - server healthy"
           else
             echo "✗ Startup test failed"
-            cat startup.log
+            docker logs mailpilot-test
             exit 1
           fi
 
