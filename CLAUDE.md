@@ -6,6 +6,24 @@ This document provides guidelines for AI assistants working on the Mailpilot cod
 
 Mailpilot is an AI-powered email processing daemon that uses LLM classification to organize emails. Built with TypeScript, Node.js 22+, and a Svelte 5 dashboard.
 
+## Critical Rules
+
+### Git Operations (NEVER AUTOMATIC)
+
+**NEVER push to any branch without explicit user approval.** This includes:
+
+- `git push` to any branch (especially master/main)
+- `git push --tags`
+- `git push --force` (absolutely forbidden without explicit request)
+
+**Workflow:**
+1. Make commits locally when requested
+2. Show the user what will be pushed (`git log origin/master..HEAD`)
+3. **Wait for explicit approval** before pushing
+4. Only push after user confirms
+
+This protects against accidental pushes to production branches and gives the user control over what goes to remote.
+
 ## Priority Guidelines
 
 ### Documentation Updates (HIGH PRIORITY)
