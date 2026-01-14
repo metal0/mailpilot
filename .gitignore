@@ -31,5 +31,5 @@ coverage/
 config.yaml
 
 # Spec file (local only)
-SPEC.md
 tmp/
+SPEC*.md
