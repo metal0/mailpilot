@@ -63,9 +63,9 @@
 </div>
 
 <div class="charts-row">
-  {#if $stats?.actionBreakdown && $stats.actionBreakdown.length > 0}
-    <div class="chart-card">
-      <h3>Actions by Type</h3>
+  <div class="chart-card">
+    <h3>Actions by Type</h3>
+    {#if $stats?.actionBreakdown && $stats.actionBreakdown.length > 0}
       <div class="bar-chart">
         {#each $stats.actionBreakdown as action}
           <div class="bar-item">
@@ -80,10 +80,14 @@
           </div>
         {/each}
       </div>
-    </div>
-  {/if}
-
+    {:else}
+      <div class="empty-state">
+        <p>No actions recorded yet</p>
+        <span>Process emails to see action breakdown</span>
+      </div>
+    {/if}
   </div>
+</div>
 
 <style>
   .stats-grid {
@@ -184,4 +188,23 @@
     text-align: right;
   }
 
-  </style>
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    text-align: center;
+  }
+
+  .empty-state p {
+    margin: 0 0 0.25rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  .empty-state span {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+</style>
