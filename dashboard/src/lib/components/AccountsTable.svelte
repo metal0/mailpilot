@@ -1,6 +1,7 @@
 <script lang="ts">
   import { stats, type AccountStatus } from "../stores/data";
   import { addToast } from "../stores/toast";
+  import { t } from "../i18n";
   import * as api from "../api";
 
   let openDropdown = $state<string | null>(null);
@@ -162,18 +163,18 @@
 
 <div class="card">
   <div class="card-header">
-    <h2 class="card-title">Accounts</h2>
+    <h2 class="card-title">{$t("common.accounts")}</h2>
   </div>
 
   {#if selectedAccounts.size > 0}
     <div class="bulk-actions-bar">
       <span class="selection-count">{selectedAccounts.size} selected</span>
       <div class="bulk-buttons">
-        <button class="btn-sm" onclick={bulkPause} disabled={bulkActionLoading}>Pause All</button>
-        <button class="btn-sm" onclick={bulkResume} disabled={bulkActionLoading}>Resume All</button>
-        <button class="btn-sm btn-secondary" onclick={bulkReconnect} disabled={bulkActionLoading}>Reconnect All</button>
-        <button class="btn-sm btn-secondary" onclick={bulkProcess} disabled={bulkActionLoading}>Process All</button>
-        <button class="btn-sm btn-secondary" onclick={clearSelection}>Clear</button>
+        <button class="btn-sm" onclick={bulkPause} disabled={bulkActionLoading}>{$t("accounts.pauseSelected")}</button>
+        <button class="btn-sm" onclick={bulkResume} disabled={bulkActionLoading}>{$t("accounts.resumeSelected")}</button>
+        <button class="btn-sm btn-secondary" onclick={bulkReconnect} disabled={bulkActionLoading}>{$t("accounts.reconnectSelected")}</button>
+        <button class="btn-sm btn-secondary" onclick={bulkProcess} disabled={bulkActionLoading}>{$t("accounts.processSelected")}</button>
+        <button class="btn-sm btn-secondary" onclick={clearSelection}>{$t("common.cancel")}</button>
       </div>
     </div>
   {/if}
@@ -185,13 +186,13 @@
           <th class="checkbox-cell">
             <input type="checkbox" checked={selectedAccounts.size > 0} onchange={toggleSelectAll} />
           </th>
-          <th>Name</th>
+          <th>{$t("common.name")}</th>
           <th>LLM</th>
-          <th>Last Scan</th>
-          <th class="num">Processed</th>
-          <th class="num">Actions</th>
-          <th class="num">Errors</th>
-          <th>Manage</th>
+          <th>{$t("accounts.lastScan")}</th>
+          <th class="num">{$t("accounts.processed")}</th>
+          <th class="num">{$t("common.actions")}</th>
+          <th class="num">{$t("accounts.errorsCount")}</th>
+          <th>{$t("common.actions")}</th>
         </tr>
       </thead>
       <tbody>
@@ -209,25 +210,25 @@
                   class="status-indicator"
                   class:connected={account.connected}
                   class:paused={account.paused}
-                  title={account.paused ? "Paused" : account.connected ? "Connected" : "Disconnected"}
+                  title={account.paused ? $t("accounts.paused") : account.connected ? $t("accounts.connected") : $t("accounts.disconnected")}
                 ></span>
                 {account.name}
                 {#if account.idleSupported}
-                  <span class="badge">IDLE</span>
+                  <span class="badge">{$t("accounts.idle")}</span>
                 {/if}
                 {#if account.paused}
-                  <span class="badge badge-warning">Paused</span>
+                  <span class="badge badge-warning">{$t("accounts.paused")}</span>
                 {/if}
               </td>
               <td class="llm-cell">{account.llmProvider}/{account.llmModel}</td>
-              <td class="time-cell">{account.lastScan ?? "Never"}</td>
+              <td class="time-cell">{account.lastScan ?? $t("accounts.never")}</td>
               <td class="num">{account.emailsProcessed}</td>
               <td class="num">{account.actionsTaken}</td>
               <td class="num errors">{account.errors}</td>
               <td class="actions-cell">
                 <div class="dropdown">
                   <button class="btn-sm btn-secondary dropdown-toggle" onclick={(e) => toggleDropdown(account.name, e)}>
-                    Manage
+                    {$t("common.actions")}
                   </button>
                   {#if openDropdown === account.name && dropdownPosition}
                     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -237,13 +238,13 @@
                       style="position: fixed; top: {dropdownPosition.top}px; right: {dropdownPosition.right}px;"
                     >
                       <button class="dropdown-item" onclick={() => handlePause(account)}>
-                        {account.paused ? "Resume" : "Pause"}
+                        {account.paused ? $t("accounts.resume") : $t("accounts.pause")}
                       </button>
                       <button class="dropdown-item" onclick={() => handleReconnect(account.name)}>
-                        Reconnect
+                        {$t("accounts.reconnect")}
                       </button>
                       <button class="dropdown-item" onclick={() => handleProcess(account.name)}>
-                        Process Now
+                        {$t("accounts.processNow")}
                       </button>
                     </div>
                   {/if}

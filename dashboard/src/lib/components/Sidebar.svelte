@@ -1,5 +1,6 @@
 <script lang="ts">
   import { stats } from "../stores/data";
+  import { t } from "../i18n";
 
   const actionColors: Record<string, string> = {
     move: "#3b82f6",
@@ -40,16 +41,16 @@
 
 <div class="sidebar">
   <div class="panel">
-    <h3 class="panel-title">LLM Providers</h3>
+    <h3 class="panel-title">{$t("sidebar.llmProviders")}</h3>
     {#if !$stats?.providerStats || $stats.providerStats.length === 0}
-      <p class="muted">No providers configured</p>
+      <p class="muted">{$t("accounts.noAccounts")}</p>
     {:else}
       <div class="provider-list">
         {#each $stats.providerStats as provider}
           <div class="provider-card">
             <div class="provider-header">
               <span class="provider-name">
-                <span class="health-indicator {provider.healthStale ? 'stale' : provider.healthy ? 'healthy' : 'unhealthy'}" title={provider.healthStale ? 'Unknown' : provider.healthy ? 'Healthy' : 'Unhealthy'}></span>
+                <span class="health-indicator {provider.healthStale ? 'stale' : provider.healthy ? 'healthy' : 'unhealthy'}" title={provider.healthStale ? $t("health.unknown") : provider.healthy ? $t("sidebar.healthy") : $t("sidebar.unhealthy")}></span>
                 {provider.name}
               </span>
               <span class="provider-model">{provider.model}</span>
@@ -57,21 +58,21 @@
             <div class="provider-metrics">
               <div class="metric">
                 <span class="metric-value">{provider.requestsToday.toLocaleString()}</span>
-                <span class="metric-label">Today</span>
+                <span class="metric-label">{$t("common.today")}</span>
               </div>
               <div class="metric">
                 <span class="metric-value">{provider.requestsTotal.toLocaleString()}</span>
-                <span class="metric-label">Total</span>
+                <span class="metric-label">{$t("common.total")}</span>
               </div>
               <div class="metric">
                 <span class="metric-value" class:rate-limited={provider.rateLimited}>
                   {provider.requestsLastMinute}{#if provider.rpmLimit}/{provider.rpmLimit}{/if}
                 </span>
-                <span class="metric-label">RPM</span>
+                <span class="metric-label">{$t("sidebar.requestsPerMin")}</span>
               </div>
             </div>
             {#if provider.rateLimited}
-              <div class="rate-limit-warning">Rate limited</div>
+              <div class="rate-limit-warning">{$t("sidebar.rateLimited")}</div>
             {/if}
           </div>
         {/each}
@@ -80,9 +81,9 @@
   </div>
 
   <div class="panel">
-    <h3 class="panel-title">Action Breakdown</h3>
+    <h3 class="panel-title">{$t("chart.actionBreakdown")}</h3>
     {#if !$stats?.actionBreakdown || $stats.actionBreakdown.length === 0}
-      <p class="muted">No actions yet</p>
+      <p class="muted">{$t("chart.noData")}</p>
     {:else}
       <div class="pie-chart-container">
         <svg class="pie-chart" viewBox="0 0 42 42">
@@ -118,9 +119,9 @@
   </div>
 
   <div class="panel">
-    <h3 class="panel-title">Processing Queue</h3>
+    <h3 class="panel-title">{$t("sidebar.processingQueue")}</h3>
     {#if !$stats?.queueStatus || $stats.queueStatus.length === 0}
-      <p class="muted">No active processing</p>
+      <p class="muted">{$t("sidebar.noActiveProcessing")}</p>
     {:else}
       <div class="queue-list">
         {#each $stats.queueStatus as item}

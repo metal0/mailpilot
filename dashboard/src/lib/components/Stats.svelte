@@ -1,5 +1,6 @@
 <script lang="ts">
   import { stats } from "../stores/data";
+  import { t } from "../i18n";
 
   function formatUptime(seconds: number): string {
     const days = Math.floor(seconds / 86400);
@@ -17,28 +18,28 @@
 
 <div class="stats-grid">
   <div class="stat-card">
-    <div class="stat-label">Uptime</div>
+    <div class="stat-label">{$t("stats.uptime")}</div>
     <div class="stat-value">{$stats ? formatUptime($stats.uptime) : "-"}</div>
   </div>
 
   <div class="stat-card">
-    <div class="stat-label">Emails Processed</div>
+    <div class="stat-label">{$t("stats.emailsProcessed")}</div>
     <div class="stat-value">{$stats?.totals.emailsProcessed.toLocaleString() ?? "-"}</div>
   </div>
 
   <div class="stat-card">
-    <div class="stat-label">Actions Taken</div>
+    <div class="stat-label">{$t("stats.actionsTaken")}</div>
     <div class="stat-value">{$stats?.totals.actionsTaken.toLocaleString() ?? "-"}</div>
   </div>
 
   <div class="stat-card">
-    <div class="stat-label">Errors</div>
+    <div class="stat-label">{$t("stats.errors")}</div>
     <div class="stat-value stat-errors">{$stats?.totals.errors.toLocaleString() ?? "-"}</div>
   </div>
 
   {#if $stats?.deadLetterCount !== undefined && $stats.deadLetterCount > 0}
     <div class="stat-card stat-warning">
-      <div class="stat-label">Dead Letters</div>
+      <div class="stat-label">{$t("stats.deadLetters")}</div>
       <div class="stat-value">{$stats.deadLetterCount}</div>
     </div>
   {/if}
