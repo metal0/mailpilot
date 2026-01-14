@@ -35,7 +35,7 @@
     <div class="connection-status connection-{$connectionState}">
       <span class="status-dot"></span>
       <span class="status-text">
-        {$connectionState === "connected" ? "Live" : $connectionState === "connecting" ? $t("accounts.connecting") : "Offline"}
+        {$connectionState === "connected" ? "" : $connectionState === "connecting" ? $t("accounts.connecting") : "Offline"}
       </span>
     </div>
   </div>
