@@ -22,9 +22,33 @@
     {:else}
       <div class="provider-list">
         {#each $stats.providerStats as provider}
-          <div class="provider-item">
-            <span class="provider-name">{provider.name}</span>
-            <span class="health-indicator {provider.healthStale ? 'stale' : provider.healthy ? 'healthy' : 'unhealthy'}" title={provider.healthStale ? 'Unknown' : provider.healthy ? 'Healthy' : 'Unhealthy'}></span>
+          <div class="provider-card">
+            <div class="provider-header">
+              <span class="provider-name">
+                <span class="health-indicator {provider.healthStale ? 'stale' : provider.healthy ? 'healthy' : 'unhealthy'}" title={provider.healthStale ? 'Unknown' : provider.healthy ? 'Healthy' : 'Unhealthy'}></span>
+                {provider.name}
+              </span>
+              <span class="provider-model">{provider.model}</span>
+            </div>
+            <div class="provider-metrics">
+              <div class="metric">
+                <span class="metric-value">{provider.requestsToday.toLocaleString()}</span>
+                <span class="metric-label">Today</span>
+              </div>
+              <div class="metric">
+                <span class="metric-value">{provider.requestsTotal.toLocaleString()}</span>
+                <span class="metric-label">Total</span>
+              </div>
+              <div class="metric">
+                <span class="metric-value" class:rate-limited={provider.rateLimited}>
+                  {provider.requestsLastMinute}{#if provider.rpmLimit}/{provider.rpmLimit}{/if}
+                </span>
+                <span class="metric-label">RPM</span>
+              </div>
+            </div>
+            {#if provider.rateLimited}
+              <div class="rate-limit-warning">Rate limited</div>
+            {/if}
           </div>
         {/each}
       </div>
@@ -171,24 +195,74 @@
   .provider-list {
     display: flex;
     flex-direction: column;
-    gap: 0.375rem;
+    gap: 0.75rem;
   }
 
-  .provider-item {
+  .provider-card {
+    padding: 0.75rem;
+    background: var(--bg-tertiary);
+    border-radius: 0.375rem;
+  }
+
+  .provider-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.375rem 0;
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  .provider-item:last-child {
-    border-bottom: none;
+    margin-bottom: 0.5rem;
   }
 
   .provider-name {
     font-size: 0.8125rem;
+    font-weight: 600;
     color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .provider-model {
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+  }
+
+  .provider-metrics {
+    display: flex;
+    gap: 1rem;
+  }
+
+  .metric {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .metric-value {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .metric-value.rate-limited {
+    color: var(--warning);
+  }
+
+  .metric-label {
+    font-size: 0.625rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .rate-limit-warning {
+    margin-top: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.625rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    color: var(--warning);
+    background: color-mix(in srgb, var(--warning) 15%, transparent);
+    border-radius: 0.25rem;
+    display: inline-block;
   }
 
   .health-indicator {

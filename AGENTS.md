@@ -273,12 +273,46 @@ default_prompt: |
   When uncertain, prefer noop over incorrect classification.
 ```
 
+## Provider Health Tracking
+
+Mailpilot tracks the health status of each LLM provider:
+
+### Health States
+
+| State | Indicator | Meaning |
+|-------|-----------|---------|
+| Healthy | Green | Provider responding successfully |
+| Unhealthy | Red | Provider failing (consecutive failures) |
+| Stale | Gray | No recent health check (>10 min) |
+
+### Health Check Behavior
+
+- Health is checked on the Debug page via "Test LLM Health" button
+- Successful requests reset consecutive failure count
+- Failed requests increment consecutive failure count
+- Provider is marked unhealthy after consecutive failures
+- Health status broadcasts to all dashboard clients via WebSocket
+
+### Dashboard Integration
+
+The sidebar on the Overview page shows:
+- Provider name
+- Health indicator dot (color-coded)
+- Tooltip with status text
+
+The Debug page shows detailed provider info:
+- Last health check timestamp
+- Last successful request timestamp
+- Consecutive failure count
+- Request/error totals
+
 ## Monitoring
 
 ### Dashboard Stats
 - Emails processed count
 - Actions taken breakdown
 - Provider request counts
+- Provider health status
 - Rate limit status
 
 ### Health Check

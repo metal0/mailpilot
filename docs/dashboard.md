@@ -4,19 +4,19 @@ Mailpilot includes a modern Svelte-based web dashboard with real-time WebSocket 
 
 ## Enabling the Dashboard
 
-The dashboard is **disabled by default** for security reasons. To enable it, add to your `config.yaml`:
+The dashboard is **enabled by default**. To disable it, set in your `config.yaml`:
 
 ```yaml
 dashboard:
-  enabled: true
+  enabled: false
 ```
 
 ## First-Time Setup
 
 When you first access the dashboard:
 
-1. Navigate to `http://localhost:8080/dashboard`
-2. You'll be redirected to `/dashboard/setup`
+1. Navigate to `http://localhost:8080/`
+2. You'll be redirected to `/setup`
 3. Create your admin account (username + password)
 4. You'll be logged in automatically
 
@@ -26,7 +26,7 @@ When you first access the dashboard:
 
 ```yaml
 dashboard:
-  enabled: false      # Enable/disable the dashboard (default: false)
+  enabled: true       # Enable/disable the dashboard (default: true)
   session_ttl: 24h    # How long login sessions last (default: 24h)
   api_keys:           # API keys for programmatic access
     - name: monitoring
@@ -38,9 +38,48 @@ dashboard:
 
 ## Dashboard Features
 
+### Overview Page
+
+The main overview page displays:
+
+- **System Stats**: Uptime, version, dry run status
+- **Totals**: Emails processed, actions taken, errors, dead letter count
+- **Account Status Table**: Connection status, IDLE support, last scan, per-account stats
+- **Sidebar Widgets**:
+  - **LLM Providers**: Health status indicators for each provider (green=healthy, red=unhealthy, gray=unknown)
+  - **Action Breakdown**: Count of each action type taken
+  - **Processing Queue**: Currently active processing
+
+### Account Controls
+
+Each account has a dropdown menu with:
+
+- **Pause/Resume**: Temporarily stop processing for an account
+- **Reconnect**: Force reconnection to IMAP server
+- **Process Now**: Manually trigger email processing
+
+### Bulk Account Operations
+
+Select multiple accounts using checkboxes and perform bulk actions:
+
+- Pause all selected accounts
+- Resume all selected accounts
+- Reconnect all selected accounts
+- Process all selected accounts
+
+### Visual Configuration Editor
+
+Edit all settings through the UI without manually editing YAML:
+
+- Navigate to Settings page
+- Edit configuration with helpful tooltips
+- Validate changes before applying
+- **Live Config Reload**: Apply changes without restarting Mailpilot
+
 ### Real-Time Updates
 
 The dashboard uses WebSocket connections for instant updates:
+
 - No manual refresh needed
 - Activity feed updates as emails are processed
 - Account status changes reflected immediately
@@ -50,30 +89,9 @@ The dashboard uses WebSocket connections for instant updates:
 
 Toggle between dark and light themes using the button in the header. Your preference is saved in localStorage.
 
-### Metrics Overview
-
-- **Uptime**: How long Mailpilot has been running
-- **Emails Processed**: Total count of emails analyzed
-- **Actions Taken**: Total count of LLM-triggered actions
-- **Errors**: Total error count across all accounts
-- **Dead Letter Count**: Emails that failed processing
-
-### Account Status Table
-
-For each configured email account:
-
-- Connection status (Connected/Disconnected)
-- IDLE support indicator
-- Last scan timestamp
-- Per-account processed/action/error counts
-- LLM provider and model in use
-- Pause/Resume controls
-- Reconnect button
-- Manual process trigger
-
 ### Activity Log
 
-The activity tab shows processed emails with:
+The Activity tab shows processed emails with:
 
 - Timestamp
 - Account name
@@ -81,9 +99,11 @@ The activity tab shows processed emails with:
 - Actions taken (move, flag, read, delete, etc.)
 
 **Features**:
+
 - **Search**: Filter by subject, message ID, or account name
 - **Account Filter**: Show activity for a specific account
 - **Action Filter**: Filter by action type
+- **Date Range**: Filter by time period
 - **Pagination**: Navigate through historical entries
 - **Email Preview**: Click to preview email content before manual processing
 
@@ -91,13 +111,24 @@ The activity tab shows processed emails with:
 
 Real-time system logs with:
 
-- Log level filtering (debug, info, warn, error)
-- Account name filtering
-- Auto-scroll to latest entries
+- **Log Level Filter**: debug, info, warn, error
+- **Account Filter**: Show logs for specific account
+- **Search**: Search through log messages
+- **Auto-scroll**: Automatically scroll to latest entries
+
+### Debug Page
+
+Detailed system information for troubleshooting:
+
+- **Processing Statistics**: Emails processed, actions taken, error counts
+- **IMAP Server View**: Accounts grouped by IMAP server for easier debugging
+- **Provider Health**: Detailed LLM provider status with last check time
+- **LLM Health Test**: Test provider connectivity on demand
+- **System Info**: Database path, memory usage, uptime
 
 ### Dead Letter Queue
 
-Emails that fail processing after multiple attempts are added to the dead letter queue:
+Emails that fail processing after multiple attempts:
 
 - View failed emails with error messages
 - Retry processing
@@ -122,11 +153,13 @@ dashboard:
 
 | Permission | Endpoints | Description |
 |------------|-----------|-------------|
-| `read:stats` | `/dashboard/api/stats` | Access metrics and account status |
-| `read:activity` | `/dashboard/api/activity` | Access audit log |
-| `read:logs` | `/dashboard/api/logs` | Access system logs |
-| `read:export` | `/dashboard/api/export` | Export audit data as CSV/JSON |
-| `write:accounts` | `/dashboard/api/accounts/*` | Pause/resume/reconnect/process |
+| `read:stats` | `/api/stats` | Access metrics and account status |
+| `read:activity` | `/api/activity` | Access audit log |
+| `read:logs` | `/api/logs` | Access system logs |
+| `read:export` | `/api/export` | Export audit data as CSV/JSON |
+| `read:config` | `/api/config` | Read configuration |
+| `write:accounts` | `/api/accounts/*` | Pause/resume/reconnect/process |
+| `write:config` | `/api/config` | Update configuration |
 | `read:*` | All read endpoints | Wildcard for all read permissions |
 | `write:*` | All write endpoints | Wildcard for all write permissions |
 | `*` | All endpoints | Full access |
@@ -136,11 +169,11 @@ dashboard:
 ```bash
 # Fetch stats with API key
 curl -H "Authorization: Bearer mp_your_api_key" \
-  http://localhost:8080/dashboard/api/stats
+  http://localhost:8080/api/stats
 
 # Pause an account
 curl -X POST -H "Authorization: Bearer mp_your_api_key" \
-  http://localhost:8080/dashboard/api/accounts/personal/pause
+  http://localhost:8080/api/accounts/personal/pause
 ```
 
 ## WebSocket Connection
@@ -148,14 +181,16 @@ curl -X POST -H "Authorization: Bearer mp_your_api_key" \
 For real-time updates, connect to the WebSocket endpoint:
 
 ```
-ws://localhost:8080/dashboard/ws
+ws://localhost:8080/ws
 ```
 
 Authentication via:
+
 - Session cookie (browser)
 - `Authorization: Bearer <api_key>` header (programmatic)
 
 Message types:
+
 - `stats` - Updated statistics
 - `activity` - New audit entries
 - `logs` - New log entries
@@ -170,9 +205,9 @@ Message types:
 |----------|-----------|---------|
 | `/health` | None | Health check for load balancers |
 | `/status` | Bearer token | API access for monitoring tools |
-| `/dashboard` | Session or API key | Human access via browser |
-| `/dashboard/api/*` | Session or API key | API access |
-| `/dashboard/ws` | Session or API key | WebSocket connection |
+| `/` | Session or API key | Human access via browser |
+| `/api/*` | Session or API key | API access |
+| `/ws` | Session or API key | WebSocket connection |
 
 ### Session-Based Auth
 
@@ -187,7 +222,7 @@ The dashboard uses session-based authentication with:
 
 ### Logging In
 
-1. Go to `/dashboard/login`
+1. Go to `/login`
 2. Enter your username and password
 3. Session cookie is set automatically
 
@@ -195,13 +230,21 @@ The dashboard uses session-based authentication with:
 
 Click the "Logout" button in the dashboard header.
 
+### Dry Run Mode
+
+When `dry_run: true` is set in config:
+
+- Authentication is bypassed (auto-logged in as "dev")
+- A prominent banner indicates no actions are being taken
+- Ideal for testing classification rules
+
 ## Security Considerations
 
 ### First-Visitor Risk
 
 When the dashboard is enabled but no account exists:
 
-- **Anyone** can visit `/dashboard/setup` and create the admin account
+- **Anyone** can visit `/setup` and create the admin account
 - Warnings are logged on startup and every 4 hours
 - Create your account immediately after enabling
 
@@ -228,35 +271,38 @@ When the dashboard is enabled but no account exists:
 
 | Route | Method | Auth | Purpose |
 |-------|--------|------|---------|
-| `/dashboard` | GET | Session | Main dashboard view |
-| `/dashboard/setup` | GET | None* | Registration page |
-| `/dashboard/setup` | POST | None* | Create admin account |
-| `/dashboard/login` | GET | None | Login page |
-| `/dashboard/login` | POST | None | Authenticate |
-| `/dashboard/logout` | POST | Session | End session |
+| `/` | GET | Session | Main dashboard view |
+| `/setup` | GET | None* | Registration page |
+| `/setup` | POST | None* | Create admin account |
+| `/login` | GET | None | Login page |
+| `/login` | POST | None | Authenticate |
+| `/logout` | POST | Session | End session |
 
-*`/dashboard/setup` only accessible when no admin account exists
+*`/setup` only accessible when no admin account exists
 
 ### API Routes
 
 | Route | Method | Auth | Permission | Purpose |
 |-------|--------|------|------------|---------|
-| `/dashboard/api/stats` | GET | Session/Key | `read:stats` | Get metrics |
-| `/dashboard/api/activity` | GET | Session/Key | `read:activity` | Get audit log |
-| `/dashboard/api/logs` | GET | Session/Key | `read:logs` | Get system logs |
-| `/dashboard/api/export` | GET | Session/Key | `read:export` | Export audit data |
-| `/dashboard/api/dead-letter` | GET | Session/Key | `read:activity` | Get dead letters |
-| `/dashboard/api/dead-letter/:id/retry` | POST | Session/Key | `write:accounts` | Retry failed email |
-| `/dashboard/api/dead-letter/:id/dismiss` | POST | Session/Key | `write:accounts` | Dismiss entry |
-| `/dashboard/api/emails/:account/:folder/:uid` | GET | Session/Key | `read:activity` | Email preview |
-| `/dashboard/api/accounts/:name/pause` | POST | Session/Key | `write:accounts` | Pause account |
-| `/dashboard/api/accounts/:name/resume` | POST | Session/Key | `write:accounts` | Resume account |
-| `/dashboard/api/accounts/:name/reconnect` | POST | Session/Key | `write:accounts` | Reconnect IMAP |
-| `/dashboard/api/accounts/:name/process` | POST | Session/Key | `write:accounts` | Trigger processing |
+| `/api/stats` | GET | Session/Key | `read:stats` | Get metrics |
+| `/api/activity` | GET | Session/Key | `read:activity` | Get audit log |
+| `/api/logs` | GET | Session/Key | `read:logs` | Get system logs |
+| `/api/export` | GET | Session/Key | `read:export` | Export audit data |
+| `/api/config` | GET | Session/Key | `read:config` | Get configuration |
+| `/api/config` | PUT | Session/Key | `write:config` | Update configuration |
+| `/api/dead-letter` | GET | Session/Key | `read:activity` | Get dead letters |
+| `/api/dead-letter/:id/retry` | POST | Session/Key | `write:accounts` | Retry failed email |
+| `/api/dead-letter/:id/dismiss` | POST | Session/Key | `write:accounts` | Dismiss entry |
+| `/api/emails/:account/:folder/:uid` | GET | Session/Key | `read:activity` | Email preview |
+| `/api/accounts/:name/pause` | POST | Session/Key | `write:accounts` | Pause account |
+| `/api/accounts/:name/resume` | POST | Session/Key | `write:accounts` | Resume account |
+| `/api/accounts/:name/reconnect` | POST | Session/Key | `write:accounts` | Reconnect IMAP |
+| `/api/accounts/:name/process` | POST | Session/Key | `write:accounts` | Trigger processing |
 
 ### Query Parameters
 
-**Activity endpoint** (`/dashboard/api/activity`):
+**Activity endpoint** (`/api/activity`):
+
 - `page` - Page number (default: 1)
 - `pageSize` - Items per page (default: 20)
 - `accountName` - Filter by account
@@ -265,16 +311,18 @@ When the dashboard is enabled but no account exists:
 - `startDate` - Filter by start timestamp (ms)
 - `endDate` - Filter by end timestamp (ms)
 
-**Logs endpoint** (`/dashboard/api/logs`):
+**Logs endpoint** (`/api/logs`):
+
 - `limit` - Max entries (default: 100)
 - `level` - Minimum log level (debug/info/warn/error)
 - `accountName` - Filter by account context
+- `search` - Search log messages
 
 ## Troubleshooting
 
 ### "Setup already completed" Error
 
-This means an admin account already exists. Go to `/dashboard/login` instead.
+This means an admin account already exists. Go to `/login` instead.
 
 ### Session Expired
 
@@ -287,7 +335,7 @@ Currently, there's no password reset flow. You'll need to:
 1. Stop Mailpilot
 2. Delete the user and session data from SQLite
 3. Restart Mailpilot
-4. Create a new account at `/dashboard/setup`
+4. Create a new account at `/setup`
 
 ```bash
 sqlite3 ./data/mailpilot.db "DELETE FROM dashboard_sessions; DELETE FROM dashboard_users;"
@@ -304,3 +352,10 @@ sqlite3 ./data/mailpilot.db "DELETE FROM dashboard_sessions; DELETE FROM dashboa
 1. Verify the key is at least 16 characters
 2. Check the key has required permissions
 3. Ensure the `Authorization: Bearer` header is correct
+
+### LLM Provider Shows Unhealthy
+
+1. Check the Debug page for detailed provider status
+2. Use "Test LLM Health" button to diagnose
+3. Verify API key and URL are correct
+4. Check network connectivity to provider

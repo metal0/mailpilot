@@ -1,238 +1,155 @@
-# AI/LLM Integration in Mailpilot
+# AI Development Instructions for Mailpilot
 
-This document describes how Mailpilot uses AI/LLM services for email classification and processing.
+This document provides guidelines for AI assistants working on the Mailpilot codebase.
 
-## Overview
+## Project Overview
 
-Mailpilot uses LLM APIs to classify incoming emails and determine actions (move to folder, flag, mark as read, delete, etc.). The system is provider-agnostic and supports any OpenAI-compatible API.
+Mailpilot is an AI-powered email processing daemon that uses LLM classification to organize emails. Built with TypeScript, Node.js 22+, and a Svelte 5 dashboard.
 
-## Supported Providers
+## Priority Guidelines
 
-| Provider | API Format | Models |
-|----------|------------|--------|
-| OpenAI | OpenAI Chat Completions | gpt-4o, gpt-4o-mini, gpt-4-turbo |
-| Anthropic | OpenAI-compatible | claude-3-opus, claude-3-sonnet, claude-3-haiku |
-| Azure OpenAI | OpenAI-compatible | gpt-4, gpt-35-turbo |
-| Ollama | OpenAI-compatible | llama3, mistral, mixtral |
-| Any OpenAI-compatible | OpenAI Chat Completions | varies |
+### Documentation Updates (HIGH PRIORITY)
 
-## Configuration
+When making changes to the codebase, documentation MUST be reviewed and updated:
 
-```yaml
-llm_providers:
-  - name: openai
-    api_url: https://api.openai.com/v1/chat/completions
-    api_key: ${OPENAI_API_KEY}
-    default_model: gpt-4o-mini
-    max_body_tokens: 4000      # Max tokens for email body
-    max_thread_tokens: 2000    # Max tokens for thread context
-    rate_limit_rpm: 60         # Requests per minute limit
+1. **README.md** - Update if features, configuration, or usage changes
+2. **SPEC.md** - Update if architecture, schemas, or behavior changes
+3. **AGENTS.md** - Update if LLM integration, prompts, or AI features change
+4. **docs/** folder - Update relevant documentation articles:
+   - `docs/dashboard.md` - Dashboard features and API
+   - `docs/configuration.md` - Config options
+   - `docs/llm-providers.md` - Provider setup
+   - Other topic-specific docs
 
-accounts:
-  - name: personal
-    llm:
-      provider: openai         # Reference to provider above
-      model: gpt-4o-mini       # Override default model
+### Unit Tests (HIGH PRIORITY)
+
+When modifying code, unit tests MUST be checked and updated:
+
+1. **Run existing tests** - `pnpm test` before and after changes
+2. **Add tests for new functionality** - Every new feature needs tests
+3. **Update tests for changed behavior** - Modified functions need test updates
+4. **Test location**: `tests/unit/` mirrors `src/` structure
+
+Test files:
+- `tests/unit/providers.test.ts` - LLM provider logic and health tracking
+- `tests/unit/config.test.ts` - Configuration parsing
+- `tests/unit/parser.test.ts` - LLM response parsing
+- `tests/unit/rate-limiter.test.ts` - Rate limiting logic
+- etc.
+
+## Code Style
+
+### TypeScript
+- Strict mode enabled
+- No `any` types, `@ts-ignore`, or `@ts-expect-error`
+- Use Zod for runtime validation
+- Prefer explicit types over inference for public APIs
+
+### Imports
+- Use `.js` extension for local imports (ESM requirement)
+- Group imports: external, internal, types
+
+### Error Handling
+- Use structured logging via `src/utils/logger.ts`
+- Add context to errors (account name, message ID, etc.)
+- Never swallow errors silently
+
+## Architecture
+
+### Key Directories
+
+```
+src/
+  config/       # Configuration loading and validation
+  accounts/     # Account lifecycle management
+  imap/         # IMAP client and connection handling
+  llm/          # LLM provider abstraction
+  processor/    # Email processing pipeline
+  actions/      # Action execution (move, flag, delete, etc.)
+  storage/      # SQLite database operations
+  server/       # HTTP/WebSocket server and dashboard API
+  attachments/  # Tika client and attachment extraction
+  webhooks/     # Webhook delivery
+  utils/        # Shared utilities
+
+dashboard/      # Svelte 5 SPA (separate build)
+tests/          # Vitest test suites
+docs/           # Documentation articles
 ```
 
-## Classification Flow
+### Data Flow
 
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  IMAP Fetch     │────▶│  Build Prompt    │────▶│  LLM Request    │
-│  (email data)   │     │  (context + rules)│    │  (classification)│
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-                                                          │
-                                                          ▼
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  Execute Action │◀────│  Parse Response  │◀────│  JSON Response  │
-│  (move/flag/etc)│     │  (validate JSON) │     │  (actions array)│
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-```
+1. IMAP client fetches new emails
+2. Attachments extracted via Tika (if enabled)
+3. Prompt built with email content + folders + schema
+4. LLM classifies and returns actions
+5. Actions executed (move, flag, etc.)
+6. Audit log updated
+7. WebSocket broadcasts to dashboard
 
-## Prompt Structure
+### State Management
 
-The prompt sent to the LLM contains:
+- **SQLite** for persistent state (processed messages, audit log, sessions)
+- **In-memory Maps** for runtime state (provider stats, account status)
+- **WebSocket** for real-time dashboard updates
 
-1. **Base Prompt**: User-defined classification rules
-2. **Folder Context**: Available folders (predefined or existing)
-3. **Response Schema**: Required JSON format
-4. **Email Data**: From, Subject, Date, Body, Attachment names
+## Dashboard (Svelte 5)
 
-Example prompt structure:
-```
-[Your classification rules from config]
+Located in `dashboard/` with separate `package.json`.
 
----
+### Key Files
+- `src/lib/stores/` - Svelte stores for state
+- `src/lib/components/` - Reusable UI components
+- `src/routes/` - Page components
+- `src/lib/api.ts` - Backend API client
 
-## Allowed Folders
-You may ONLY move emails to these folders:
-- Work
-- Personal
-- Finance
-- Archive
+### Reactivity
+- Uses Svelte 5 runes (`$state`, `$derived`, `$effect`)
+- WebSocket updates flow through stores to components
 
-## Response Format
-You MUST respond with valid JSON in this exact format:
-{
-  "actions": [
-    { "type": "move", "folder": "FolderName" },
-    { "type": "flag", "flags": ["Important"] }
-  ],
-  "reasoning": "Brief explanation"
-}
+## Common Tasks
 
----
+### Adding a new API endpoint
 
-## Email to Classify
+1. Add route in `src/server/dashboard.ts`
+2. Add permission to schema if needed (`src/config/schema.ts`)
+3. Update `docs/dashboard.md` API tables
+4. Add tests if applicable
 
-**From:** sender@example.com
-**Subject:** Invoice #12345
-**Date:** 2026-01-14T12:00:00Z
-**Attachments:** invoice.pdf
+### Adding a new LLM provider option
 
-**Body:**
-Please find attached the invoice for January...
-```
+1. Update schema in `src/config/schema.ts`
+2. Update provider handling in `src/llm/`
+3. Update `docs/llm-providers.md`
+4. Update `AGENTS.md` if behavior changes
+5. Add unit tests
 
-## Response Schema
+### Modifying the dashboard
 
-The LLM must return valid JSON with an `actions` array:
+1. Make changes in `dashboard/src/`
+2. Test with `pnpm dashboard:dev`
+3. Build with `pnpm dashboard:build`
+4. Update `docs/dashboard.md` if UI features change
 
-```typescript
-interface LlmResponse {
-  actions: LlmAction[];
-  reasoning?: string;
-}
+## Build & Test Commands
 
-type LlmAction =
-  | { type: "move"; folder: string }
-  | { type: "spam" }
-  | { type: "flag"; flags: string[] }
-  | { type: "read" }
-  | { type: "delete" }
-  | { type: "noop"; reason?: string };
-```
-
-## Rate Limiting
-
-Mailpilot enforces rate limits per provider:
-
-- **RPM Limit**: Configurable requests per minute
-- **429 Handling**: Respects `Retry-After` header
-- **Exponential Backoff**: 3 retries with increasing delays
-- **Queue**: Requests wait if limit reached
-
-## Token Management
-
-Email content is truncated to fit within token limits:
-
-- **Body**: Truncated to `max_body_tokens` (default: 4000 chars ≈ 1000 tokens)
-- **Thread Context**: Truncated to `max_thread_tokens` (default: 2000 chars)
-- **Truncation**: Breaks at word boundaries, adds `[Content truncated...]`
-
-## Error Handling
-
-| Error | Handling |
-|-------|----------|
-| API timeout | Retry up to 3 times with backoff |
-| Rate limit (429) | Wait for Retry-After, then retry |
-| Invalid JSON response | Attempt recovery parsing, fallback to noop |
-| Network error | Retry with exponential backoff |
-| Provider unavailable | Log error, skip email processing |
-
-## PGP Encrypted Emails
-
-Emails detected as PGP encrypted are automatically skipped:
-
-- Checks `Content-Type: multipart/encrypted`
-- Checks for `application/pgp-encrypted` attachments
-- Checks for `-----BEGIN PGP MESSAGE-----` markers
-
-Skipped emails are logged with action `noop` and reason "PGP encrypted email".
-
-## Dry Run Mode
-
-Set `dry_run: true` in config to:
-- Process emails through classification
-- Log what actions would be taken
-- Skip actual action execution
-
-Useful for testing classification rules before enabling.
-
-## Audit Logging
-
-All classifications are logged to SQLite:
-
-```sql
-SELECT * FROM audit_log ORDER BY created_at DESC;
-```
-
-Fields: message_id, account_name, actions (JSON), provider, model, subject (if enabled), timestamp.
-
-## Writing Effective Prompts
-
-### Do
-- Be specific about folder purposes
-- Include examples of email types
-- Define clear rules for edge cases
-- Use consistent terminology
-
-### Don't
-- Include folder lists (injected automatically)
-- Include JSON schema (injected automatically)
-- Over-complicate with too many rules
-- Use ambiguous language
-
-### Example Base Prompt
-
-```yaml
-default_prompt: |
-  You are an email classifier for a software developer.
-
-  Classification rules:
-  - Receipts, invoices, order confirmations → Finance
-  - GitHub notifications, CI/CD alerts → Development
-  - Meeting invites, calendar updates → Calendar
-  - Newsletters, marketing emails → flag as "Newsletter", no move
-  - Spam, phishing attempts → Spam
-  - Personal correspondence from known contacts → Personal
-  - Everything else → leave in INBOX (noop)
-
-  When uncertain, prefer noop over incorrect classification.
-```
-
-## Monitoring
-
-### Dashboard Stats
-- Emails processed count
-- Actions taken breakdown
-- Provider request counts
-- Rate limit status
-
-### Health Check
 ```bash
-curl http://localhost:8080/health
+pnpm install          # Install dependencies
+pnpm dev              # Run with hot reload
+pnpm build            # Build backend + dashboard
+pnpm test             # Run all tests
+pnpm test:unit        # Run unit tests only
+pnpm lint             # Run ESLint
+pnpm typecheck        # Run TypeScript checks
 ```
 
-### Provider Stats
-```bash
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/status
-```
+## Release Process
 
-## Troubleshooting
-
-### LLM Returns Invalid JSON
-- Check if response is being truncated (increase `max_tokens` on provider)
-- Verify prompt isn't too long
-- Check provider logs for errors
-
-### Rate Limiting Issues
-- Reduce `rate_limit_rpm` in config
-- Add delays between account processing
-- Use cheaper/faster model for high-volume accounts
-
-### Classification Accuracy
-- Review audit log for patterns
-- Refine prompt with specific examples
-- Consider using more capable model
+1. Update version in `package.json`
+2. Update documentation if needed
+3. Run full test suite: `pnpm test`
+4. Run lint and typecheck: `pnpm lint && pnpm typecheck`
+5. Build: `pnpm build`
+6. Commit with descriptive message
+7. Tag release: `git tag v1.x.x`
+8. Push with tags: `git push && git push --tags`
