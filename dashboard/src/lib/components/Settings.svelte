@@ -160,6 +160,10 @@
   let probingImap = $state(false);
   let availableFolders = $state<string[]>([]);
   let connectionTested = $state(false);
+  let imapPresets = $state<api.ImapPreset[]>([]);
+  let showPresetDropdown = $state(false);
+  let portLocked = $state(false);
+  let connectionFieldsLocked = $state(true); // Lock port/tls/auth until host is probed
 
   // Folder multi-select dropdown state
   let showWatchFolderDropdown = $state(false);
@@ -216,6 +220,13 @@
   onMount(async () => {
     await loadConfig();
     await checkServices();
+    // Load IMAP presets
+    try {
+      const presetsResult = await api.fetchImapPresets();
+      imapPresets = presetsResult.presets;
+    } catch {
+      // Presets are optional, ignore errors
+    }
     // Poll service status every 30 seconds
     serviceCheckInterval = setInterval(checkServices, 30000);
   });
@@ -370,13 +381,16 @@
     testResult = null;
     showWatchFolderDropdown = false;
     showAllowedFolderDropdown = false;
+    showPresetDropdown = false;
+    portLocked = false;
+    connectionFieldsLocked = true;
   }
 
   function addAccount() {
     resetWizardState();
     editingAccount = {
       name: "",
-      imap: { host: "", port: 993, tls: "auto", auth: "basic", username: "", password: "" },
+      imap: { host: "", port: 993, tls: "tls", auth: "basic", username: "", password: "" },
       folders: { watch: ["INBOX"] },
     };
   }
@@ -388,6 +402,7 @@
     if (account.name) {
       connectionTested = true;
       wizardState = "connected";
+      connectionFieldsLocked = false; // Unlock for existing accounts
     }
   }
 
@@ -410,32 +425,95 @@
 
     probingImap = true;
     probeResult = null;
+    portLocked = false;
+    connectionFieldsLocked = true; // Lock during probe
 
     try {
       const result = await api.probeImap({
         host: editingAccount.imap.host,
-        port: editingAccount.imap.port ?? 993,
       });
       probeResult = result;
 
-      if (result.success) {
-        // Auto-fill TLS mode based on probe
-        if (result.suggestedTls && editingAccount) {
-          editingAccount.imap.tls = result.suggestedTls;
+      // If we detected a provider (even if connection failed), we can still use defaults
+      const hasProvider = !!result.provider;
+      const hasAvailablePorts = (result.availablePorts?.length ?? 0) > 0;
+
+      if (editingAccount) {
+        if (result.success && result.suggestedPort) {
+          editingAccount.imap.port = result.suggestedPort;
+        }
+        if (result.success && result.suggestedTls) {
+          editingAccount.imap.tls = result.suggestedTls === "none" ? "insecure" : result.suggestedTls;
+        }
+        // Lock port if we detected available ports OR if we have a provider (use defaults)
+        // This allows TLS mode changes to rotate ports even with default mappings
+        portLocked = hasAvailablePorts || hasProvider;
+        connectionFieldsLocked = false; // Unlock after probe attempt
+        // Auto-select auth type if only one is available
+        if (result.authMethods && result.authMethods.length === 1) {
+          editingAccount.imap.auth = result.authMethods[0];
         }
         wizardState = "auth_ready";
       }
     } catch (e) {
       probeResult = { success: false, error: e instanceof Error ? e.message : "Probe failed" };
+      portLocked = false;
+      connectionFieldsLocked = false; // Unlock on error for manual fallback
     } finally {
       probingImap = false;
     }
   }
 
-  function handleHostPortBlur() {
-    if (editingAccount?.imap.host && editingAccount.imap.port) {
+  function handleHostBlur() {
+    if (editingAccount?.imap.host) {
       probeImapServer();
     }
+  }
+
+  // Default port mappings for when probe can't determine available ports
+  const DEFAULT_PORT_MAP: Record<string, number> = {
+    tls: 993,
+    starttls: 143,
+    none: 143,
+    insecure: 143,
+  };
+
+  function handleTlsModeChange() {
+    if (!editingAccount) return;
+    // When TLS mode changes, update port to match
+    const selectedTls = editingAccount.imap.tls === "insecure" ? "none" : editingAccount.imap.tls;
+
+    // First try to find from probe results
+    const matchingPort = probeResult?.availablePorts?.find(p => p.tls === selectedTls);
+    if (matchingPort) {
+      editingAccount.imap.port = matchingPort.port;
+    } else {
+      // Use default port mapping as fallback
+      const tlsMode = editingAccount.imap.tls ?? "tls";
+      editingAccount.imap.port = DEFAULT_PORT_MAP[tlsMode] ?? 993;
+    }
+  }
+
+  // Get available TLS modes from probe result
+  function getAvailableTlsModes(): { value: string; label: string }[] {
+    if (!probeResult?.availablePorts || probeResult.availablePorts.length === 0) {
+      // No probe result - show all options except Auto (manual fallback)
+      return [
+        { value: "tls", label: $t("settings.accounts.tlsTls") },
+        { value: "starttls", label: $t("settings.accounts.tlsStarttls") },
+        { value: "insecure", label: $t("settings.accounts.tlsInsecure") },
+      ];
+    }
+    // Map probe results to form options
+    const modes: { value: string; label: string }[] = [];
+    for (const port of probeResult.availablePorts) {
+      const value = port.tls === "none" ? "insecure" : port.tls;
+      const labelKey = port.tls === "tls" ? "tlsTls" : port.tls === "starttls" ? "tlsStarttls" : "tlsInsecure";
+      if (!modes.some(m => m.value === value)) {
+        modes.push({ value, label: $t(`settings.accounts.${labelKey}`) });
+      }
+    }
+    return modes;
   }
 
   function removeAccount(name: string) {
@@ -812,16 +890,64 @@
 
                   <h4>{$t("settings.accounts.imapSettings")}</h4>
                   <div class="form-row">
-                    <div class="form-group">
+                    <div class="form-group form-group-host">
                       <label>
                         <span class="label-text">{$t("settings.accounts.host")} <span class="help-icon" title={helpTexts["imap.host"]}>?</span></span>
-                        <input type="text" bind:value={editingAccount.imap.host} placeholder="imap.gmail.com" onblur={handleHostPortBlur} />
+                        <div class="host-input-wrapper">
+                          <input
+                            type="text"
+                            bind:value={editingAccount.imap.host}
+                            placeholder="imap.gmail.com"
+                            onfocus={() => showPresetDropdown = imapPresets.length > 0}
+                            onkeydown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                showPresetDropdown = false;
+                                probeImapServer();
+                              }
+                            }}
+                          />
+                          {#if showPresetDropdown && imapPresets.length > 0}
+                            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                            <div class="preset-backdrop" onmousedown={() => { showPresetDropdown = false; handleHostBlur(); }}></div>
+                            <div class="preset-dropdown">
+                              {#each imapPresets as preset}
+                                <button
+                                  type="button"
+                                  class="preset-item"
+                                  onmousedown={() => {
+                                    if (editingAccount) {
+                                      editingAccount.imap.host = preset.host;
+                                      showPresetDropdown = false;
+                                      probeImapServer();
+                                    }
+                                  }}
+                                >
+                                  {preset.name}
+                                  <span class="preset-host">{preset.host}</span>
+                                </button>
+                              {/each}
+                            </div>
+                          {/if}
+                        </div>
                       </label>
                     </div>
                     <div class="form-group">
                       <label>
-                        <span class="label-text">{$t("settings.accounts.port")} <span class="help-icon" title={helpTexts["imap.port"]}>?</span></span>
-                        <input type="number" bind:value={editingAccount.imap.port} placeholder="993" onblur={handleHostPortBlur} />
+                        <span class="label-text">
+                          {$t("settings.accounts.port")}
+                          {#if portLocked || connectionFieldsLocked}
+                            <span class="locked-icon" title={connectionFieldsLocked ? "Enter IMAP host first" : "Auto-detected from server"}>🔒</span>
+                          {/if}
+                          <span class="help-icon" title={helpTexts["imap.port"]}>?</span>
+                        </span>
+                        <input
+                          type="number"
+                          bind:value={editingAccount.imap.port}
+                          placeholder="993"
+                          disabled={portLocked || connectionFieldsLocked}
+                          class:field-locked={portLocked || connectionFieldsLocked}
+                        />
                       </label>
                     </div>
                     {#if probingImap}
@@ -835,9 +961,13 @@
                           <polyline points="20 6 9 17 4 12"/>
                         </svg>
                         <span>{probeResult.provider.name}</span>
-                        {#if probeResult.provider.oauthSupported}
+                        {#if probeResult.authMethods?.includes("oauth2")}
                           <span class="badge">OAuth supported</span>
                         {/if}
+                      </div>
+                    {:else if connectionFieldsLocked && !probingImap}
+                      <div class="probe-status">
+                        <span>Enter IMAP host to auto-detect</span>
                       </div>
                     {/if}
                   </div>
@@ -845,21 +975,34 @@
                   <div class="form-row">
                     <div class="form-group">
                       <label>
-                        <span class="label-text">{$t("settings.accounts.tlsMode")} <span class="help-icon" title={helpTexts["imap.tls"]}>?</span></span>
-                        <select bind:value={editingAccount.imap.tls}>
-                          <option value="auto">{$t("settings.accounts.tlsAuto")}</option>
-                          <option value="tls">{$t("settings.accounts.tlsTls")}</option>
-                          <option value="starttls">{$t("settings.accounts.tlsStarttls")}</option>
-                          <option value="insecure">{$t("settings.accounts.tlsInsecure")}</option>
+                        <span class="label-text">
+                          {$t("settings.accounts.tlsMode")}
+                          {#if connectionFieldsLocked}
+                            <span class="locked-icon" title="Enter IMAP host first">🔒</span>
+                          {/if}
+                          <span class="help-icon" title={helpTexts["imap.tls"]}>?</span>
+                        </span>
+                        <select bind:value={editingAccount.imap.tls} onchange={handleTlsModeChange} disabled={connectionFieldsLocked} class:field-locked={connectionFieldsLocked}>
+                          {#each getAvailableTlsModes() as mode}
+                            <option value={mode.value}>{mode.label}</option>
+                          {/each}
                         </select>
                       </label>
                     </div>
                     <div class="form-group">
                       <label>
-                        <span class="label-text">{$t("settings.accounts.authTypeLabel")} <span class="help-icon" title={helpTexts["imap.auth"]}>?</span></span>
-                        <select bind:value={editingAccount.imap.auth}>
+                        <span class="label-text">
+                          {$t("settings.accounts.authTypeLabel")}
+                          {#if connectionFieldsLocked}
+                            <span class="locked-icon" title="Enter IMAP host first">🔒</span>
+                          {/if}
+                          <span class="help-icon" title={helpTexts["imap.auth"]}>?</span>
+                        </span>
+                        <select bind:value={editingAccount.imap.auth} disabled={connectionFieldsLocked} class:field-locked={connectionFieldsLocked}>
                           <option value="basic">{$t("settings.accounts.authBasic")}</option>
-                          <option value="oauth2">{$t("settings.accounts.authOauth2")}</option>
+                          {#if !probeResult?.authMethods || probeResult.authMethods.includes("oauth2")}
+                            <option value="oauth2">{$t("settings.accounts.authOauth2")}</option>
+                          {/if}
                         </select>
                       </label>
                     </div>
@@ -2321,6 +2464,72 @@
   }
 
   /* Probe status */
+  /* Host input with preset dropdown */
+  .form-group-host {
+    flex: 2;
+  }
+
+  .host-input-wrapper {
+    position: relative;
+  }
+
+  .preset-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 99;
+  }
+
+  .preset-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .preset-item {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .preset-item:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .preset-host {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+  }
+
+  /* Locked field indicator */
+  .locked-icon {
+    font-size: 0.75rem;
+    margin-left: 0.25rem;
+  }
+
+  .field-locked {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
   .probe-status {
     display: flex;
     align-items: center;
