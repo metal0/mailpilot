@@ -75,8 +75,8 @@ export function startServer(
     setApiKeys(dashboardConfig.api_keys);
 
     // Initialize WebSocket server
-    initWebSocketServer(dashboardConfig);
-    logger.info("WebSocket server initialized");
+    initWebSocketServer(dashboardConfig, dryRun);
+    logger.info("WebSocket server initialized", { dryRun });
 
     // Set up broadcast functions
     setActivityBroadcast(broadcastActivity);

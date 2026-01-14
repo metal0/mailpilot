@@ -1,16 +1,40 @@
 <script lang="ts">
   import { stats } from "../stores/data";
 
-  function getActionBadgeClass(type: string): string {
-    const classes: Record<string, string> = {
-      move: "badge-move",
-      flag: "badge-flag",
-      read: "badge-read",
-      delete: "badge-delete",
-      spam: "badge-delete",
-      noop: "badge-noop",
-    };
-    return classes[type] ?? "";
+  const actionColors: Record<string, string> = {
+    move: "#3b82f6",
+    flag: "#f59e0b",
+    read: "#10b981",
+    spam: "#ef4444",
+    delete: "#dc2626",
+    noop: "#6b7280",
+  };
+
+  function getActionColor(type: string): string {
+    return actionColors[type.toLowerCase()] ?? "#6b7280";
+  }
+
+  function getTotalActions(): number {
+    if (!$stats?.actionBreakdown?.length) return 0;
+    return $stats.actionBreakdown.reduce((sum, a) => sum + a.count, 0);
+  }
+
+  function getPieSlices(): Array<{ type: string; color: string; percentage: number; offset: number }> {
+    const total = getTotalActions();
+    if (total === 0) return [];
+
+    let offset = 0;
+    return $stats!.actionBreakdown.map(action => {
+      const percentage = (action.count / total) * 100;
+      const slice = {
+        type: action.type,
+        color: getActionColor(action.type),
+        percentage,
+        offset,
+      };
+      offset += percentage;
+      return slice;
+    });
   }
 </script>
 
@@ -60,13 +84,35 @@
     {#if !$stats?.actionBreakdown || $stats.actionBreakdown.length === 0}
       <p class="muted">No actions yet</p>
     {:else}
-      <div class="breakdown-list">
-        {#each $stats.actionBreakdown as item}
-          <div class="breakdown-item">
-            <span class="badge {getActionBadgeClass(item.type)}">{item.type}</span>
-            <span class="breakdown-count">{item.count.toLocaleString()}</span>
-          </div>
-        {/each}
+      <div class="pie-chart-container">
+        <svg class="pie-chart" viewBox="0 0 42 42">
+          <circle cx="21" cy="21" r="15.9155" fill="transparent" stroke="var(--bg-tertiary)" stroke-width="6" />
+          {#each getPieSlices() as slice}
+            <circle
+              cx="21"
+              cy="21"
+              r="15.9155"
+              fill="transparent"
+              stroke={slice.color}
+              stroke-width="6"
+              stroke-dasharray="{slice.percentage} {100 - slice.percentage}"
+              stroke-dashoffset="{25 - slice.offset}"
+              stroke-linecap="round"
+            />
+          {/each}
+          <text x="21" y="21" class="pie-total" text-anchor="middle" dominant-baseline="central">
+            {getTotalActions().toLocaleString()}
+          </text>
+        </svg>
+        <div class="pie-legend">
+          {#each $stats.actionBreakdown as item}
+            <div class="legend-item">
+              <span class="legend-dot" style="background: {getActionColor(item.type)}"></span>
+              <span class="legend-label">{item.type}</span>
+              <span class="legend-count">{item.count.toLocaleString()}</span>
+            </div>
+          {/each}
+        </div>
       </div>
     {/if}
   </div>
@@ -113,27 +159,56 @@
     font-size: 0.875rem;
   }
 
-  .breakdown-list {
+  .pie-chart-container {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .breakdown-item {
-    display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid var(--border-color);
+    gap: 0.75rem;
   }
 
-  .breakdown-item:last-child {
-    border-bottom: none;
+  .pie-chart {
+    width: 100px;
+    height: 100px;
+    transform: rotate(-90deg);
   }
 
-  .breakdown-count {
-    font-weight: 500;
+  .pie-total {
+    fill: var(--text-primary);
+    font-size: 0.5rem;
+    font-weight: 600;
+    transform: rotate(90deg);
+    transform-origin: center;
+  }
+
+  .pie-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.6875rem;
     color: var(--text-secondary);
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .legend-label {
+    text-transform: capitalize;
+  }
+
+  .legend-count {
+    font-weight: 600;
+    color: var(--text-primary);
   }
 
   .badge {
@@ -142,31 +217,6 @@
     background: var(--bg-tertiary);
     border-radius: 0.25rem;
     font-size: 0.75rem;
-    color: var(--text-secondary);
-  }
-
-  .badge-move {
-    background: #1e3a5f;
-    color: #60a5fa;
-  }
-
-  .badge-flag {
-    background: #3f2f1d;
-    color: #fbbf24;
-  }
-
-  .badge-read {
-    background: #1a3329;
-    color: #4ade80;
-  }
-
-  .badge-delete {
-    background: #3b1c1c;
-    color: #f87171;
-  }
-
-  .badge-noop {
-    background: var(--bg-tertiary);
     color: var(--text-secondary);
   }
 

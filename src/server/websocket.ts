@@ -22,12 +22,14 @@ interface AuthenticatedClient {
 const clients = new Set<AuthenticatedClient>();
 let wss: WebSocketServer | null = null;
 let apiKeys: ApiKeyConfig[] = [];
+let dryRunMode = false;
 
 const SESSION_COOKIE = "mailpilot_session";
 
-export function initWebSocketServer(config: DashboardConfig): WebSocketServer {
+export function initWebSocketServer(config: DashboardConfig, dryRun = false): WebSocketServer {
   wss = new WebSocketServer({ noServer: true });
   apiKeys = config.api_keys;
+  dryRunMode = dryRun;
 
   wss.on("connection", (ws: WebSocket, _request: IncomingMessage, client: AuthenticatedClient) => {
     clients.add(client);
@@ -90,6 +92,12 @@ interface AuthResult {
 }
 
 function authenticateRequest(request: IncomingMessage): AuthResult {
+  // Bypass auth in dry run mode
+  if (dryRunMode) {
+    logger.debug("WebSocket auth bypassed (dry run mode)");
+    return { authenticated: true, userId: -1 };
+  }
+
   // Try API key auth first (Authorization: Bearer mp_xxx)
   const authHeader = request.headers.authorization;
   if (authHeader?.startsWith("Bearer ")) {

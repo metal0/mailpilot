@@ -3,6 +3,7 @@
   import Header from "../lib/components/Header.svelte";
   import Stats from "../lib/components/Stats.svelte";
   import AccountsTable from "../lib/components/AccountsTable.svelte";
+  import ActionsBarChart from "../lib/components/ActionsBarChart.svelte";
   import ActivityLog from "../lib/components/ActivityLog.svelte";
   import LogViewer from "../lib/components/LogViewer.svelte";
   import Sidebar from "../lib/components/Sidebar.svelte";
@@ -101,6 +102,7 @@
         <div class="overview-grid">
           <div class="main-content">
             <AccountsTable />
+            <ActionsBarChart />
           </div>
           <aside class="sidebar-content">
             <Sidebar />
