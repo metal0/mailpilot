@@ -1,6 +1,6 @@
 services:
   mailpilot:
-    image: ghcr.io/youruser/mailpilot:latest
+    image: ghcr.io/metal0/mailpilot:latest
     # Or build locally:
     # build: .
     container_name: mailpilot
