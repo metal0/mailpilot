@@ -6,6 +6,7 @@ import {
   handleRateLimitResponse,
 } from "./rate-limiter.js";
 import { parseLlmResponse, type LlmAction } from "./parser.js";
+import { recordProviderRequest } from "./providers.js";
 
 const logger = createLogger("llm-client");
 
@@ -98,6 +99,9 @@ export async function classifyEmail(
       },
     }
   );
+
+  // Record successful request
+  recordProviderRequest(provider.name);
 
   const content = response.choices[0]?.message.content;
   if (!content) {

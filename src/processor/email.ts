@@ -181,3 +181,97 @@ function stripHtml(html: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/**
+ * Detects if an email is PGP encrypted.
+ * Checks for:
+ * - multipart/encrypted content type with pgp protocol
+ * - application/pgp-encrypted attachments
+ * - PGP message markers in body
+ */
+export function isPgpEncrypted(parsed: ParsedMail): boolean {
+  const contentType = parsed.headers.get("content-type");
+
+  // Check for multipart/encrypted with PGP protocol
+  if (contentType) {
+    // Content-Type header can be a string or structured object
+    const ctValue = typeof contentType === "string"
+      ? contentType
+      : JSON.stringify(contentType);
+    if (
+      ctValue.includes("multipart/encrypted") &&
+      ctValue.includes("application/pgp-encrypted")
+    ) {
+      return true;
+    }
+  }
+
+  // Check for PGP-encrypted attachments
+  for (const att of parsed.attachments) {
+    if (
+      att.contentType === "application/pgp-encrypted" ||
+      att.contentType === "application/octet-stream" &&
+        att.filename?.endsWith(".gpg")
+    ) {
+      return true;
+    }
+  }
+
+  // Check body for PGP message markers
+  const body = typeof parsed.text === "string" ? parsed.text : "";
+  if (
+    body.includes("-----BEGIN PGP MESSAGE-----") ||
+    body.includes("-----BEGIN PGP SIGNED MESSAGE-----")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export interface ParsedEmailWithPgp extends ParsedEmail {
+  isPgpEncrypted: boolean;
+}
+
+export async function fetchAndParseEmailWithPgpDetection(
+  client: ImapFlow,
+  folder: string,
+  uid: number,
+  options: FetchOptions = {}
+): Promise<ParsedEmailWithPgp> {
+  const lock = await client.getMailboxLock(folder);
+
+  try {
+    const message = await client.fetchOne(
+      uid,
+      { source: true, envelope: true },
+      { uid: true }
+    );
+
+    if (!message) {
+      throw new Error(`Failed to fetch message for UID ${uid}`);
+    }
+
+    if (!message.source) {
+      throw new Error(`Failed to fetch message source for UID ${uid}`);
+    }
+
+    const parsed = await simpleParser(message.source);
+    const pgpEncrypted = isPgpEncrypted(parsed);
+
+    if (pgpEncrypted) {
+      logger.info("Detected PGP encrypted email", {
+        uid,
+        subject: parsed.subject,
+      });
+    }
+
+    const email = transformParsedMail(parsed, uid, options);
+    return {
+      ...email,
+      isPgpEncrypted: pgpEncrypted,
+    };
+  } finally {
+    lock.release();
+  }
+}

@@ -9,6 +9,19 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 
 let currentLevel: LogLevel = "info";
 
+// Log buffer for dashboard log viewer
+const LOG_BUFFER_SIZE = 500;
+
+export interface LogEntry {
+  timestamp: string;
+  level: LogLevel;
+  context: string;
+  message: string;
+  meta?: Record<string, unknown>;
+}
+
+const logBuffer: LogEntry[] = [];
+
 export function setLogLevel(level: LogLevel): void {
   currentLevel = level;
 }
@@ -41,6 +54,49 @@ function formatMessage(
   return base;
 }
 
+function addToBuffer(
+  level: LogLevel,
+  context: string,
+  message: string,
+  meta?: Record<string, unknown>
+): void {
+  const entry: LogEntry = {
+    timestamp: formatTimestamp(),
+    level,
+    context,
+    message,
+  };
+
+  if (meta !== undefined) {
+    entry.meta = meta;
+  }
+
+  logBuffer.push(entry);
+
+  // Keep buffer at max size
+  if (logBuffer.length > LOG_BUFFER_SIZE) {
+    logBuffer.shift();
+  }
+}
+
+export function getRecentLogs(
+  limit = 100,
+  levelFilter?: LogLevel
+): LogEntry[] {
+  let logs = logBuffer;
+
+  if (levelFilter) {
+    const minLevel = LOG_LEVELS[levelFilter];
+    logs = logs.filter((entry) => LOG_LEVELS[entry.level] >= minLevel);
+  }
+
+  return logs.slice(-limit);
+}
+
+export function clearLogBuffer(): void {
+  logBuffer.length = 0;
+}
+
 export interface Logger {
   debug(message: string, meta?: Record<string, unknown>): void;
   info(message: string, meta?: Record<string, unknown>): void;
@@ -52,21 +108,25 @@ export interface Logger {
 export function createLogger(context: string): Logger {
   return {
     debug(message: string, meta?: Record<string, unknown>): void {
+      addToBuffer("debug", context, message, meta);
       if (shouldLog("debug")) {
         console.debug(formatMessage("debug", context, message, meta));
       }
     },
     info(message: string, meta?: Record<string, unknown>): void {
+      addToBuffer("info", context, message, meta);
       if (shouldLog("info")) {
         console.info(formatMessage("info", context, message, meta));
       }
     },
     warn(message: string, meta?: Record<string, unknown>): void {
+      addToBuffer("warn", context, message, meta);
       if (shouldLog("warn")) {
         console.warn(formatMessage("warn", context, message, meta));
       }
     },
     error(message: string, meta?: Record<string, unknown>): void {
+      addToBuffer("error", context, message, meta);
       if (shouldLog("error")) {
         console.error(formatMessage("error", context, message, meta));
       }

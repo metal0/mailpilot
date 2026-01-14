@@ -4,7 +4,7 @@ import { createLogger } from "../utils/logger.js";
 import { isShutdownInProgress } from "../utils/shutdown.js";
 import { isMessageProcessed, markMessageProcessed } from "../storage/processed.js";
 import { logAction } from "../storage/audit.js";
-import { fetchAndParseEmail, type ParsedEmail } from "./email.js";
+import { fetchAndParseEmailWithPgpDetection, type ParsedEmail } from "./email.js";
 import type { AntivirusScanner } from "./antivirus.js";
 import { buildPrompt, truncateToTokens, type EmailContext, type PromptOptions } from "../llm/prompt.js";
 import { classifyEmail } from "../llm/client.js";
@@ -79,9 +79,27 @@ async function processMessage(
     const avConfig = config.antivirus;
     const needsAvScan = Boolean(antivirusScanner && avConfig?.enabled);
 
-    const email = await fetchAndParseEmail(imapClient.client, folder, uid, {
+    const email = await fetchAndParseEmailWithPgpDetection(imapClient.client, folder, uid, {
       includeAttachmentContent: needsAvScan,
     });
+
+    // Skip PGP encrypted emails - cannot process encrypted content
+    if (email.isPgpEncrypted) {
+      log.info("Skipping PGP encrypted email", { messageId, subject: email.subject });
+      markMessageProcessed(messageId, account.name);
+
+      const stateConfig = config.state ?? { audit_subjects: false };
+      const subject = stateConfig.audit_subjects ? email.subject : undefined;
+      logAction(
+        messageId,
+        account.name,
+        [{ type: "noop", reason: "PGP encrypted email" }],
+        provider.name,
+        model,
+        subject
+      );
+      return true;
+    }
 
     // Antivirus scanning
     if (needsAvScan && email.attachments.length > 0) {
