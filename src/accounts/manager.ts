@@ -217,10 +217,10 @@ export function getPausedAccounts(): string[] {
 
 // Manual reconnect
 export async function reconnectAccount(accountName: string): Promise<boolean> {
-  const client = activeClients.get(accountName);
+  const oldClient = activeClients.get(accountName);
   const ctx = accountContexts.get(accountName);
 
-  if (!client || !ctx) {
+  if (!oldClient || !ctx) {
     logger.warn("Cannot reconnect: account not found", { accountName });
     return false;
   }
@@ -234,19 +234,43 @@ export async function reconnectAccount(accountName: string): Promise<boolean> {
       stopIdleLoop(`${accountName}:${folder}`);
     }
 
-    // Disconnect
-    await client.disconnect();
+    // Disconnect old client
+    try {
+      await oldClient.disconnect();
+    } catch (disconnectError) {
+      logger.debug("Error disconnecting old client (ignored)", {
+        accountName,
+        error: disconnectError instanceof Error ? disconnectError.message : String(disconnectError),
+      });
+    }
     updateAccountStatus(accountName, { connected: false });
 
-    // Reconnect
-    await client.connect();
-    updateAccountStatus(accountName, {
-      connected: true,
-      idleSupported: client.providerInfo.supportsIdle,
+    // Create a new ImapClient instance (ImapFlow cannot be reused after disconnect)
+    const newClient = createImapClient({
+      config: ctx.account.imap,
+      accountName: ctx.account.name,
     });
 
-    // Restart watching
-    startWatching(ctx);
+    // Connect the new client
+    await newClient.connect();
+
+    // Update the maps with the new client
+    activeClients.set(accountName, newClient);
+
+    // Create a new context with the new client
+    const newCtx = createAccountContext(ctx.config, ctx.account, newClient);
+    if (!newCtx) {
+      throw new Error("Failed to create new account context");
+    }
+    accountContexts.set(accountName, newCtx);
+
+    updateAccountStatus(accountName, {
+      connected: true,
+      idleSupported: newClient.providerInfo.supportsIdle,
+    });
+
+    // Restart watching with the new context
+    startWatching(newCtx);
 
     logger.info("Account reconnected successfully", { accountName });
     return true;
@@ -258,6 +282,11 @@ export async function reconnectAccount(accountName: string): Promise<boolean> {
     updateAccountStatus(accountName, { connected: false });
     return false;
   }
+}
+
+// Get ImapClient for an account (for email preview)
+export function getAccountClient(accountName: string): ImapClient | undefined {
+  return activeClients.get(accountName);
 }
 
 // Manual processing trigger

@@ -6,6 +6,8 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
+# Build dashboard and copy to dist
+RUN cd dashboard && pnpm install && pnpm build && cp -r dist ../dist/dashboard
 
 FROM node:22-slim
 WORKDIR /app
@@ -14,7 +16,7 @@ RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt
 # Copy build artifacts and package files
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./
-# Use npm for production install (handles native modules more reliably than pnpm)
-RUN npm install --omit=dev
+# Install production deps and explicitly rebuild native modules
+RUN npm install --omit=dev --ignore-scripts && npm rebuild better-sqlite3
 EXPOSE 8080
 CMD ["node", "dist/index.js"]

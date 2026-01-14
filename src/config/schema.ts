@@ -113,10 +113,28 @@ const serverConfigSchema = z.object({
   auth_token: z.string().optional(),
 });
 
+const apiKeyPermissionSchema = z.enum([
+  "read:stats",
+  "read:activity",
+  "read:logs",
+  "read:export",
+  "read:*",
+  "write:accounts",
+  "write:*",
+  "*",
+]);
+
+const apiKeyConfigSchema = z.object({
+  name: z.string().min(1),
+  key: z.string().min(16),
+  permissions: z.array(apiKeyPermissionSchema).default(["read:stats"]),
+});
+
 const dashboardConfigSchema = z.object({
   enabled: z.boolean().default(false),
   session_secret: z.string().optional(),
   session_ttl: durationSchema.default("24h"),
+  api_keys: z.array(apiKeyConfigSchema).default([]),
 });
 
 const virusActionSchema = z.enum(["quarantine", "delete", "flag_only"]);
@@ -157,6 +175,8 @@ export type StateConfig = z.infer<typeof stateConfigSchema>;
 export type LoggingConfig = z.infer<typeof loggingConfigSchema>;
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
 export type DashboardConfig = z.infer<typeof dashboardConfigSchema>;
+export type ApiKeyConfig = z.infer<typeof apiKeyConfigSchema>;
+export type ApiKeyPermission = z.infer<typeof apiKeyPermissionSchema>;
 export type AntivirusConfig = z.infer<typeof antivirusConfigSchema>;
 
 export type TlsMode = z.infer<typeof tlsModeSchema>;

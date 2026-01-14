@@ -8,11 +8,15 @@ AI-powered email processing daemon that uses LLM classification to automatically
 - **LLM Classification**: Uses OpenAI-compatible APIs to classify emails and determine actions
 - **Multiple Actions**: Move to folders, mark as spam, flag, mark read, delete, or take no action
 - **Multi-Account**: Process multiple email accounts with per-account configuration
-- **Rate Limiting**: Per-provider rate limiting to stay within API quotas
+- **Rate Limiting**: Per-provider rate limiting with automatic 429 retry handling
 - **Webhooks**: Configurable webhooks for events like errors, actions taken, connection status
 - **Health/Status API**: HTTP endpoints for monitoring and health checks
-- **Web Dashboard**: Optional web UI for viewing metrics and recent activity
-- **Audit Logging**: SQLite-based audit trail of all actions taken
+- **Web Dashboard**: Modern Svelte SPA with real-time WebSocket updates
+- **API Key Auth**: Programmatic access to dashboard APIs with granular permissions
+- **Email Preview**: Preview email content before manual processing
+- **Dead Letter Queue**: Track and retry failed email processing
+- **Audit Logging**: SQLite-based audit trail with search and filtering
+- **Processing Headers**: Optional X-Mailpilot-* headers injected into processed emails
 - **Docker Ready**: Multi-arch Docker images for easy deployment
 
 ## Requirements
@@ -207,7 +211,22 @@ See [docs/prompt-system.md](docs/prompt-system.md) for detailed documentation on
 GET /health
 ```
 
-Returns `{"status": "ok"}` with HTTP 200. Used for Docker health checks.
+Returns detailed health status:
+
+```json
+{
+  "status": "ok",
+  "uptime": 3600,
+  "accounts": {
+    "connected": 2,
+    "total": 3
+  },
+  "deadLetterCount": 0,
+  "lastProcessed": "2026-01-14T12:00:00.000Z"
+}
+```
+
+Used for Docker health checks and monitoring systems.
 
 ### Status
 
@@ -225,14 +244,34 @@ Returns detailed status including:
 
 ### Web Dashboard
 
-The optional web dashboard provides a visual interface for monitoring. Enable it in your config:
+The optional web dashboard provides a modern Svelte-based interface with real-time WebSocket updates. Enable it in your config:
 
 ```yaml
 dashboard:
   enabled: true
+  api_keys:
+    - name: monitoring
+      key: mp_your_secret_key_here_min_16_chars
+      permissions: [read:stats, read:activity]
 ```
 
 Then visit `http://localhost:8080/dashboard`. On first visit, you'll create an admin account.
+
+**Features**:
+- Real-time updates via WebSocket (no page refresh needed)
+- Dark/light mode toggle
+- Email preview before manual processing
+- Search and filter audit logs
+- Dead letter queue management
+- Account pause/resume/reconnect controls
+
+**API Key Permissions**:
+- `read:stats` - Access stats endpoint
+- `read:activity` - Access activity/audit endpoints
+- `read:logs` - Access system logs
+- `read:export` - Export audit data
+- `write:accounts` - Pause/resume/reconnect accounts
+- `read:*` / `write:*` / `*` - Wildcards
 
 **Security Note**: The first visitor can create the admin account. Only enable on trusted networks.
 
@@ -323,6 +362,8 @@ src/
   processor/
     email.ts         # Email fetching and parsing
     worker.ts        # Processing pipeline
+    headers.ts       # Processing header injection
+    antivirus.ts     # ClamAV integration
   actions/
     executor.ts      # Action dispatch
     move.ts          # Move action
@@ -332,22 +373,31 @@ src/
   storage/
     database.ts      # SQLite initialization
     processed.ts     # Processed message tracking
-    audit.ts         # Audit log
+    audit.ts         # Audit log with search
     dashboard.ts     # Dashboard user/session storage
+    dead-letter.ts   # Dead letter queue
   server/
-    index.ts         # HTTP server
+    index.ts         # HTTP server with WebSocket
     health.ts        # Health endpoint
     status.ts        # Status endpoint
-    dashboard.ts     # Dashboard routes
-    auth.ts          # Session authentication
-    templates.ts     # Dashboard HTML templates
+    dashboard.ts     # Dashboard API routes
+    auth.ts          # Session + API key authentication
+    websocket.ts     # WebSocket server
   webhooks/
     dispatcher.ts    # Webhook delivery
   utils/
-    logger.ts        # Structured logging
+    logger.ts        # Structured logging with broadcast
     duration.ts      # Duration parsing (30s, 5m, 24h)
     retry.ts         # Retry with backoff
     shutdown.ts      # Graceful shutdown
+
+dashboard/           # Svelte SPA (built separately)
+  src/
+    lib/
+      components/    # UI components
+      stores/        # Svelte stores (WebSocket, theme, data)
+      api.ts         # API client
+    routes/          # Page components
 ```
 
 ## Troubleshooting

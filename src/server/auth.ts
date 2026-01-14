@@ -8,6 +8,7 @@ import {
   type DashboardUser,
 } from "../storage/dashboard.js";
 import { createLogger } from "../utils/logger.js";
+import type { ApiKeyConfig, ApiKeyPermission } from "../config/schema.js";
 
 const logger = createLogger("auth");
 
@@ -172,3 +173,87 @@ setInterval(() => {
     }
   }
 }, 60 * 1000);
+
+// API Key authentication
+let configuredApiKeys: ApiKeyConfig[] = [];
+
+export function setApiKeys(keys: ApiKeyConfig[]): void {
+  configuredApiKeys = keys;
+}
+
+export interface ApiKeyContext {
+  apiKey: ApiKeyConfig;
+}
+
+export function getApiKeyContext(c: Context): ApiKeyContext | null {
+  return c.get("apiKey") as ApiKeyContext | null;
+}
+
+function hasPermission(apiKey: ApiKeyConfig, required: ApiKeyPermission): boolean {
+  if (apiKey.permissions.includes("*")) {
+    return true;
+  }
+
+  if (apiKey.permissions.includes(required)) {
+    return true;
+  }
+
+  // Check wildcard permissions
+  if (required.startsWith("read:") && apiKey.permissions.includes("read:*")) {
+    return true;
+  }
+  if (required.startsWith("write:") && apiKey.permissions.includes("write:*")) {
+    return true;
+  }
+
+  return false;
+}
+
+export function validateApiKey(c: Context): ApiKeyConfig | null {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+
+  const token = authHeader.slice(7);
+  const apiKey = configuredApiKeys.find((k) => k.key === token);
+
+  if (apiKey) {
+    c.set("apiKey", { apiKey } as ApiKeyContext);
+  }
+
+  return apiKey ?? null;
+}
+
+export function requireApiPermission(permission: ApiKeyPermission) {
+  return (c: Context): boolean => {
+    const apiKeyCtx = getApiKeyContext(c);
+    if (!apiKeyCtx) {
+      return false;
+    }
+    return hasPermission(apiKeyCtx.apiKey, permission);
+  };
+}
+
+export function requireAuthOrApiKey(requiredPermission?: ApiKeyPermission) {
+  return async (c: Context, next: Next) => {
+    // First check session auth
+    const auth = getAuthContext(c);
+    if (auth) {
+      await next();
+      return;
+    }
+
+    // Then check API key
+    const apiKey = validateApiKey(c);
+    if (apiKey) {
+      if (requiredPermission && !hasPermission(apiKey, requiredPermission)) {
+        return c.json({ error: "Insufficient permissions" }, 403);
+      }
+      await next();
+      return;
+    }
+
+    return c.json({ error: "Unauthorized" }, 401);
+  };
+}

@@ -22,6 +22,13 @@ export interface LogEntry {
 
 const logBuffer: LogEntry[] = [];
 
+// Optional WebSocket broadcast function (set by server during startup)
+let broadcastLogsFn: ((data: unknown) => void) | null = null;
+
+export function setLogsBroadcast(fn: (data: unknown) => void): void {
+  broadcastLogsFn = fn;
+}
+
 export function setLogLevel(level: LogLevel): void {
   currentLevel = level;
 }
@@ -76,6 +83,11 @@ function addToBuffer(
   // Keep buffer at max size
   if (logBuffer.length > LOG_BUFFER_SIZE) {
     logBuffer.shift();
+  }
+
+  // Broadcast to WebSocket clients (only for info, warn, error - skip debug for performance)
+  if (broadcastLogsFn && level !== "debug") {
+    broadcastLogsFn(entry);
   }
 }
 

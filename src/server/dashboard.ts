@@ -26,6 +26,7 @@ import {
   clearFailedLogins,
   validateCsrf,
   getCsrfToken,
+  requireAuthOrApiKey,
 } from "./auth.js";
 import {
   renderSetupPage,
@@ -43,7 +44,15 @@ import {
   reconnectAccount,
   triggerProcessing,
   getPausedAccounts,
+  getAccountClient,
 } from "../accounts/manager.js";
+import { fetchAndParseEmail } from "../processor/email.js";
+import {
+  getDeadLetterEntries,
+  getDeadLetterCount,
+  resolveDeadLetter,
+  removeDeadLetter,
+} from "../storage/dead-letter.js";
 
 export function createDashboardRouter(config: DashboardConfig): Hono {
   const router = new Hono();
@@ -195,13 +204,8 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
     return c.redirect("/dashboard/login");
   });
 
-  // API endpoints for AJAX polling
-  router.get("/dashboard/api/stats", (c) => {
-    const auth = getAuthContext(c);
-    if (!auth) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-
+  // API endpoints with API key support
+  router.get("/dashboard/api/stats", requireAuthOrApiKey("read:stats"), (c) => {
     const accounts = getAccountStatuses();
     const pausedAccountsList = getPausedAccounts();
 
@@ -219,15 +223,11 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
       actionBreakdown: getActionBreakdown(),
       providerStats: getDetailedProviderStats(),
       queueStatus: getQueueStatus(),
+      deadLetterCount: getDeadLetterCount(),
     });
   });
 
-  router.get("/dashboard/api/activity", (c) => {
-    const auth = getAuthContext(c);
-    if (!auth) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-
+  router.get("/dashboard/api/activity", requireAuthOrApiKey("read:activity"), (c) => {
     const page = parseInt(c.req.query("page") ?? "1", 10);
     const pageSize = parseInt(c.req.query("pageSize") ?? "20", 10);
 
@@ -236,35 +236,36 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
     const actionType = c.req.query("actionType");
     const startDate = c.req.query("startDate");
     const endDate = c.req.query("endDate");
+    const search = c.req.query("search");
 
     if (accountName) filters.accountName = accountName;
     if (actionType) filters.actionType = actionType;
     if (startDate) filters.startDate = parseInt(startDate, 10);
     if (endDate) filters.endDate = parseInt(endDate, 10);
+    if (search) filters.search = search;
 
     return c.json(getAuditEntriesPaginated(page, pageSize, filters));
   });
 
-  router.get("/dashboard/api/logs", (c) => {
-    const auth = getAuthContext(c);
-    if (!auth) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-
+  router.get("/dashboard/api/logs", requireAuthOrApiKey("read:logs"), (c) => {
     const limit = parseInt(c.req.query("limit") ?? "100", 10);
     const levelFilter = c.req.query("level") as LogLevel | undefined;
+    const accountName = c.req.query("accountName");
 
-    return c.json({
-      logs: getRecentLogs(limit, levelFilter),
-    });
-  });
+    let logs = getRecentLogs(limit, levelFilter);
 
-  router.get("/dashboard/api/export", (c) => {
-    const auth = getAuthContext(c);
-    if (!auth) {
-      return c.json({ error: "Unauthorized" }, 401);
+    // Filter by account if specified
+    if (accountName) {
+      logs = logs.filter((log) => {
+        const contextStr = JSON.stringify(log.meta ?? {});
+        return contextStr.includes(accountName);
+      });
     }
 
+    return c.json({ logs });
+  });
+
+  router.get("/dashboard/api/export", requireAuthOrApiKey("read:export"), (c) => {
     const format = c.req.query("format") ?? "json";
     const filters: AuditFilters = {};
 
@@ -272,11 +273,13 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
     const actionType = c.req.query("actionType");
     const startDate = c.req.query("startDate");
     const endDate = c.req.query("endDate");
+    const search = c.req.query("search");
 
     if (accountName) filters.accountName = accountName;
     if (actionType) filters.actionType = actionType;
     if (startDate) filters.startDate = parseInt(startDate, 10);
     if (endDate) filters.endDate = parseInt(endDate, 10);
+    if (search) filters.search = search;
 
     const entries = exportAuditLog(filters);
 
@@ -305,53 +308,107 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
   });
 
   // Account management actions
-  router.post("/dashboard/api/accounts/:name/pause", (c) => {
-    const auth = getAuthContext(c);
-    if (!auth) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-
+  router.post("/dashboard/api/accounts/:name/pause", requireAuthOrApiKey("write:accounts"), (c) => {
     const name = c.req.param("name");
     const success = pauseAccount(name);
 
     return c.json({ success, paused: success ? true : isAccountPaused(name) });
   });
 
-  router.post("/dashboard/api/accounts/:name/resume", (c) => {
-    const auth = getAuthContext(c);
-    if (!auth) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-
+  router.post("/dashboard/api/accounts/:name/resume", requireAuthOrApiKey("write:accounts"), (c) => {
     const name = c.req.param("name");
     const success = resumeAccount(name);
 
     return c.json({ success, paused: success ? false : isAccountPaused(name) });
   });
 
-  router.post("/dashboard/api/accounts/:name/reconnect", async (c) => {
-    const auth = getAuthContext(c);
-    if (!auth) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-
+  router.post("/dashboard/api/accounts/:name/reconnect", requireAuthOrApiKey("write:accounts"), async (c) => {
     const name = c.req.param("name");
     const success = await reconnectAccount(name);
 
     return c.json({ success });
   });
 
-  router.post("/dashboard/api/accounts/:name/process", async (c) => {
-    const auth = getAuthContext(c);
-    if (!auth) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-
+  router.post("/dashboard/api/accounts/:name/process", requireAuthOrApiKey("write:accounts"), async (c) => {
     const name = c.req.param("name");
     const folder = c.req.query("folder") ?? "INBOX";
     const success = await triggerProcessing(name, folder);
 
     return c.json({ success });
+  });
+
+  // Dead letter queue endpoints
+  router.get("/dashboard/api/dead-letter", requireAuthOrApiKey("read:activity"), (c) => {
+    const accountName = c.req.query("accountName");
+    const entries = getDeadLetterEntries(accountName);
+    return c.json({
+      entries,
+      total: entries.length,
+    });
+  });
+
+  router.post("/dashboard/api/dead-letter/:id/retry", requireAuthOrApiKey("write:accounts"), (c) => {
+    const id = parseInt(c.req.param("id"), 10);
+    if (isNaN(id)) {
+      return c.json({ error: "Invalid ID" }, 400);
+    }
+
+    // Mark as resolved (the actual retry will happen when the email is processed again)
+    const success = resolveDeadLetter(id);
+    return c.json({ success });
+  });
+
+  router.post("/dashboard/api/dead-letter/:id/dismiss", requireAuthOrApiKey("write:accounts"), (c) => {
+    const id = parseInt(c.req.param("id"), 10);
+    if (isNaN(id)) {
+      return c.json({ error: "Invalid ID" }, 400);
+    }
+
+    const success = removeDeadLetter(id);
+    return c.json({ success });
+  });
+
+  // Email preview endpoint
+  router.get("/dashboard/api/emails/:account/:folder/:uid", requireAuthOrApiKey("read:activity"), async (c) => {
+    const accountName = c.req.param("account");
+    const folder = c.req.param("folder");
+    const uid = parseInt(c.req.param("uid"), 10);
+
+    if (isNaN(uid)) {
+      return c.json({ error: "Invalid UID" }, 400);
+    }
+
+    const client = getAccountClient(accountName);
+    if (!client) {
+      return c.json({ error: "Account not found or not connected" }, 404);
+    }
+
+    try {
+      const email = await fetchAndParseEmail(client.client, folder, uid);
+
+      // Truncate body for preview (first 2000 chars)
+      const truncatedBody = email.body.length > 2000
+        ? email.body.substring(0, 2000) + "..."
+        : email.body;
+
+      return c.json({
+        messageId: email.messageId,
+        from: email.from,
+        subject: email.subject,
+        date: email.date,
+        body: truncatedBody,
+        attachments: email.attachments.map((a) => ({
+          filename: a.filename,
+          contentType: a.contentType,
+          size: a.size,
+        })),
+      });
+    } catch (error) {
+      return c.json({
+        error: "Failed to fetch email",
+        message: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
   });
 
   return router;

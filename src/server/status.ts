@@ -30,6 +30,13 @@ const accountStatuses = new Map<
 
 const startTime = Date.now();
 
+// Optional WebSocket broadcast function (set by server during startup)
+let broadcastAccountUpdateFn: ((data: unknown) => void) | null = null;
+
+export function setAccountUpdateBroadcast(fn: (data: unknown) => void): void {
+  broadcastAccountUpdateFn = fn;
+}
+
 export function updateAccountStatus(
   accountName: string,
   status: Partial<{
@@ -50,7 +57,21 @@ export function updateAccountStatus(
     llmModel: "unknown",
   };
 
-  accountStatuses.set(accountName, { ...current, ...status });
+  const updated = { ...current, ...status };
+  accountStatuses.set(accountName, updated);
+
+  // Broadcast to WebSocket clients
+  if (broadcastAccountUpdateFn) {
+    broadcastAccountUpdateFn({
+      name: accountName,
+      connected: updated.connected,
+      idleSupported: updated.idleSupported,
+      lastScan: updated.lastScan?.toISOString() ?? null,
+      errors: updated.errors,
+      llmProvider: updated.llmProvider,
+      llmModel: updated.llmModel,
+    });
+  }
 }
 
 export function incrementAccountErrors(accountName: string): void {

@@ -1,14 +1,26 @@
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
 import type { ServerConfig, AccountConfig, DashboardConfig } from "../config/schema.js";
-import { createLogger } from "../utils/logger.js";
+import { createLogger, setLogsBroadcast } from "../utils/logger.js";
 import { healthRouter } from "./health.js";
 import {
   createStatusRouter,
   initializeAccountStatuses,
+  setAccountUpdateBroadcast,
 } from "./status.js";
 import { createDashboardRouter } from "./dashboard.js";
 import { getUserCount, cleanupExpiredSessions } from "../storage/dashboard.js";
+import {
+  initWebSocketServer,
+  handleUpgrade,
+  closeAllConnections,
+  broadcastActivity,
+  broadcastLogs,
+  broadcastAccountUpdate,
+} from "./websocket.js";
+import { setApiKeys } from "./auth.js";
+import { setActivityBroadcast } from "../storage/audit.js";
 
 const logger = createLogger("server");
 
@@ -39,7 +51,35 @@ export function startServer(
   app.route("/", createStatusRouter(serverConfig));
 
   if (dashboardConfig?.enabled) {
+    // Initialize API keys for auth
+    setApiKeys(dashboardConfig.api_keys);
+
+    // Initialize WebSocket server
+    initWebSocketServer(dashboardConfig);
+    logger.info("WebSocket server initialized");
+
+    // Set up broadcast functions
+    setActivityBroadcast(broadcastActivity);
+    setLogsBroadcast(broadcastLogs);
+    setAccountUpdateBroadcast(broadcastAccountUpdate);
+
+    // Serve static dashboard files
+    app.use("/dashboard/assets/*", serveStatic({ root: "./dist/dashboard" }));
+    app.get("/dashboard/favicon.ico", serveStatic({ path: "./dist/dashboard/favicon.ico" }));
+
+    // Dashboard router (API endpoints)
     app.route("/", createDashboardRouter(dashboardConfig));
+
+    // SPA fallback - serve index.html for all non-API dashboard routes
+    app.get("/dashboard", serveStatic({ path: "./dist/dashboard/index.html" }));
+    app.get("/dashboard/*", async (c) => {
+      // Don't serve index.html for API routes
+      if (c.req.path.startsWith("/dashboard/api/")) {
+        return c.json({ error: "Not found" }, 404);
+      }
+      return serveStatic({ path: "./dist/dashboard/index.html" })(c, async () => {});
+    });
+
     logger.info("Dashboard enabled", { path: "/dashboard" });
 
     checkDashboardWarning();
@@ -58,6 +98,20 @@ export function startServer(
     },
     (info) => {
       logger.info("HTTP server started", { port: info.port });
+
+      // Handle WebSocket upgrade
+      if (dashboardConfig?.enabled && server) {
+        const httpServer = (server as unknown as { server?: { on: (event: string, handler: (...args: unknown[]) => void) => void } }).server;
+        if (httpServer) {
+          httpServer.on("upgrade", (request: unknown, socket: unknown, head: unknown) => {
+            const req = request as import("node:http").IncomingMessage;
+            if (req.url === "/dashboard/ws") {
+              handleUpgrade(req, socket as import("node:stream").Duplex, head as Buffer);
+            }
+          });
+          logger.info("WebSocket upgrade handler registered", { path: "/dashboard/ws" });
+        }
+      }
     }
   );
 }
@@ -72,6 +126,9 @@ export function stopServer(): void {
     clearInterval(sessionCleanupInterval);
     sessionCleanupInterval = null;
   }
+
+  // Close WebSocket connections
+  closeAllConnections();
 
   if (server) {
     server.close();

@@ -5,6 +5,13 @@ import type { LlmAction } from "../llm/parser.js";
 
 const logger = createLogger("audit");
 
+// Optional WebSocket broadcast function (set by server during startup)
+let broadcastActivityFn: ((data: unknown) => void) | null = null;
+
+export function setActivityBroadcast(fn: (data: unknown) => void): void {
+  broadcastActivityFn = fn;
+}
+
 export interface AuditEntry {
   id: number;
   messageId: string;
@@ -25,19 +32,21 @@ export function logAction(
   subject?: string
 ): void {
   const db = getDatabase();
+  const createdAt = Date.now();
+
   const stmt = db.prepare(`
     INSERT INTO audit_log (message_id, account_name, actions, llm_provider, llm_model, subject, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
-  stmt.run(
+  const result = stmt.run(
     messageId,
     accountName,
     JSON.stringify(actions),
     llmProvider ?? null,
     llmModel ?? null,
     subject ?? null,
-    Date.now()
+    createdAt
   );
 
   logger.debug("Action logged", {
@@ -45,6 +54,22 @@ export function logAction(
     accountName,
     actionCount: actions.length,
   });
+
+  // Broadcast to WebSocket clients
+  if (broadcastActivityFn) {
+    const entry: AuditEntry = {
+      id: Number(result.lastInsertRowid),
+      messageId,
+      accountName,
+      actions,
+      createdAt,
+    };
+    if (llmProvider) entry.llmProvider = llmProvider;
+    if (llmModel) entry.llmModel = llmModel;
+    if (subject) entry.subject = subject;
+
+    broadcastActivityFn(entry);
+  }
 }
 
 export function cleanupAuditLog(retention: string): number {
@@ -175,6 +200,7 @@ export interface AuditFilters {
   actionType?: string;
   startDate?: number;
   endDate?: number;
+  search?: string;
 }
 
 export function getAuditEntriesPaginated(
@@ -206,6 +232,12 @@ export function getAuditEntriesPaginated(
   if (filters.endDate) {
     conditions.push("created_at <= ?");
     params.push(filters.endDate);
+  }
+
+  if (filters.search) {
+    conditions.push("(subject LIKE ? OR message_id LIKE ? OR account_name LIKE ?)");
+    const searchPattern = `%${filters.search}%`;
+    params.push(searchPattern, searchPattern, searchPattern);
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -291,6 +323,12 @@ export function exportAuditLog(filters: AuditFilters = {}): AuditEntry[] {
   if (filters.endDate) {
     conditions.push("created_at <= ?");
     params.push(filters.endDate);
+  }
+
+  if (filters.search) {
+    conditions.push("(subject LIKE ? OR message_id LIKE ? OR account_name LIKE ?)");
+    const searchPattern = `%${filters.search}%`;
+    params.push(searchPattern, searchPattern, searchPattern);
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";

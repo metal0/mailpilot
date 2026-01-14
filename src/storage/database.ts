@@ -81,6 +81,24 @@ function createTables(database: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_dashboard_sessions_user
     ON dashboard_sessions(user_id);
+
+    CREATE TABLE IF NOT EXISTS dead_letter (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id TEXT NOT NULL,
+      account_name TEXT NOT NULL,
+      folder TEXT NOT NULL,
+      uid INTEGER NOT NULL,
+      error TEXT NOT NULL,
+      attempts INTEGER DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      resolved_at INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dead_letter_account
+    ON dead_letter(account_name);
+
+    CREATE INDEX IF NOT EXISTS idx_dead_letter_resolved
+    ON dead_letter(resolved_at);
   `);
 
   logger.debug("Database tables created");
