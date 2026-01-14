@@ -25,7 +25,7 @@ AI-powered email processing daemon that uses LLM classification to automatically
 
 ```bash
 # Clone and install
-git clone https://github.com/youruser/mailpilot.git
+git clone https://github.com/metal0/mailpilot.git
 cd mailpilot
 pnpm install
 
@@ -97,7 +97,7 @@ On first visit, create an admin account. See [Dashboard Guide](docs/dashboard.md
 ```yaml
 services:
   mailpilot:
-    image: ghcr.io/youruser/mailpilot:latest
+    image: ghcr.io/metal0/mailpilot:latest
     ports:
       - "8080:8080"
     volumes:

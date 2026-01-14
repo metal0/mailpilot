@@ -10,7 +10,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/youruser/mailpilot.git
+git clone https://github.com/metal0/mailpilot.git
 cd mailpilot
 
 # Install dependencies
