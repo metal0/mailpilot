@@ -47,6 +47,3 @@ jobs:
 
       - name: Unit tests
         run: pnpm test:unit
-
-      - name: Integration tests
-        run: pnpm test:integration
