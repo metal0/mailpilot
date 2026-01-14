@@ -12,6 +12,11 @@ export const locale = writable<string>("en");
 export const locales = Object.keys(translations);
 
 function getNestedValue(obj: Translations, path: string): string | undefined {
+  // First try direct key lookup (flat keys like "settings.sections.global")
+  if (path in obj) {
+    return obj[path];
+  }
+  // Fall back to nested traversal for backwards compatibility
   return path.split(".").reduce((acc: Translations | string | undefined, part) => {
     if (acc && typeof acc === "object") {
       return acc[part];
