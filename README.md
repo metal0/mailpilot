@@ -11,6 +11,7 @@ AI-powered email processing daemon that uses LLM classification to automatically
 - **Rate Limiting**: Per-provider rate limiting to stay within API quotas
 - **Webhooks**: Configurable webhooks for events like errors, actions taken, connection status
 - **Health/Status API**: HTTP endpoints for monitoring and health checks
+- **Web Dashboard**: Optional web UI for viewing metrics and recent activity
 - **Audit Logging**: SQLite-based audit trail of all actions taken
 - **Docker Ready**: Multi-arch Docker images for easy deployment
 
@@ -222,6 +223,21 @@ Returns detailed status including:
 - LLM provider statistics
 - Error counts
 
+### Web Dashboard
+
+The optional web dashboard provides a visual interface for monitoring. Enable it in your config:
+
+```yaml
+dashboard:
+  enabled: true
+```
+
+Then visit `http://localhost:8080/dashboard`. On first visit, you'll create an admin account.
+
+**Security Note**: The first visitor can create the admin account. Only enable on trusted networks.
+
+See [docs/dashboard.md](docs/dashboard.md) for detailed documentation.
+
 ## Docker Deployment
 
 ### Using Docker Compose
@@ -317,10 +333,14 @@ src/
     database.ts      # SQLite initialization
     processed.ts     # Processed message tracking
     audit.ts         # Audit log
+    dashboard.ts     # Dashboard user/session storage
   server/
     index.ts         # HTTP server
     health.ts        # Health endpoint
     status.ts        # Status endpoint
+    dashboard.ts     # Dashboard routes
+    auth.ts          # Session authentication
+    templates.ts     # Dashboard HTML templates
   webhooks/
     dispatcher.ts    # Webhook delivery
   utils/

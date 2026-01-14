@@ -60,6 +60,30 @@ export function incrementAccountErrors(accountName: string): void {
   }
 }
 
+export function getUptime(): number {
+  return Math.floor((Date.now() - startTime) / 1000);
+}
+
+export function getAccountStatuses(): AccountStatus[] {
+  const accounts: AccountStatus[] = [];
+
+  for (const [name, status] of accountStatuses) {
+    accounts.push({
+      name,
+      llmProvider: status.llmProvider,
+      llmModel: status.llmModel,
+      connected: status.connected,
+      idleSupported: status.idleSupported,
+      lastScan: status.lastScan?.toISOString() ?? null,
+      emailsProcessed: getProcessedCount(name),
+      actionsTaken: getActionCount(name),
+      errors: status.errors,
+    });
+  }
+
+  return accounts;
+}
+
 export function createStatusRouter(serverConfig: ServerConfig): Hono {
   const router = new Hono();
 
@@ -73,22 +97,7 @@ export function createStatusRouter(serverConfig: ServerConfig): Hono {
       }
     }
 
-    const accounts: AccountStatus[] = [];
-
-    for (const [name, status] of accountStatuses) {
-      accounts.push({
-        name,
-        llmProvider: status.llmProvider,
-        llmModel: status.llmModel,
-        connected: status.connected,
-        idleSupported: status.idleSupported,
-        lastScan: status.lastScan?.toISOString() ?? null,
-        emailsProcessed: getProcessedCount(name),
-        actionsTaken: getActionCount(name),
-        errors: status.errors,
-      });
-    }
-
+    const accounts = getAccountStatuses();
     const totals = {
       emailsProcessed: getProcessedCount(),
       actionsTaken: getActionCount(),
@@ -97,7 +106,7 @@ export function createStatusRouter(serverConfig: ServerConfig): Hono {
 
     return c.json({
       status: "running",
-      uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
+      uptime_seconds: getUptime(),
       accounts,
       totals,
       llm_providers: getProviderStats(),

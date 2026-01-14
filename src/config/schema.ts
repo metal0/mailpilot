@@ -113,6 +113,12 @@ const serverConfigSchema = z.object({
   auth_token: z.string().optional(),
 });
 
+const dashboardConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  session_secret: z.string().optional(),
+  session_ttl: durationSchema.default("24h"),
+});
+
 const virusActionSchema = z.enum(["quarantine", "delete", "flag_only"]);
 
 const antivirusConfigSchema = z.object({
@@ -135,6 +141,7 @@ export const configSchema = z.object({
   default_prompt_file: z.string().optional(),
   logging: loggingConfigSchema.optional(),
   server: serverConfigSchema.optional(),
+  dashboard: dashboardConfigSchema.optional(),
   antivirus: antivirusConfigSchema.optional(),
   accounts: z.array(accountConfigSchema).min(1),
 });
@@ -149,6 +156,7 @@ export type BacklogConfig = z.infer<typeof backlogConfigSchema>;
 export type StateConfig = z.infer<typeof stateConfigSchema>;
 export type LoggingConfig = z.infer<typeof loggingConfigSchema>;
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
+export type DashboardConfig = z.infer<typeof dashboardConfigSchema>;
 export type AntivirusConfig = z.infer<typeof antivirusConfigSchema>;
 
 export type TlsMode = z.infer<typeof tlsModeSchema>;

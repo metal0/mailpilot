@@ -31,6 +31,7 @@ async function main(): Promise<void> {
     audit_retention: "30d",
   };
   const serverConfig = config.server ?? { port: 8080 };
+  const dashboardConfig = config.dashboard;
 
   setLogLevel(loggingConfig.level as LogLevel);
 
@@ -44,7 +45,7 @@ async function main(): Promise<void> {
 
   registerProviders(config.llm_providers);
 
-  startServer(serverConfig, config.accounts);
+  startServer(serverConfig, config.accounts, dashboardConfig);
 
   await dispatchStartup();
 

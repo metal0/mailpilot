@@ -61,6 +61,26 @@ function createTables(database: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_audit_log_created_at
     ON audit_log(created_at);
+
+    CREATE TABLE IF NOT EXISTS dashboard_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS dashboard_sessions (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES dashboard_users(id) ON DELETE CASCADE,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dashboard_sessions_expires
+    ON dashboard_sessions(expires_at);
+
+    CREATE INDEX IF NOT EXISTS idx_dashboard_sessions_user
+    ON dashboard_sessions(user_id);
   `);
 
   logger.debug("Database tables created");

@@ -66,11 +66,48 @@ function transformParsedMail(
   const date = parsed.date?.toISOString() ?? new Date().toISOString();
   const messageId = parsed.messageId ?? `uid-${uid}`;
 
+  // Debug: Log MIME structure
+  const textContent = typeof parsed.text === "string" ? parsed.text : "";
+  const htmlContent = typeof parsed.html === "string" ? parsed.html : "";
+
+  logger.debug("MIME structure", {
+    messageId,
+    hasText: textContent.length > 0,
+    textLength: textContent.length,
+    hasHtml: htmlContent.length > 0,
+    htmlLength: htmlContent.length,
+    attachmentCount: parsed.attachments.length,
+    attachmentTypes: parsed.attachments.map(a => ({
+      filename: a.filename,
+      contentType: a.contentType,
+      size: a.size,
+    })),
+  });
+
   let body = "";
-  if (parsed.text) {
-    body = parsed.text;
-  } else if (parsed.html) {
-    body = stripHtml(parsed.html);
+  if (textContent) {
+    body = textContent;
+  } else if (htmlContent) {
+    body = stripHtml(htmlContent);
+  }
+
+  // If body is still empty, try to extract from text/plain attachments
+  if (!body) {
+    for (const att of parsed.attachments) {
+      if (att.contentType === "text/plain") {
+        const attText = Buffer.isBuffer(att.content)
+          ? att.content.toString("utf-8")
+          : String(att.content);
+        if (attText) {
+          logger.debug("Extracted body from text/plain attachment", {
+            filename: att.filename,
+            size: att.size,
+          });
+          body = attText;
+          break;
+        }
+      }
+    }
   }
 
   const attachments: AttachmentInfo[] = [];
@@ -107,8 +144,8 @@ function transformParsedMail(
     attachments,
   };
 
-  if (parsed.html) {
-    result.html = parsed.html;
+  if (htmlContent) {
+    result.html = htmlContent;
   }
 
   return result;

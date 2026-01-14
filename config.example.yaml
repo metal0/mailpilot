@@ -61,6 +61,13 @@ server:
   port: 8080
   auth_token: ${STATUS_API_TOKEN}  # required for /status endpoint
 
+# Web dashboard (opt-in)
+# WARNING: First visitor can create the admin account!
+# Only enable on trusted networks or immediately create an account
+dashboard:
+  enabled: false                   # set to true to enable
+  # session_ttl: 24h               # how long login sessions last
+
 # Antivirus scanning (optional, requires ClamAV daemon)
 antivirus:
   enabled: false
