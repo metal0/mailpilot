@@ -9,8 +9,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/dashboard/api": "http://localhost:8080",
-      "/dashboard/ws": {
+      "/api": "http://localhost:8080",
+      "/ws": {
         target: "ws://localhost:8080",
         ws: true,
       },

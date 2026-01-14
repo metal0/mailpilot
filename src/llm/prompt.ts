@@ -1,4 +1,6 @@
 import { RESPONSE_SCHEMA } from "./parser.js";
+import type { ExtractedAttachment } from "../attachments/index.js";
+import { formatAttachmentsForPrompt } from "../attachments/index.js";
 
 export interface EmailContext {
   from: string;
@@ -6,6 +8,7 @@ export interface EmailContext {
   date: string;
   body: string;
   attachmentNames?: string[];
+  extractedAttachments?: ExtractedAttachment[];
   threadContext?: string;
 }
 
@@ -61,6 +64,11 @@ export function buildPrompt(
 
   parts.push("\n**Body:**\n");
   parts.push(email.body);
+
+  // Add extracted attachment content if available
+  if (email.extractedAttachments?.length) {
+    parts.push(formatAttachmentsForPrompt(email.extractedAttachments));
+  }
 
   if (email.threadContext) {
     parts.push("\n\n## Thread Context (Previous Messages)\n");

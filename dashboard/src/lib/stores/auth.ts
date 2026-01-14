@@ -44,7 +44,7 @@ interface AuthCheckResult {
 
 export async function checkAuth(): Promise<AuthCheckResult> {
   try {
-    const res = await fetch("/dashboard/api/auth");
+    const res = await fetch("/api/auth");
     if (!res.ok) {
       auth.logout();
       return { needsSetup: false, authenticated: false };
@@ -74,7 +74,7 @@ interface LoginResult {
 
 export async function login(username: string, password: string): Promise<LoginResult> {
   try {
-    const res = await fetch("/dashboard/api/login", {
+    const res = await fetch("/api/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
@@ -101,7 +101,7 @@ interface SetupResult {
 
 export async function setup(username: string, password: string, confirm: string): Promise<SetupResult> {
   try {
-    const res = await fetch("/dashboard/api/setup", {
+    const res = await fetch("/api/setup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password, confirm }),
@@ -122,7 +122,7 @@ export async function setup(username: string, password: string, confirm: string)
 
 export async function logout(): Promise<void> {
   try {
-    await fetch("/dashboard/api/logout", { method: "POST" });
+    await fetch("/api/logout", { method: "POST" });
   } finally {
     auth.logout();
   }

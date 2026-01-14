@@ -53,7 +53,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
   router.use("*", createSessionMiddleware(sessionTtl));
 
   // Auth status endpoint - used by SPA to check authentication state
-  router.get("/dashboard/api/auth", (c) => {
+  router.get("/api/auth", (c) => {
     const auth = getAuthContext(c);
     const needsSetup = getUserCount() === 0;
 
@@ -73,7 +73,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
   });
 
   // Setup endpoint - create first admin account
-  router.post("/dashboard/api/setup", async (c) => {
+  router.post("/api/setup", async (c) => {
     if (getUserCount() > 0) {
       return c.json({ error: "Setup already completed" }, 403);
     }
@@ -101,7 +101,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
   });
 
   // Login endpoint
-  router.post("/dashboard/api/login", async (c) => {
+  router.post("/api/login", async (c) => {
     if (getUserCount() === 0) {
       return c.json({ error: "Setup required", needsSetup: true }, 400);
     }
@@ -137,7 +137,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
   });
 
   // Logout endpoint
-  router.post("/dashboard/api/logout", (c) => {
+  router.post("/api/logout", (c) => {
     const auth = getAuthContext(c);
     if (auth) {
       deleteSession(auth.sessionId);
@@ -147,7 +147,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
   });
 
   // Stats endpoint
-  router.get("/dashboard/api/stats", requireAuthOrApiKey("read:stats"), (c) => {
+  router.get("/api/stats", requireAuthOrApiKey("read:stats"), (c) => {
     const accounts = getAccountStatuses();
     const pausedAccountsList = getPausedAccounts();
 
@@ -169,7 +169,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
     });
   });
 
-  router.get("/dashboard/api/activity", requireAuthOrApiKey("read:activity"), (c) => {
+  router.get("/api/activity", requireAuthOrApiKey("read:activity"), (c) => {
     const page = parseInt(c.req.query("page") ?? "1", 10);
     const pageSize = parseInt(c.req.query("pageSize") ?? "20", 10);
 
@@ -189,7 +189,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
     return c.json(getAuditEntriesPaginated(page, pageSize, filters));
   });
 
-  router.get("/dashboard/api/logs", requireAuthOrApiKey("read:logs"), (c) => {
+  router.get("/api/logs", requireAuthOrApiKey("read:logs"), (c) => {
     const limit = parseInt(c.req.query("limit") ?? "100", 10);
     const levelFilter = c.req.query("level") as LogLevel | undefined;
     const accountName = c.req.query("accountName");
@@ -207,7 +207,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
     return c.json({ logs });
   });
 
-  router.get("/dashboard/api/export", requireAuthOrApiKey("read:export"), (c) => {
+  router.get("/api/export", requireAuthOrApiKey("read:export"), (c) => {
     const format = c.req.query("format") ?? "json";
     const filters: AuditFilters = {};
 
@@ -250,28 +250,28 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
   });
 
   // Account management actions
-  router.post("/dashboard/api/accounts/:name/pause", requireAuthOrApiKey("write:accounts"), (c) => {
+  router.post("/api/accounts/:name/pause", requireAuthOrApiKey("write:accounts"), (c) => {
     const name = c.req.param("name");
     const success = pauseAccount(name);
 
     return c.json({ success, paused: success ? true : isAccountPaused(name) });
   });
 
-  router.post("/dashboard/api/accounts/:name/resume", requireAuthOrApiKey("write:accounts"), (c) => {
+  router.post("/api/accounts/:name/resume", requireAuthOrApiKey("write:accounts"), (c) => {
     const name = c.req.param("name");
     const success = resumeAccount(name);
 
     return c.json({ success, paused: success ? false : isAccountPaused(name) });
   });
 
-  router.post("/dashboard/api/accounts/:name/reconnect", requireAuthOrApiKey("write:accounts"), async (c) => {
+  router.post("/api/accounts/:name/reconnect", requireAuthOrApiKey("write:accounts"), async (c) => {
     const name = c.req.param("name");
     const success = await reconnectAccount(name);
 
     return c.json({ success });
   });
 
-  router.post("/dashboard/api/accounts/:name/process", requireAuthOrApiKey("write:accounts"), async (c) => {
+  router.post("/api/accounts/:name/process", requireAuthOrApiKey("write:accounts"), async (c) => {
     const name = c.req.param("name");
     const folder = c.req.query("folder") ?? "INBOX";
     const success = await triggerProcessing(name, folder);
@@ -280,7 +280,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
   });
 
   // Dead letter queue endpoints
-  router.get("/dashboard/api/dead-letter", requireAuthOrApiKey("read:activity"), (c) => {
+  router.get("/api/dead-letter", requireAuthOrApiKey("read:activity"), (c) => {
     const accountName = c.req.query("accountName");
     const entries = getDeadLetterEntries(accountName);
     return c.json({
@@ -289,7 +289,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
     });
   });
 
-  router.post("/dashboard/api/dead-letter/:id/retry", requireAuthOrApiKey("write:accounts"), (c) => {
+  router.post("/api/dead-letter/:id/retry", requireAuthOrApiKey("write:accounts"), (c) => {
     const id = parseInt(c.req.param("id"), 10);
     if (isNaN(id)) {
       return c.json({ error: "Invalid ID" }, 400);
@@ -300,7 +300,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
     return c.json({ success });
   });
 
-  router.post("/dashboard/api/dead-letter/:id/dismiss", requireAuthOrApiKey("write:accounts"), (c) => {
+  router.post("/api/dead-letter/:id/dismiss", requireAuthOrApiKey("write:accounts"), (c) => {
     const id = parseInt(c.req.param("id"), 10);
     if (isNaN(id)) {
       return c.json({ error: "Invalid ID" }, 400);
@@ -311,7 +311,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
   });
 
   // Email preview endpoint
-  router.get("/dashboard/api/emails/:account/:folder/:uid", requireAuthOrApiKey("read:activity"), async (c) => {
+  router.get("/api/emails/:account/:folder/:uid", requireAuthOrApiKey("read:activity"), async (c) => {
     const accountName = c.req.param("account");
     const folder = c.req.param("folder");
     const uid = parseInt(c.req.param("uid"), 10);

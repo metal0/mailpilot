@@ -34,7 +34,7 @@ const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 function checkDashboardWarning(): void {
   if (getUserCount() === 0) {
     logger.warn("SECURITY WARNING: Dashboard enabled but no admin account exists");
-    logger.warn("Anyone can register at /dashboard/setup - create an account immediately");
+    logger.warn("Anyone can register at /setup - create an account immediately");
   }
 }
 
@@ -64,23 +64,18 @@ export function startServer(
     setAccountUpdateBroadcast(broadcastAccountUpdate);
 
     // Serve static dashboard files
-    app.use("/dashboard/assets/*", serveStatic({ root: "./dist/dashboard" }));
-    app.get("/dashboard/favicon.ico", serveStatic({ path: "./dist/dashboard/favicon.ico" }));
+    app.use("/assets/*", serveStatic({ root: "./dist/dashboard" }));
+    app.get("/favicon.ico", serveStatic({ path: "./dist/dashboard/favicon.ico" }));
 
     // Dashboard router (API endpoints)
     app.route("/", createDashboardRouter(dashboardConfig));
 
-    // SPA fallback - serve index.html for all non-API dashboard routes
-    app.get("/dashboard", serveStatic({ path: "./dist/dashboard/index.html" }));
-    app.get("/dashboard/*", async (c) => {
-      // Don't serve index.html for API routes
-      if (c.req.path.startsWith("/dashboard/api/")) {
-        return c.json({ error: "Not found" }, 404);
-      }
-      return serveStatic({ path: "./dist/dashboard/index.html" })(c, async () => {});
-    });
+    // SPA fallback - serve index.html for dashboard routes
+    app.get("/", serveStatic({ path: "./dist/dashboard/index.html" }));
+    app.get("/login", serveStatic({ path: "./dist/dashboard/index.html" }));
+    app.get("/setup", serveStatic({ path: "./dist/dashboard/index.html" }));
 
-    logger.info("Dashboard enabled", { path: "/dashboard" });
+    logger.info("Dashboard enabled", { path: "/" });
 
     checkDashboardWarning();
 
@@ -105,11 +100,11 @@ export function startServer(
         if (httpServer) {
           httpServer.on("upgrade", (request: unknown, socket: unknown, head: unknown) => {
             const req = request as import("node:http").IncomingMessage;
-            if (req.url === "/dashboard/ws") {
+            if (req.url === "/ws") {
               handleUpgrade(req, socket as import("node:stream").Duplex, head as Buffer);
             }
           });
-          logger.info("WebSocket upgrade handler registered", { path: "/dashboard/ws" });
+          logger.info("WebSocket upgrade handler registered", { path: "/ws" });
         }
       }
     }

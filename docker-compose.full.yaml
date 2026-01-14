@@ -1,0 +1,126 @@
+# Full-featured Mailpilot with all optional services
+#
+# Usage:
+#   docker compose -f docker-compose.full.yaml up -d
+#
+# Services included:
+#   - mailpilot: Main application
+#   - clamav: Antivirus scanning for attachments
+#   - tika: Text/content extraction from attachments (PDF, DOCX, etc.)
+#
+# Requirements:
+#   - Memory: ~3GB total (ClamAV needs 1-2GB, Tika needs 512MB)
+#   - Disk: ~500MB for ClamAV virus definitions
+#   - Startup time: 2-5 minutes (ClamAV loading definitions)
+#
+# Configuration (add to config.yaml):
+#   antivirus:
+#     enabled: true
+#     host: clamav
+#     port: 3310
+#
+#   attachments:
+#     enabled: true
+#     tika_url: http://tika:9998
+#     max_size_mb: 10
+
+services:
+  mailpilot:
+    image: ghcr.io/metal0/mailpilot:latest
+    # Or build locally:
+    # build: .
+    container_name: mailpilot
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - LLM_OPENAI_API_KEY=${LLM_OPENAI_API_KEY}
+      - STATUS_API_TOKEN=${STATUS_API_TOKEN}
+    depends_on:
+      clamav:
+        condition: service_healthy
+      tika:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - mailpilot-internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  clamav:
+    image: clamav/clamav:latest
+    container_name: mailpilot-clamav
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+    volumes:
+      - clamav-db:/var/lib/clamav
+    networks:
+      - mailpilot-internal
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  tika:
+    image: apache/tika:latest
+    container_name: mailpilot-tika
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9998/tika"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - mailpilot-internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  mailpilot-internal:
+    driver: bridge
+    # Internal network - no external access for security
+    internal: false  # Set to true for stricter isolation (requires proxy for updates)
+
+volumes:
+  clamav-db:

@@ -12,6 +12,7 @@ import { loadPrompt } from "../config/loader.js";
 import { executeAction } from "../actions/executor.js";
 import type { LlmAction } from "../llm/parser.js";
 import { addProcessingHeaders } from "./headers.js";
+import type { AttachmentProcessor } from "../attachments/index.js";
 
 const logger = createLogger("worker");
 
@@ -22,6 +23,7 @@ export interface WorkerContext {
   provider: LlmProviderConfig;
   model: string;
   antivirusScanner?: AntivirusScanner;
+  attachmentProcessor?: AttachmentProcessor;
 }
 
 export async function processMailbox(
@@ -67,7 +69,7 @@ async function processMessage(
   uid: number,
   messageId: string
 ): Promise<boolean> {
-  const { account, imapClient, provider, model, config, antivirusScanner } = ctx;
+  const { account, imapClient, provider, model, config, antivirusScanner, attachmentProcessor } = ctx;
   const log = logger.child(account.name);
 
   if (isMessageProcessed(messageId, account.name)) {
@@ -77,10 +79,12 @@ async function processMessage(
 
   try {
     const avConfig = config.antivirus;
+    const attConfig = config.attachments;
     const needsAvScan = Boolean(antivirusScanner && avConfig?.enabled);
+    const needsAttachmentExtraction = Boolean(attachmentProcessor && attConfig?.enabled);
 
     const email = await fetchAndParseEmailWithPgpDetection(imapClient.client, folder, uid, {
-      includeAttachmentContent: needsAvScan,
+      includeAttachmentContent: needsAvScan || needsAttachmentExtraction,
     });
 
     // Skip PGP encrypted emails - cannot process encrypted content

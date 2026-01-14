@@ -80,6 +80,7 @@ const llmProviderSchema = z.object({
   max_body_tokens: z.number().int().positive().default(4000),
   max_thread_tokens: z.number().int().positive().default(2000),
   rate_limit_rpm: z.number().int().positive().optional(),
+  supports_vision: z.boolean().default(false),
 });
 
 const backlogModeSchema = z.enum([
@@ -147,6 +148,29 @@ const antivirusConfigSchema = z.object({
   on_virus_detected: virusActionSchema.default("quarantine"),
 });
 
+const attachmentsConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  tika_url: z.url().optional(),
+  timeout: durationSchema.default("30s"),
+  max_size_mb: z.number().positive().default(10),
+  max_extracted_chars: z.number().int().positive().default(10000),
+  allowed_types: z.array(z.string()).default([
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/plain",
+    "text/csv",
+    "text/html",
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+  ]),
+  extract_images: z.boolean().default(false),
+});
+
 export const configSchema = z.object({
   polling_interval: durationSchema.default("30s"),
   concurrency_limit: z.number().int().positive().default(5),
@@ -161,6 +185,7 @@ export const configSchema = z.object({
   server: serverConfigSchema.optional(),
   dashboard: dashboardConfigSchema.optional(),
   antivirus: antivirusConfigSchema.optional(),
+  attachments: attachmentsConfigSchema.optional(),
   accounts: z.array(accountConfigSchema).min(1),
 });
 
@@ -178,6 +203,7 @@ export type DashboardConfig = z.infer<typeof dashboardConfigSchema>;
 export type ApiKeyConfig = z.infer<typeof apiKeyConfigSchema>;
 export type ApiKeyPermission = z.infer<typeof apiKeyPermissionSchema>;
 export type AntivirusConfig = z.infer<typeof antivirusConfigSchema>;
+export type AttachmentsConfig = z.infer<typeof attachmentsConfigSchema>;
 
 export type TlsMode = z.infer<typeof tlsModeSchema>;
 export type AuthType = z.infer<typeof authTypeSchema>;

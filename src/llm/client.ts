@@ -7,12 +7,13 @@ import {
 } from "./rate-limiter.js";
 import { parseLlmResponse, type LlmAction } from "./parser.js";
 import { recordProviderRequest } from "./providers.js";
+import type { MultimodalContent } from "../attachments/index.js";
 
 const logger = createLogger("llm-client");
 
 interface ChatMessage {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: string | MultimodalContent[];
 }
 
 interface ChatCompletionResponse {
@@ -27,20 +28,26 @@ export interface LlmRequestOptions {
   provider: LlmProviderConfig;
   model: string;
   prompt: string;
+  multimodalContent?: MultimodalContent[];
   temperature?: number;
 }
 
 export async function classifyEmail(
   options: LlmRequestOptions
 ): Promise<LlmAction[]> {
-  const { provider, model, prompt, temperature = 0.3 } = options;
+  const { provider, model, prompt, multimodalContent, temperature = 0.3 } = options;
 
   await acquireRateLimit(provider.api_url, provider.rate_limit_rpm);
+
+  // Use multimodal content if provided and provider supports vision
+  const messageContent = multimodalContent && provider.supports_vision
+    ? multimodalContent
+    : prompt;
 
   const messages: ChatMessage[] = [
     {
       role: "user",
-      content: prompt,
+      content: messageContent,
     },
   ];
 
@@ -51,10 +58,13 @@ export async function classifyEmail(
     response_format: { type: "json_object" },
   };
 
+  const isMultimodal = Array.isArray(messageContent);
   logger.debug("Sending request to LLM", {
     provider: provider.name,
     model,
     promptLength: prompt.length,
+    isMultimodal,
+    imageCount: isMultimodal ? messageContent.filter(c => c.type === "image_url").length : 0,
   });
 
   const response = await retry(

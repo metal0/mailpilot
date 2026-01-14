@@ -1,6 +1,6 @@
 import type { DashboardStats, AuditEntry, LogEntry, DeadLetterEntry } from "./stores/data";
 
-const BASE_URL = "/dashboard/api";
+const BASE_URL = "/api";
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
