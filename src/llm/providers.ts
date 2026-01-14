@@ -9,12 +9,29 @@ const providers = new Map<string, LlmProviderConfig>();
 // Track request counts
 const requestCounts = new Map<string, { total: number; today: number; lastReset: number }>();
 
+// Track health status
+interface ProviderHealth {
+  healthy: boolean;
+  lastCheck: number;
+  lastSuccessfulRequest: number;
+  consecutiveFailures: number;
+}
+const providerHealth = new Map<string, ProviderHealth>();
+
+const HEALTH_STALE_THRESHOLD = 10 * 60 * 1000; // 10 minutes
+
 export function registerProviders(configs: LlmProviderConfig[]): void {
   providers.clear();
 
   for (const config of configs) {
     providers.set(config.name, config);
     requestCounts.set(config.name, { total: 0, today: 0, lastReset: getStartOfDay() });
+    providerHealth.set(config.name, {
+      healthy: true, // Assume healthy until proven otherwise
+      lastCheck: 0,
+      lastSuccessfulRequest: 0,
+      consecutiveFailures: 0,
+    });
     logger.debug("Registered LLM provider", {
       name: config.name,
       model: config.default_model,
@@ -42,6 +59,48 @@ export function recordProviderRequest(providerName: string): void {
 
   counts.total++;
   counts.today++;
+
+  // Update health status on successful request
+  const health = providerHealth.get(providerName);
+  if (health) {
+    health.healthy = true;
+    health.lastSuccessfulRequest = Date.now();
+    health.consecutiveFailures = 0;
+  }
+}
+
+export function recordProviderFailure(providerName: string): void {
+  const health = providerHealth.get(providerName);
+  if (!health) return;
+
+  health.consecutiveFailures++;
+  if (health.consecutiveFailures >= 3) {
+    health.healthy = false;
+  }
+}
+
+export function updateProviderHealth(providerName: string, healthy: boolean): void {
+  const health = providerHealth.get(providerName);
+  if (!health) return;
+
+  health.healthy = healthy;
+  health.lastCheck = Date.now();
+  if (healthy) {
+    health.consecutiveFailures = 0;
+  }
+}
+
+export function getProviderHealth(providerName: string): ProviderHealth | undefined {
+  return providerHealth.get(providerName);
+}
+
+export function isProviderHealthStale(providerName: string): boolean {
+  const health = providerHealth.get(providerName);
+  if (!health) return true;
+
+  const now = Date.now();
+  const lastActivity = Math.max(health.lastCheck, health.lastSuccessfulRequest);
+  return lastActivity === 0 || (now - lastActivity) > HEALTH_STALE_THRESHOLD;
 }
 
 export function getProvider(name: string): LlmProviderConfig | undefined {
@@ -90,6 +149,8 @@ export interface ProviderStats {
   requestsLastMinute: number;
   rateLimited: boolean;
   rpmLimit?: number;
+  healthy: boolean;
+  healthStale: boolean;
 }
 
 export function getProviderStats(): Record<string, ProviderStats> {
@@ -98,6 +159,7 @@ export function getProviderStats(): Record<string, ProviderStats> {
   for (const [name, config] of providers) {
     const counts = requestCounts.get(name) ?? { total: 0, today: 0, lastReset: 0 };
     const rateLimitInfo = getRateLimitStats(config.api_url);
+    const health = providerHealth.get(name);
 
     // Reset today count if day changed
     const startOfDay = getStartOfDay();
@@ -113,6 +175,8 @@ export function getProviderStats(): Record<string, ProviderStats> {
       requestsTotal: counts.total,
       requestsLastMinute: rateLimitInfo.requestsInLastMinute,
       rateLimited: rateLimitInfo.isLimited,
+      healthy: health?.healthy ?? true,
+      healthStale: isProviderHealthStale(name),
     };
     if (config.rate_limit_rpm !== undefined) {
       stat.rpmLimit = config.rate_limit_rpm;

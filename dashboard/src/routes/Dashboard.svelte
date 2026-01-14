@@ -119,6 +119,10 @@
   </main>
 
   <footer class="footer">
+    <div class="footer-left">
+      <span class="version">Mailpilot v{$stats?.version ?? "-"}</span>
+      <span class="connection-url" title="Connection URL">{window.location.origin}</span>
+    </div>
     <a
       href="https://github.com/metal0/mailpilot"
       target="_blank"
@@ -141,23 +145,25 @@
   }
 
   .dry-run-banner {
-    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-    color: #1f2937;
-    padding: 0.75rem 2rem;
+    background: color-mix(in srgb, var(--warning) 15%, var(--bg-secondary));
+    border-bottom: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
+    color: var(--text-secondary);
+    padding: 0.5rem 2rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.75rem;
-    font-size: 0.9375rem;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    gap: 0.5rem;
+    font-size: 0.8125rem;
   }
 
   .banner-icon {
-    font-size: 1.25rem;
+    font-size: 1rem;
+    color: var(--warning);
   }
 
   .banner-text strong {
     font-weight: 600;
+    color: var(--warning);
   }
 
   .main {
@@ -238,8 +244,33 @@
     padding: 1rem 2rem;
     border-top: 1px solid var(--border-color);
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
+    align-items: center;
     background: var(--bg-secondary);
+  }
+
+  .footer-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  .version {
+    font-weight: 500;
+  }
+
+  .connection-url {
+    filter: blur(4px);
+    transition: filter 0.2s ease;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .connection-url:hover {
+    filter: blur(0);
+    user-select: auto;
   }
 
   .github-link {

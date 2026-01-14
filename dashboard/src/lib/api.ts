@@ -168,6 +168,17 @@ export async function fetchServices(): Promise<ServicesStatus> {
   return fetchJson(`${BASE_URL}/services`);
 }
 
+// Comprehensive Health Check
+export interface HealthCheckResult {
+  services: Record<string, { enabled: boolean; healthy: boolean; url?: string }>;
+  llmProviders: Array<{ name: string; model: string; url: string; healthy: boolean }>;
+  imapAccounts: Array<{ name: string; connected: boolean; idleSupported: boolean; lastScan: string | null; errors: number }>;
+}
+
+export async function fetchHealthCheck(checkLlm = false): Promise<HealthCheckResult> {
+  return fetchJson(`${BASE_URL}/health-check${checkLlm ? "?llm=true" : ""}`);
+}
+
 // Export
 export function exportCsvUrl(params: ActivityParams = {}): string {
   const searchParams = new URLSearchParams();

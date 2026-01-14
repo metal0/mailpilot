@@ -25,8 +25,9 @@ import {
   clearFailedLogins,
   requireAuthOrApiKey,
 } from "./auth.js";
-import { getAccountStatuses, getUptime } from "./status.js";
-import { getDetailedProviderStats } from "../llm/providers.js";
+import { getAccountStatuses, getUptime, getVersion } from "./status.js";
+import { getDetailedProviderStats, getAllProviders } from "../llm/providers.js";
+import { testConnection as testLlmConnection } from "../llm/client.js";
 import { getRecentLogs, type LogLevel } from "../utils/logger.js";
 import {
   getQueueStatus,
@@ -185,10 +186,12 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
   router.get("/api/stats", requireAuthOrApiKeyWithDryRun("read:stats"), (c) => {
     const accounts = getAccountStatuses();
     const pausedAccountsList = getPausedAccounts();
+    const currentConfig = getCurrentConfig();
 
     return c.json({
+      version: getVersion(),
       uptime: getUptime(),
-      dryRun,
+      dryRun: currentConfig?.dry_run ?? dryRun,
       totals: {
         emailsProcessed: getProcessedCount(),
         actionsTaken: getActionCount(),
@@ -429,6 +432,70 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     }
 
     return c.json(services);
+  });
+
+  // Comprehensive health check endpoint (includes LLM providers and IMAP accounts)
+  router.get("/api/health-check", requireAuthOrApiKeyWithDryRun("read:stats"), async (c) => {
+    const currentConfig = getCurrentConfig();
+    const checkLlm = c.req.query("llm") === "true";
+
+    // Infrastructure services
+    const services: Record<string, { enabled: boolean; healthy: boolean; url?: string }> = {};
+
+    if (currentConfig?.attachments?.enabled) {
+      const tikaClient = createTikaClient(currentConfig.attachments);
+      const tikaHealthy = await tikaClient.isHealthy();
+      services.tika = {
+        enabled: true,
+        healthy: tikaHealthy,
+        url: currentConfig.attachments.tika_url ?? "http://localhost:9998",
+      };
+    } else {
+      services.tika = { enabled: false, healthy: false };
+    }
+
+    if (currentConfig?.antivirus?.enabled) {
+      const scanner = createAntivirusScanner(currentConfig.antivirus);
+      const clamHealthy = await scanner.ping();
+      services.clamav = {
+        enabled: true,
+        healthy: clamHealthy,
+        url: `${currentConfig.antivirus.host}:${currentConfig.antivirus.port}`,
+      };
+    } else {
+      services.clamav = { enabled: false, healthy: false };
+    }
+
+    // LLM provider health (only if explicitly requested - makes actual API calls)
+    const llmProviders: Array<{ name: string; model: string; url: string; healthy: boolean }> = [];
+    if (checkLlm) {
+      const providers = getAllProviders();
+      for (const provider of providers) {
+        const healthy = await testLlmConnection(provider, provider.default_model);
+        llmProviders.push({
+          name: provider.name,
+          model: provider.default_model,
+          url: provider.api_url,
+          healthy,
+        });
+      }
+    }
+
+    // IMAP account status (uses existing connection status)
+    const accounts = getAccountStatuses();
+    const imapAccounts = accounts.map((a) => ({
+      name: a.name,
+      connected: a.connected,
+      idleSupported: a.idleSupported,
+      lastScan: a.lastScan,
+      errors: a.errors,
+    }));
+
+    return c.json({
+      services,
+      llmProviders,
+      imapAccounts,
+    });
   });
 
   // Dead letter queue endpoints

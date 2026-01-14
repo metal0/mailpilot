@@ -26,6 +26,8 @@ export interface ProviderStats {
   requestsLastMinute: number;
   rateLimited: boolean;
   rpmLimit?: number;
+  healthy: boolean;
+  healthStale: boolean;
 }
 
 export interface QueueStatus {
@@ -66,6 +68,7 @@ export interface DeadLetterEntry {
 }
 
 export interface DashboardStats {
+  version: string;
   uptime: number;
   dryRun: boolean;
   totals: {

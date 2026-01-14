@@ -9,7 +9,6 @@
     dry_run?: boolean;
     add_processing_headers?: boolean;
     default_prompt?: string;
-    default_prompt_file?: string;
     llm_providers: LlmProvider[];
     accounts: Account[];
     logging?: { level?: string };
@@ -32,7 +31,7 @@
     name: string;
     imap: ImapConfig;
     llm?: { provider?: string; model?: string };
-    folders?: { watch?: string[]; spam?: string; archive?: string; trash?: string };
+    folders?: { watch?: string[]; mode?: string; allowed?: string[] };
     webhooks?: Webhook[];
     prompt_override?: string;
     prompt_file?: string;
@@ -96,6 +95,11 @@
   let services = $state<ServicesStatus | null>(null);
   let serviceCheckInterval: ReturnType<typeof setInterval> | null = null;
 
+  // Port change tracking
+  let originalPort = $state<number>(8080);
+  let showPortWarning = $state(false);
+  let pendingPortChange = $state<number | null>(null);
+
   const sections = [
     { id: "global", label: "Global Settings", icon: "cog" },
     { id: "accounts", label: "Email Accounts", icon: "mail" },
@@ -110,8 +114,7 @@
     concurrency_limit: "Maximum number of emails to process simultaneously",
     dry_run: "When enabled, emails are classified but no actions are taken. Dashboard auth is also disabled.",
     add_processing_headers: "Add X-Mailpilot headers to processed emails",
-    default_prompt: "System prompt for LLM classification (inline)",
-    default_prompt_file: "Path to file containing the system prompt",
+    default_prompt: "System prompt used for LLM email classification",
     "imap.host": "IMAP server hostname (e.g., imap.gmail.com)",
     "imap.port": "IMAP server port (usually 993 for TLS)",
     "imap.tls": "TLS mode: auto, tls, starttls, or insecure",
@@ -119,9 +122,9 @@
     "imap.username": "Email address or username for authentication",
     "imap.password": "Password for basic authentication",
     "folders.watch": "Folders to monitor for new emails (comma-separated)",
-    "folders.spam": "Folder to move spam emails to",
-    "folders.archive": "Folder to archive emails to",
-    "folders.trash": "Folder to move deleted emails to",
+    "folders.mode": "Predefined: only allow moves to specified folders. Auto-create: create folders as needed",
+    "folders.allowed": "List of folders that LLM can move emails to (for predefined mode)",
+    prompt_override: "Custom classification prompt for this account (overrides global default)",
     "llm.provider": "Which LLM provider to use for this account",
     "llm.model": "Model to use (overrides provider default)",
     "provider.api_url": "API endpoint URL for the LLM provider",
@@ -181,6 +184,7 @@
 
       config = loadedConfig;
       configPath = result.configPath;
+      originalPort = loadedConfig.server.port ?? 8080;
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to load config";
     } finally {
@@ -190,16 +194,37 @@
 
   async function handleSave() {
     if (!config) return;
+
+    const newPort = config.server?.port ?? 8080;
+    const portChanged = newPort !== originalPort;
+
+    // Show warning if port is changing
+    if (portChanged && !showPortWarning) {
+      pendingPortChange = newPort;
+      showPortWarning = true;
+      return;
+    }
+
     saving = true;
     saveMessage = null;
 
     try {
       const result = await api.saveConfig(config);
       if (result.success) {
-        saveMessage = { type: "success", text: "Configuration saved and reloaded successfully" };
-        // Refresh stats
-        const newStats = await api.fetchStats();
-        stats.set(newStats);
+        // Handle port change redirect
+        if (portChanged) {
+          saveMessage = { type: "success", text: `Configuration saved. Redirecting to port ${newPort}...` };
+          setTimeout(() => {
+            const currentUrl = new URL(window.location.href);
+            currentUrl.port = String(newPort);
+            window.location.href = currentUrl.toString();
+          }, 2000);
+        } else {
+          saveMessage = { type: "success", text: "Configuration saved and reloaded successfully" };
+          // Refresh stats
+          const newStats = await api.fetchStats();
+          stats.set(newStats);
+        }
       } else {
         saveMessage = { type: "error", text: "Failed to save configuration" };
       }
@@ -207,8 +232,25 @@
       saveMessage = { type: "error", text: e instanceof Error ? e.message : "Failed to save" };
     } finally {
       saving = false;
-      setTimeout(() => { saveMessage = null; }, 5000);
+      showPortWarning = false;
+      pendingPortChange = null;
+      if (!config.server || config.server.port === originalPort) {
+        setTimeout(() => { saveMessage = null; }, 5000);
+      }
     }
+  }
+
+  function cancelPortChange() {
+    showPortWarning = false;
+    pendingPortChange = null;
+    if (config?.server) {
+      config.server.port = originalPort;
+      config = { ...config }; // Trigger reactivity
+    }
+  }
+
+  function confirmPortChange() {
+    handleSave();
   }
 
   function addAccount() {
@@ -278,6 +320,29 @@
     }
   }
 </script>
+
+{#if showPortWarning}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="modal-overlay" onclick={cancelPortChange}>
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div class="modal modal-warning" onclick={(e) => e.stopPropagation()}>
+      <div class="warning-icon">&#9888;</div>
+      <h3>Port Change Warning</h3>
+      <p>
+        You are changing the server port from <strong>{originalPort}</strong> to <strong>{pendingPortChange}</strong>.
+      </p>
+      <p class="warning-text">
+        After saving, the server will restart on the new port. Your browser will be automatically
+        redirected to the new address. If the redirect fails, manually navigate to:
+      </p>
+      <code class="new-url">{`${window.location.protocol}//${window.location.hostname}:${pendingPortChange}`}</code>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick={cancelPortChange}>Cancel</button>
+        <button class="btn btn-warning" onclick={confirmPortChange}>Change Port</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <div class="settings">
   <div class="settings-header">
@@ -403,19 +468,10 @@
             <div class="form-group">
               <label>
                 <span class="label-text">
-                  Prompt File Path
-                  <span class="help-icon" title={helpTexts.default_prompt_file}>?</span>
-                </span>
-                <input type="text" bind:value={config.default_prompt_file} placeholder="./prompts/default.md" />
-              </label>
-            </div>
-            <div class="form-group">
-              <label>
-                <span class="label-text">
-                  Inline Prompt (overrides file)
+                  Classification Prompt
                   <span class="help-icon" title={helpTexts.default_prompt}>?</span>
                 </span>
-                <textarea bind:value={config.default_prompt} rows="6" placeholder="Enter your classification prompt..."></textarea>
+                <textarea bind:value={config.default_prompt} rows="8" placeholder="Enter your classification prompt..."></textarea>
               </label>
             </div>
           </section>
@@ -528,33 +584,34 @@
                       />
                     </label>
                   </div>
-
                   <div class="form-row">
                     <div class="form-group">
                       <label>
-                        <span class="label-text">Spam Folder <span class="help-icon" title={helpTexts["folders.spam"]}>?</span></span>
-                        <input
-                          type="text"
-                          value={editingAccount.folders?.spam ?? ""}
-                          oninput={(e) => {
+                        <span class="label-text">Folder Mode <span class="help-icon" title={helpTexts["folders.mode"]}>?</span></span>
+                        <select
+                          value={editingAccount.folders?.mode ?? "predefined"}
+                          onchange={(e) => {
                             editingAccount!.folders = editingAccount!.folders ?? {};
-                            editingAccount!.folders.spam = (e.target as HTMLInputElement).value;
+                            editingAccount!.folders.mode = (e.target as HTMLSelectElement).value;
                           }}
-                          placeholder="Spam"
-                        />
+                        >
+                          <option value="predefined">Predefined only</option>
+                          <option value="auto_create">Auto-create folders</option>
+                        </select>
                       </label>
                     </div>
                     <div class="form-group">
                       <label>
-                        <span class="label-text">Archive Folder <span class="help-icon" title={helpTexts["folders.archive"]}>?</span></span>
+                        <span class="label-text">Allowed Folders <span class="help-icon" title={helpTexts["folders.allowed"]}>?</span></span>
                         <input
                           type="text"
-                          value={editingAccount.folders?.archive ?? ""}
+                          value={editingAccount.folders?.allowed?.join(", ") ?? ""}
                           oninput={(e) => {
                             editingAccount!.folders = editingAccount!.folders ?? {};
-                            editingAccount!.folders.archive = (e.target as HTMLInputElement).value;
+                            const value = (e.target as HTMLInputElement).value;
+                            editingAccount!.folders.allowed = value ? value.split(",").map(s => s.trim()).filter(Boolean) : undefined;
                           }}
-                          placeholder="Archive"
+                          placeholder="Archive, Work/Important"
                         />
                       </label>
                     </div>
@@ -593,6 +650,20 @@
                         />
                       </label>
                     </div>
+                  </div>
+                  <div class="form-group">
+                    <label>
+                      <span class="label-text">Custom Prompt <span class="help-icon" title={helpTexts.prompt_override}>?</span></span>
+                      <textarea
+                        value={editingAccount.prompt_override ?? ""}
+                        oninput={(e) => {
+                          editingAccount!.prompt_override = (e.target as HTMLTextAreaElement).value || undefined;
+                        }}
+                        rows="4"
+                        placeholder="Leave empty to use the default prompt"
+                      ></textarea>
+                    </label>
+                    <p class="help-text">Overrides the global default prompt for this account only.</p>
                   </div>
 
                   <div class="modal-actions">
@@ -1182,6 +1253,58 @@
     max-width: 600px;
     max-height: 90vh;
     overflow-y: auto;
+  }
+
+  .modal-warning {
+    max-width: 450px;
+    text-align: center;
+  }
+
+  .modal-warning .warning-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--warning);
+  }
+
+  .modal-warning h3 {
+    margin: 0 0 1rem;
+    color: var(--warning);
+  }
+
+  .modal-warning p {
+    margin: 0 0 0.75rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .modal-warning .warning-text {
+    font-size: 0.8125rem;
+  }
+
+  .modal-warning .new-url {
+    display: block;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-tertiary);
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+    color: var(--text-primary);
+    margin-bottom: 1.5rem;
+  }
+
+  .modal-warning .modal-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+  }
+
+  .btn-warning {
+    background: var(--warning);
+    color: #1f2937;
+  }
+
+  .btn-warning:hover {
+    background: color-mix(in srgb, var(--warning) 85%, black);
   }
 
   .modal h3 {

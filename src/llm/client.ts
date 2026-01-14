@@ -6,7 +6,7 @@ import {
   handleRateLimitResponse,
 } from "./rate-limiter.js";
 import { parseLlmResponse, type LlmAction } from "./parser.js";
-import { recordProviderRequest } from "./providers.js";
+import { recordProviderRequest, recordProviderFailure } from "./providers.js";
 import type { MultimodalContent } from "../attachments/index.js";
 
 const logger = createLogger("llm-client");
@@ -67,48 +67,55 @@ export async function classifyEmail(
     imageCount: isMultimodal ? messageContent.filter(c => c.type === "image_url").length : 0,
   });
 
-  const response = await retry(
-    async () => {
-      const res = await fetch(provider.api_url, {
-        method: "POST",
-        headers: buildHeaders(provider),
-        body: JSON.stringify(requestBody),
-      });
+  let response: ChatCompletionResponse;
+  try {
+    response = await retry(
+      async () => {
+        const res = await fetch(provider.api_url, {
+          method: "POST",
+          headers: buildHeaders(provider),
+          body: JSON.stringify(requestBody),
+        });
 
-      if (res.status === 429) {
-        const retryAfter = res.headers.get("retry-after");
-        handleRateLimitResponse(
-          provider.api_url,
-          retryAfter ? parseInt(retryAfter, 10) : undefined
-        );
-        throw new Error("Rate limited");
-      }
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`LLM API error: ${res.status} - ${errorText}`);
-      }
-
-      return res.json() as Promise<ChatCompletionResponse>;
-    },
-    {
-      maxAttempts: 3,
-      baseDelayMs: 1000,
-      maxDelayMs: 10000,
-      retryIf: (error) => {
-        if (error instanceof Error) {
-          return (
-            error.message.includes("Rate limited") ||
-            error.message.includes("429") ||
-            error.message.includes("500") ||
-            error.message.includes("502") ||
-            error.message.includes("503")
+        if (res.status === 429) {
+          const retryAfter = res.headers.get("retry-after");
+          handleRateLimitResponse(
+            provider.api_url,
+            retryAfter ? parseInt(retryAfter, 10) : undefined
           );
+          throw new Error("Rate limited");
         }
-        return false;
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`LLM API error: ${res.status} - ${errorText}`);
+        }
+
+        return res.json() as Promise<ChatCompletionResponse>;
       },
-    }
-  );
+      {
+        maxAttempts: 3,
+        baseDelayMs: 1000,
+        maxDelayMs: 10000,
+        retryIf: (error) => {
+          if (error instanceof Error) {
+            return (
+              error.message.includes("Rate limited") ||
+              error.message.includes("429") ||
+              error.message.includes("500") ||
+              error.message.includes("502") ||
+              error.message.includes("503")
+            );
+          }
+          return false;
+        },
+      }
+    );
+  } catch (error) {
+    // Record failure after all retries exhausted
+    recordProviderFailure(provider.name);
+    throw error;
+  }
 
   // Record successful request
   recordProviderRequest(provider.name);

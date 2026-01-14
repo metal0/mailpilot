@@ -1,8 +1,23 @@
+import { readFileSync } from "node:fs";
 import { Hono } from "hono";
 import type { AccountConfig, ServerConfig } from "../config/schema.js";
 import { getProcessedCount } from "../storage/processed.js";
 import { getActionCount } from "../storage/audit.js";
 import { getProviderStats } from "../llm/providers.js";
+
+let cachedVersion: string | null = null;
+
+export function getVersion(): string {
+  if (cachedVersion !== null) return cachedVersion;
+  try {
+    const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf-8")) as { version: string };
+    cachedVersion = pkg.version;
+    return cachedVersion;
+  } catch {
+    cachedVersion = "unknown";
+    return cachedVersion;
+  }
+}
 
 export interface AccountStatus {
   name: string;

@@ -3,6 +3,7 @@
   import { connectionState } from "../stores/websocket";
   import { stats, serviceStatus } from "../stores/data";
   import * as api from "../api";
+  import type { HealthCheckResult } from "../api";
 
   interface BrowserInfo {
     userAgent: string;
@@ -31,6 +32,8 @@
   let serverInfo = $state<ServerInfo | null>(null);
   let dnsCheck = $state<{ status: "pending" | "success" | "error"; latency?: number; error?: string }>({ status: "pending" });
   let apiCheck = $state<{ status: "pending" | "success" | "error"; latency?: number; error?: string }>({ status: "pending" });
+  let healthCheck = $state<HealthCheckResult | null>(null);
+  let llmCheckLoading = $state(false);
   let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
   onMount(async () => {
@@ -67,7 +70,23 @@
       checkDns(),
       checkApi(),
       loadServerInfo(),
+      loadHealthCheck(),
     ]);
+  }
+
+  async function loadHealthCheck(checkLlm = false) {
+    try {
+      if (checkLlm) llmCheckLoading = true;
+      healthCheck = await api.fetchHealthCheck(checkLlm);
+    } catch {
+      // Health check endpoint may fail
+    } finally {
+      llmCheckLoading = false;
+    }
+  }
+
+  async function runLlmCheck() {
+    await loadHealthCheck(true);
   }
 
   async function checkDns() {
@@ -235,6 +254,96 @@
             {/if}
           </span>
         </div>
+      </div>
+    </section>
+
+    <section class="debug-section">
+      <h3>
+        LLM Providers
+        <button class="btn-small" onclick={runLlmCheck} disabled={llmCheckLoading}>
+          {llmCheckLoading ? "Testing..." : "Test All"}
+        </button>
+      </h3>
+      <div class="debug-items">
+        {#if healthCheck?.llmProviders && healthCheck.llmProviders.length > 0}
+          {#each healthCheck.llmProviders as provider}
+            <div class="debug-item">
+              <span class="debug-label">{provider.name}</span>
+              <span class="debug-value">
+                <span class="status-badge" class:healthy={provider.healthy}>
+                  {provider.healthy ? "Connected" : "Unreachable"}
+                </span>
+                <span class="debug-meta">{provider.model}</span>
+              </span>
+            </div>
+          {/each}
+        {:else if healthCheck?.llmProviders?.length === 0}
+          <div class="debug-item">
+            <span class="debug-label">No providers tested</span>
+            <span class="debug-value">
+              <span class="debug-meta">Click "Test All" to check LLM connectivity</span>
+            </span>
+          </div>
+        {:else if $stats?.providerStats}
+          {#each $stats.providerStats as provider}
+            <div class="debug-item">
+              <span class="debug-label">{provider.name}</span>
+              <span class="debug-value">
+                <span class="status-badge pending">Not tested</span>
+                <span class="debug-meta">{provider.model}</span>
+              </span>
+            </div>
+          {/each}
+        {:else}
+          <div class="debug-item">
+            <span class="debug-label">No providers configured</span>
+          </div>
+        {/if}
+      </div>
+    </section>
+
+    <section class="debug-section">
+      <h3>IMAP Accounts</h3>
+      <div class="debug-items">
+        {#if healthCheck?.imapAccounts && healthCheck.imapAccounts.length > 0}
+          {#each healthCheck.imapAccounts as account}
+            <div class="debug-item">
+              <span class="debug-label">{account.name}</span>
+              <span class="debug-value">
+                <span class="status-badge" class:healthy={account.connected}>
+                  {account.connected ? "Connected" : "Disconnected"}
+                </span>
+                {#if account.idleSupported}
+                  <span class="badge-idle">IDLE</span>
+                {/if}
+                {#if account.errors > 0}
+                  <span class="badge-errors">{account.errors} errors</span>
+                {/if}
+              </span>
+            </div>
+          {/each}
+        {:else if $stats?.accounts && $stats.accounts.length > 0}
+          {#each $stats.accounts as account}
+            <div class="debug-item">
+              <span class="debug-label">{account.name}</span>
+              <span class="debug-value">
+                <span class="status-badge" class:healthy={account.connected}>
+                  {account.connected ? "Connected" : "Disconnected"}
+                </span>
+                {#if account.idleSupported}
+                  <span class="badge-idle">IDLE</span>
+                {/if}
+                {#if account.errors > 0}
+                  <span class="badge-errors">{account.errors} errors</span>
+                {/if}
+              </span>
+            </div>
+          {/each}
+        {:else}
+          <div class="debug-item">
+            <span class="debug-label">No accounts configured</span>
+          </div>
+        {/if}
       </div>
     </section>
 
@@ -449,6 +558,57 @@
   .status-badge.disabled {
     background: var(--bg-tertiary);
     color: var(--text-secondary);
+  }
+
+  .status-badge.pending {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+  }
+
+  .badge-idle {
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-size: 0.625rem;
+    font-weight: 600;
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .badge-errors {
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-size: 0.625rem;
+    font-weight: 500;
+    background: color-mix(in srgb, var(--error) 15%, transparent);
+    color: var(--error);
+  }
+
+  .btn-small {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    cursor: pointer;
+    margin-left: 0.5rem;
+    transition: background 0.2s;
+  }
+
+  .btn-small:hover:not(:disabled) {
+    background: var(--border-color);
+  }
+
+  .btn-small:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .debug-section h3 {
+    display: flex;
+    align-items: center;
   }
 
   .user-agent {
