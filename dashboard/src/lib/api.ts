@@ -208,10 +208,40 @@ export interface ImapTestResult {
   success: boolean;
   error?: string;
   capabilities?: string[];
+  folders?: string[];
 }
 
 export async function testImapConnection(params: ImapTestParams): Promise<ImapTestResult> {
   return fetchJson(`${BASE_URL}/test-imap`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+// Probe IMAP Server (no auth)
+export interface ImapProbeParams {
+  host: string;
+  port: number;
+}
+
+export interface ImapProviderInfo {
+  name: string;
+  type: "gmail" | "outlook" | "yahoo" | "icloud" | "fastmail" | "generic";
+  requiresOAuth: boolean;
+  oauthSupported: boolean;
+}
+
+export interface ImapProbeResult {
+  success: boolean;
+  provider?: ImapProviderInfo;
+  suggestedTls?: "tls" | "starttls";
+  authMethods?: ("basic" | "oauth2")[];
+  capabilities?: string[];
+  error?: string;
+}
+
+export async function probeImap(params: ImapProbeParams): Promise<ImapProbeResult> {
+  return fetchJson(`${BASE_URL}/probe-imap`, {
     method: "POST",
     body: JSON.stringify(params),
   });

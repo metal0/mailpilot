@@ -69,17 +69,6 @@
     permissions: string[];
   }
 
-  const API_KEY_PERMISSIONS = [
-    { value: "read:stats", label: "Read Stats", description: "View dashboard statistics" },
-    { value: "read:activity", label: "Read Activity", description: "View activity log" },
-    { value: "read:logs", label: "Read Logs", description: "View system logs" },
-    { value: "read:export", label: "Read Export", description: "Export data" },
-    { value: "read:*", label: "Read All", description: "All read permissions" },
-    { value: "write:accounts", label: "Write Accounts", description: "Manage email accounts" },
-    { value: "write:*", label: "Write All", description: "All write permissions" },
-    { value: "*", label: "Full Access", description: "All permissions" },
-  ] as const;
-
   interface AntivirusConfig {
     enabled?: boolean;
     host?: string;
@@ -162,7 +151,19 @@
 
   // IMAP test state
   let testingConnection = $state(false);
-  let testResult = $state<{ success: boolean; error?: string; capabilities?: string[] } | null>(null);
+  let testResult = $state<{ success: boolean; error?: string; capabilities?: string[]; folders?: string[] } | null>(null);
+
+  // Account wizard state
+  type WizardState = "host_port" | "auth_ready" | "connected" | "complete";
+  let wizardState = $state<WizardState>("host_port");
+  let probeResult = $state<api.ImapProbeResult | null>(null);
+  let probingImap = $state(false);
+  let availableFolders = $state<string[]>([]);
+  let connectionTested = $state(false);
+
+  // Folder multi-select dropdown state
+  let showWatchFolderDropdown = $state(false);
+  let showAllowedFolderDropdown = $state(false);
 
   // Service status
   let services = $state<ServicesStatus | null>(null);
@@ -173,7 +174,7 @@
   let showPortWarning = $state(false);
   let pendingPortChange = $state<number | null>(null);
 
-  const sectionIds = ["global", "accounts", "providers", "attachments", "antivirus", "dashboard"] as const;
+  const sectionIds = ["global", "accounts", "providers", "apikeys", "attachments", "antivirus"] as const;
 
   const helpTexts: Record<string, string> = {
     polling_interval: "How often to check for new emails when IDLE is not supported (e.g., 30s, 5m)",
@@ -360,7 +361,19 @@
     }
   }
 
+  function resetWizardState() {
+    wizardState = "host_port";
+    probeResult = null;
+    probingImap = false;
+    availableFolders = [];
+    connectionTested = false;
+    testResult = null;
+    showWatchFolderDropdown = false;
+    showAllowedFolderDropdown = false;
+  }
+
   function addAccount() {
+    resetWizardState();
     editingAccount = {
       name: "",
       imap: { host: "", port: 993, tls: "auto", auth: "basic", username: "", password: "" },
@@ -369,7 +382,13 @@
   }
 
   function editAccount(account: Account) {
+    resetWizardState();
     editingAccount = JSON.parse(JSON.stringify(account));
+    // If editing existing account, assume it's already been tested
+    if (account.name) {
+      connectionTested = true;
+      wizardState = "connected";
+    }
   }
 
   function saveAccount() {
@@ -383,6 +402,40 @@
     }
     config = { ...config };
     editingAccount = null;
+    resetWizardState();
+  }
+
+  async function probeImapServer() {
+    if (!editingAccount?.imap.host) return;
+
+    probingImap = true;
+    probeResult = null;
+
+    try {
+      const result = await api.probeImap({
+        host: editingAccount.imap.host,
+        port: editingAccount.imap.port ?? 993,
+      });
+      probeResult = result;
+
+      if (result.success) {
+        // Auto-fill TLS mode based on probe
+        if (result.suggestedTls && editingAccount) {
+          editingAccount.imap.tls = result.suggestedTls;
+        }
+        wizardState = "auth_ready";
+      }
+    } catch (e) {
+      probeResult = { success: false, error: e instanceof Error ? e.message : "Probe failed" };
+    } finally {
+      probingImap = false;
+    }
+  }
+
+  function handleHostPortBlur() {
+    if (editingAccount?.imap.host && editingAccount.imap.port) {
+      probeImapServer();
+    }
   }
 
   function removeAccount(name: string) {
@@ -511,6 +564,15 @@
         oauth_refresh_token: editingAccount.imap.oauth_refresh_token,
       });
       testResult = result;
+
+      if (result.success) {
+        connectionTested = true;
+        wizardState = "connected";
+        // Store available folders from server
+        if (result.folders && result.folders.length > 0) {
+          availableFolders = result.folders;
+        }
+      }
     } catch (e) {
       testResult = { success: false, error: e instanceof Error ? e.message : "Test failed" };
     } finally {
@@ -709,14 +771,22 @@
               </label>
             </div>
 
-            <h4>{$t("settings.global.defaultPromptLabel")}</h4>
             <div class="form-group">
               <label>
                 <span class="label-text">
-                  {$t("settings.global.classificationPrompt")}
-                  <span class="help-icon" title={helpTexts.default_prompt}>?</span>
+                  {$t("settings.dashboard.sessionTtl")}
+                  <span class="help-icon" title={helpTexts["dashboard.session_ttl"]}>?</span>
                 </span>
-                <textarea bind:value={config.default_prompt} rows="8" placeholder={$t("settings.prompt.placeholder")}></textarea>
+                <input
+                  type="text"
+                  value={config.dashboard?.session_ttl ?? "24h"}
+                  oninput={(e) => {
+                    config.dashboard = config.dashboard ?? {};
+                    config.dashboard.session_ttl = (e.target as HTMLInputElement).value || "24h";
+                    config = { ...config };
+                  }}
+                  placeholder="24h"
+                />
               </label>
             </div>
           </section>
@@ -745,15 +815,31 @@
                     <div class="form-group">
                       <label>
                         <span class="label-text">{$t("settings.accounts.host")} <span class="help-icon" title={helpTexts["imap.host"]}>?</span></span>
-                        <input type="text" bind:value={editingAccount.imap.host} placeholder="imap.gmail.com" />
+                        <input type="text" bind:value={editingAccount.imap.host} placeholder="imap.gmail.com" onblur={handleHostPortBlur} />
                       </label>
                     </div>
                     <div class="form-group">
                       <label>
                         <span class="label-text">{$t("settings.accounts.port")} <span class="help-icon" title={helpTexts["imap.port"]}>?</span></span>
-                        <input type="number" bind:value={editingAccount.imap.port} placeholder="993" />
+                        <input type="number" bind:value={editingAccount.imap.port} placeholder="993" onblur={handleHostPortBlur} />
                       </label>
                     </div>
+                    {#if probingImap}
+                      <div class="probe-status">
+                        <span class="spinner-small"></span>
+                        <span>Detecting server...</span>
+                      </div>
+                    {:else if probeResult?.provider}
+                      <div class="probe-status probe-success">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        <span>{probeResult.provider.name}</span>
+                        {#if probeResult.provider.oauthSupported}
+                          <span class="badge">OAuth supported</span>
+                        {/if}
+                      </div>
+                    {/if}
                   </div>
 
                   <div class="form-row">
@@ -850,60 +936,140 @@
                     {/if}
                   </div>
 
-                  <h4>{$t("settings.accounts.foldersSection")}</h4>
-                  <div class="form-group">
-                    <label>
-                      <span class="label-text">{$t("settings.accounts.watchFolders")} <span class="help-icon" title={helpTexts["folders.watch"]}>?</span></span>
-                      <input
-                        type="text"
-                        value={editingAccount.folders?.watch?.join(", ") ?? "INBOX"}
-                        oninput={(e) => {
-                          editingAccount!.folders ??= {};
-                          editingAccount!.folders.watch = (e.target as HTMLInputElement).value.split(",").map(s => s.trim()).filter(Boolean);
-                        }}
-                        placeholder="INBOX, Work"
-                      />
-                    </label>
-                  </div>
-                  <div class="form-row">
-                    <div class="form-group">
-                      <label>
-                        <span class="label-text">{$t("settings.accounts.folderMode")} <span class="help-icon" title={helpTexts["folders.mode"]}>?</span></span>
-                        <select
-                          value={editingAccount.folders?.mode ?? "predefined"}
-                          onchange={(e) => {
-                            editingAccount!.folders = editingAccount!.folders ?? {};
-                            editingAccount!.folders.mode = (e.target as HTMLSelectElement).value;
-                          }}
-                        >
-                          <option value="predefined">{$t("settings.accounts.predefinedOnly")}</option>
-                          <option value="auto_create">{$t("settings.accounts.autoCreateFolders")}</option>
-                        </select>
-                      </label>
-                    </div>
-                    {#if (editingAccount.folders?.mode ?? "predefined") === "predefined"}
-                      <div class="form-group">
-                        <label>
-                          <span class="label-text">{$t("settings.accounts.allowedFolders")} <span class="help-icon" title={helpTexts["folders.allowed"]}>?</span></span>
-                          <input
-                            type="text"
-                            value={editingAccount.folders?.allowed?.join(", ") ?? ""}
-                            oninput={(e) => {
-                              editingAccount!.folders = editingAccount!.folders ?? {};
-                              const value = (e.target as HTMLInputElement).value;
-                              editingAccount!.folders.allowed = value ? value.split(",").map(s => s.trim()).filter(Boolean) : undefined;
-                            }}
-                            placeholder="Archive, Work/Important"
-                          />
-                        </label>
-                        {#if !editingAccount.folders?.allowed || editingAccount.folders.allowed.length === 0}
-                          <div class="info-note">{$t("settings.accounts.autoDiscoverNote")}</div>
-                        {/if}
+                  <div class="wizard-section" class:section-locked={!connectionTested}>
+                    {#if !connectionTested}
+                      <div class="section-lock-overlay">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                          <path d="M7 11V7a5 5 0 0110 0v4"/>
+                        </svg>
+                        <span>Test connection to unlock</span>
                       </div>
                     {/if}
-                  </div>
+                    <h4>{$t("settings.accounts.foldersSection")}</h4>
+                    <div class="form-group">
+                      <label>
+                        <span class="label-text">{$t("settings.accounts.watchFolders")} <span class="help-icon" title={helpTexts["folders.watch"]}>?</span></span>
+                        {#if availableFolders.length > 0}
+                          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                          <div class="multi-select-dropdown">
+                            <button type="button" class="dropdown-trigger" onclick={() => showWatchFolderDropdown = !showWatchFolderDropdown}>
+                              {(editingAccount.folders?.watch ?? ["INBOX"]).join(", ") || "Select folders"}
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"/>
+                              </svg>
+                            </button>
+                            {#if showWatchFolderDropdown}
+                              <div class="dropdown-menu" onclick={(e) => e.stopPropagation()}>
+                                {#each availableFolders as folder}
+                                  <label class="dropdown-item">
+                                    <input
+                                      type="checkbox"
+                                      checked={(editingAccount.folders?.watch ?? ["INBOX"]).includes(folder)}
+                                      onchange={() => {
+                                        editingAccount!.folders ??= {};
+                                        const current = editingAccount!.folders.watch ?? ["INBOX"];
+                                        if (current.includes(folder)) {
+                                          editingAccount!.folders.watch = current.filter(f => f !== folder);
+                                        } else {
+                                          editingAccount!.folders.watch = [...current, folder];
+                                        }
+                                      }}
+                                    />
+                                    <span>{folder}</span>
+                                  </label>
+                                {/each}
+                              </div>
+                            {/if}
+                          </div>
+                        {:else}
+                          <input
+                            type="text"
+                            value={editingAccount.folders?.watch?.join(", ") ?? "INBOX"}
+                            oninput={(e) => {
+                              editingAccount!.folders ??= {};
+                              editingAccount!.folders.watch = (e.target as HTMLInputElement).value.split(",").map(s => s.trim()).filter(Boolean);
+                            }}
+                            placeholder="INBOX, Work"
+                          />
+                        {/if}
+                      </label>
+                    </div>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label>
+                          <span class="label-text">{$t("settings.accounts.folderMode")} <span class="help-icon" title={helpTexts["folders.mode"]}>?</span></span>
+                          <select
+                            value={editingAccount.folders?.mode ?? "predefined"}
+                            onchange={(e) => {
+                              editingAccount!.folders = editingAccount!.folders ?? {};
+                              editingAccount!.folders.mode = (e.target as HTMLSelectElement).value;
+                            }}
+                          >
+                            <option value="predefined">{$t("settings.accounts.predefinedOnly")}</option>
+                            <option value="auto_create">{$t("settings.accounts.autoCreateFolders")}</option>
+                          </select>
+                        </label>
+                      </div>
+                      {#if (editingAccount.folders?.mode ?? "predefined") === "predefined"}
+                        <div class="form-group">
+                          <label>
+                            <span class="label-text">{$t("settings.accounts.allowedFolders")} <span class="help-icon" title={helpTexts["folders.allowed"]}>?</span></span>
+                            {#if availableFolders.length > 0}
+                              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                              <div class="multi-select-dropdown">
+                                <button type="button" class="dropdown-trigger" onclick={() => showAllowedFolderDropdown = !showAllowedFolderDropdown}>
+                                  {(editingAccount.folders?.allowed ?? []).length > 0
+                                    ? (editingAccount.folders?.allowed ?? []).join(", ")
+                                    : "All folders (auto-discover)"}
+                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                  </svg>
+                                </button>
+                                {#if showAllowedFolderDropdown}
+                                  <div class="dropdown-menu" onclick={(e) => e.stopPropagation()}>
+                                    {#each availableFolders as folder}
+                                      <label class="dropdown-item">
+                                        <input
+                                          type="checkbox"
+                                          checked={(editingAccount.folders?.allowed ?? []).includes(folder)}
+                                          onchange={() => {
+                                            editingAccount!.folders ??= {};
+                                            const current = editingAccount!.folders.allowed ?? [];
+                                            if (current.includes(folder)) {
+                                              editingAccount!.folders.allowed = current.filter(f => f !== folder);
+                                            } else {
+                                              editingAccount!.folders.allowed = [...current, folder];
+                                            }
+                                          }}
+                                        />
+                                        <span>{folder}</span>
+                                      </label>
+                                    {/each}
+                                  </div>
+                                {/if}
+                              </div>
+                            {:else}
+                              <input
+                                type="text"
+                                value={editingAccount.folders?.allowed?.join(", ") ?? ""}
+                                oninput={(e) => {
+                                  editingAccount!.folders = editingAccount!.folders ?? {};
+                                  const value = (e.target as HTMLInputElement).value;
+                                  editingAccount!.folders.allowed = value ? value.split(",").map(s => s.trim()).filter(Boolean) : undefined;
+                                }}
+                                placeholder="Archive, Work/Important"
+                              />
+                            {/if}
+                          </label>
+                          {#if !editingAccount.folders?.allowed || editingAccount.folders.allowed.length === 0}
+                            <div class="info-note">{$t("settings.accounts.autoDiscoverNote")}</div>
+                          {/if}
+                        </div>
+                      {/if}
+                    </div>
 
-                  <h4>{$t("settings.accounts.llmSettings")}</h4>
+                    <h4>{$t("settings.accounts.llmSettings")}</h4>
                   <div class="form-row">
                     <div class="form-group">
                       <label>
@@ -950,10 +1116,18 @@
                     </label>
                     <p class="help-text">{$t("settings.accounts.promptOverrideHelp")}</p>
                   </div>
+                  </div><!-- end wizard-section -->
 
                   <div class="modal-actions">
                     <button class="btn btn-secondary" onclick={() => editingAccount = null}>{$t("common.cancel")}</button>
-                    <button class="btn btn-primary" onclick={saveAccount}>{$t("settings.accounts.saveAccount")}</button>
+                    <button
+                      class="btn btn-primary"
+                      onclick={saveAccount}
+                      disabled={!connectionTested && !editingAccount.name}
+                      title={!connectionTested && !editingAccount.name ? "Test connection first" : ""}
+                    >
+                      {$t("settings.accounts.saveAccount")}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1045,6 +1219,198 @@
                 </div>
               {/each}
             </div>
+
+            <h4>{$t("settings.global.defaultPromptLabel")}</h4>
+            <div class="form-group">
+              <label>
+                <span class="label-text">
+                  {$t("settings.global.classificationPrompt")}
+                  <span class="help-icon" title={helpTexts.default_prompt}>?</span>
+                </span>
+                <textarea bind:value={config.default_prompt} rows="8" placeholder={$t("settings.prompt.placeholder")}></textarea>
+              </label>
+            </div>
+          </section>
+
+        {:else if activeSection === "apikeys"}
+          <section class="config-section">
+            <h3>{$t("settings.apiKeys.sectionTitle")}</h3>
+            <p class="section-note">{$t("settings.apiKeys.description")}</p>
+
+            {#if editingApiKey}
+              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+              <div class="modal-overlay" onclick={() => { editingApiKey = null; editingApiKeyIndex = null; }}>
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                <div class="modal" onclick={(e) => e.stopPropagation()}>
+                  <h3>{editingApiKeyIndex !== null ? $t("settings.apiKeys.editApiKey") : $t("settings.apiKeys.newApiKey")}</h3>
+
+                  <div class="form-group">
+                    <label>
+                      <span class="label-text">{$t("settings.apiKeys.name")}</span>
+                      <input type="text" bind:value={editingApiKey.name} placeholder="My Integration" />
+                    </label>
+                  </div>
+
+                  <div class="form-group">
+                    <label>
+                      <span class="label-text">{$t("settings.apiKeys.key")}</span>
+                      <div class="api-key-input-row">
+                        <input
+                          type="text"
+                          value={editingApiKey.key}
+                          readonly
+                          class="api-key-input"
+                        />
+                        <button
+                          class="btn btn-secondary btn-sm"
+                          onclick={() => { editingApiKey!.key = generateApiKey(); editingApiKey = { ...editingApiKey! }; }}
+                          title={$t("settings.apiKeys.regenerate")}
+                        >
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6"/>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                          </svg>
+                        </button>
+                        <button
+                          class="btn btn-secondary btn-sm"
+                          onclick={() => copyApiKey(editingApiKey!.key)}
+                          title={$t("settings.apiKeys.copy")}
+                        >
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                          </svg>
+                        </button>
+                      </div>
+                      <p class="help-text">{$t("settings.apiKeys.keyNote")}</p>
+                    </label>
+                  </div>
+
+                  <div class="form-group">
+                    <span class="label-text">{$t("settings.apiKeys.permissions")}</span>
+                    <div class="permissions-simple">
+                      <label class="permission-toggle" class:disabled={editingApiKey.permissions.includes("*")}>
+                        <input
+                          type="checkbox"
+                          checked={editingApiKey.permissions.includes("read:stats") || editingApiKey.permissions.includes("read:*") || editingApiKey.permissions.includes("*")}
+                          disabled={editingApiKey.permissions.includes("*")}
+                          onchange={() => toggleApiKeyPermission("read:stats")}
+                        />
+                        <span>Read Stats</span>
+                      </label>
+                      <label class="permission-toggle" class:disabled={editingApiKey.permissions.includes("*")}>
+                        <input
+                          type="checkbox"
+                          checked={editingApiKey.permissions.includes("read:activity") || editingApiKey.permissions.includes("read:*") || editingApiKey.permissions.includes("*")}
+                          disabled={editingApiKey.permissions.includes("*")}
+                          onchange={() => toggleApiKeyPermission("read:activity")}
+                        />
+                        <span>Read Activity</span>
+                      </label>
+                      <label class="permission-toggle" class:disabled={editingApiKey.permissions.includes("*")}>
+                        <input
+                          type="checkbox"
+                          checked={editingApiKey.permissions.includes("read:logs") || editingApiKey.permissions.includes("read:*") || editingApiKey.permissions.includes("*")}
+                          disabled={editingApiKey.permissions.includes("*")}
+                          onchange={() => toggleApiKeyPermission("read:logs")}
+                        />
+                        <span>Read Logs</span>
+                      </label>
+                      <label class="permission-toggle" class:disabled={editingApiKey.permissions.includes("*")}>
+                        <input
+                          type="checkbox"
+                          checked={editingApiKey.permissions.includes("read:export") || editingApiKey.permissions.includes("read:*") || editingApiKey.permissions.includes("*")}
+                          disabled={editingApiKey.permissions.includes("*")}
+                          onchange={() => toggleApiKeyPermission("read:export")}
+                        />
+                        <span>Export Data</span>
+                      </label>
+                      <label class="permission-toggle permission-admin">
+                        <input
+                          type="checkbox"
+                          checked={editingApiKey.permissions.includes("*")}
+                          onchange={() => {
+                            if (editingApiKey!.permissions.includes("*")) {
+                              editingApiKey!.permissions = ["read:stats"];
+                            } else {
+                              editingApiKey!.permissions = ["*"];
+                            }
+                            editingApiKey = { ...editingApiKey! };
+                          }}
+                        />
+                        <span>Full Access</span>
+                        <small>(grants all permissions including account management)</small>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="modal-actions">
+                    <button class="btn btn-secondary" onclick={() => { editingApiKey = null; editingApiKeyIndex = null; }}>{$t("common.cancel")}</button>
+                    <button class="btn btn-primary" onclick={saveApiKey} disabled={!editingApiKey.name}>{$t("settings.apiKeys.saveApiKey")}</button>
+                  </div>
+                </div>
+              </div>
+            {/if}
+
+            <div class="section-header api-keys-header">
+              <span></span>
+              <button class="btn btn-secondary btn-sm" onclick={addApiKey}>+ {$t("settings.apiKeys.add")}</button>
+            </div>
+
+            {#if config.dashboard?.api_keys && config.dashboard.api_keys.length > 0}
+              <div class="items-list">
+                {#each config.dashboard.api_keys as apiKey, index}
+                  <div class="list-item api-key-item">
+                    <div class="item-info">
+                      <strong>{apiKey.name}</strong>
+                      <div class="api-key-meta">
+                        <span class="api-key-value" class:blurred={showApiKey !== apiKey.key}>
+                          {showApiKey === apiKey.key ? apiKey.key : apiKey.key.slice(0, 8) + '••••••••'}
+                        </span>
+                        <button
+                          class="btn-icon-tiny"
+                          onclick={() => showApiKey = showApiKey === apiKey.key ? null : apiKey.key}
+                          title={showApiKey === apiKey.key ? $t("settings.apiKeys.hide") : $t("settings.apiKeys.show")}
+                        >
+                          {#if showApiKey === apiKey.key}
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                              <line x1="1" y1="1" x2="23" y2="23"/>
+                            </svg>
+                          {:else}
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                              <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                          {/if}
+                        </button>
+                        <button
+                          class="btn-icon-tiny"
+                          onclick={() => copyApiKey(apiKey.key)}
+                          title={$t("settings.apiKeys.copy")}
+                        >
+                          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                          </svg>
+                        </button>
+                      </div>
+                      <span class="item-meta permissions-meta">
+                        {apiKey.permissions.includes("*") ? "Full access" : `${apiKey.permissions.length} permission${apiKey.permissions.length === 1 ? '' : 's'}`}
+                      </span>
+                    </div>
+                    <div class="item-actions">
+                      <button class="btn btn-sm" onclick={() => editApiKey(apiKey, index)}>{$t("common.edit")}</button>
+                      <button class="btn btn-sm btn-danger" onclick={() => removeApiKey(index)}>{$t("common.remove")}</button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <div class="empty-state">
+                <p>{$t("settings.apiKeys.noApiKeys")}</p>
+              </div>
+            {/if}
           </section>
 
         {:else if activeSection === "attachments"}
@@ -1169,161 +1535,6 @@
                     <option value="flag_only">{$t("settings.antivirus.flagOnly")}</option>
                   </select>
                 </label>
-              </div>
-            {/if}
-          </section>
-
-        {:else if activeSection === "dashboard"}
-          <section class="config-section">
-            <h3>{$t("settings.dashboard.sectionTitle")}</h3>
-            <p class="section-note">{$t("settings.dashboard.lockoutNote")}</p>
-
-            <div class="form-group">
-              <label>
-                <span class="label-text">
-                  {$t("settings.dashboard.sessionTtl")}
-                  <span class="help-icon" title={helpTexts["dashboard.session_ttl"]}>?</span>
-                </span>
-                <input type="text" bind:value={config.dashboard.session_ttl} placeholder="24h" />
-              </label>
-            </div>
-
-            <h4>{$t("settings.apiKeys.sectionTitle")}</h4>
-            <p class="help-text api-keys-help">{$t("settings.apiKeys.description")}</p>
-
-            {#if editingApiKey}
-              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-              <div class="modal-overlay" onclick={() => { editingApiKey = null; editingApiKeyIndex = null; }}>
-                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                <div class="modal" onclick={(e) => e.stopPropagation()}>
-                  <h3>{editingApiKeyIndex !== null ? $t("settings.apiKeys.editApiKey") : $t("settings.apiKeys.newApiKey")}</h3>
-
-                  <div class="form-group">
-                    <label>
-                      <span class="label-text">{$t("settings.apiKeys.name")}</span>
-                      <input type="text" bind:value={editingApiKey.name} placeholder="My Integration" />
-                    </label>
-                  </div>
-
-                  <div class="form-group">
-                    <label>
-                      <span class="label-text">{$t("settings.apiKeys.key")}</span>
-                      <div class="api-key-input-row">
-                        <input
-                          type="text"
-                          value={editingApiKey.key}
-                          readonly
-                          class="api-key-input"
-                        />
-                        <button
-                          class="btn btn-secondary btn-sm"
-                          onclick={() => { editingApiKey!.key = generateApiKey(); editingApiKey = { ...editingApiKey! }; }}
-                          title={$t("settings.apiKeys.regenerate")}
-                        >
-                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M23 4v6h-6"/>
-                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-                          </svg>
-                        </button>
-                        <button
-                          class="btn btn-secondary btn-sm"
-                          onclick={() => copyApiKey(editingApiKey!.key)}
-                          title={$t("settings.apiKeys.copy")}
-                        >
-                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                          </svg>
-                        </button>
-                      </div>
-                      <p class="help-text">{$t("settings.apiKeys.keyNote")}</p>
-                    </label>
-                  </div>
-
-                  <div class="form-group">
-                    <span class="label-text">{$t("settings.apiKeys.permissions")}</span>
-                    <div class="permissions-grid">
-                      {#each API_KEY_PERMISSIONS as perm}
-                        <label class="permission-item">
-                          <input
-                            type="checkbox"
-                            checked={editingApiKey.permissions.includes(perm.value)}
-                            onchange={() => toggleApiKeyPermission(perm.value)}
-                          />
-                          <span class="permission-label">
-                            <strong>{perm.label}</strong>
-                            <span class="permission-desc">{perm.description}</span>
-                          </span>
-                        </label>
-                      {/each}
-                    </div>
-                  </div>
-
-                  <div class="modal-actions">
-                    <button class="btn btn-secondary" onclick={() => { editingApiKey = null; editingApiKeyIndex = null; }}>{$t("common.cancel")}</button>
-                    <button class="btn btn-primary" onclick={saveApiKey} disabled={!editingApiKey.name}>{$t("settings.apiKeys.saveApiKey")}</button>
-                  </div>
-                </div>
-              </div>
-            {/if}
-
-            <div class="section-header api-keys-header">
-              <span></span>
-              <button class="btn btn-secondary btn-sm" onclick={addApiKey}>+ {$t("settings.apiKeys.add")}</button>
-            </div>
-
-            {#if config.dashboard?.api_keys && config.dashboard.api_keys.length > 0}
-              <div class="items-list">
-                {#each config.dashboard.api_keys as apiKey, index}
-                  <div class="list-item api-key-item">
-                    <div class="item-info">
-                      <strong>{apiKey.name}</strong>
-                      <div class="api-key-meta">
-                        <span class="api-key-value" class:blurred={showApiKey !== apiKey.key}>
-                          {showApiKey === apiKey.key ? apiKey.key : apiKey.key.slice(0, 8) + '••••••••'}
-                        </span>
-                        <button
-                          class="btn-icon-tiny"
-                          onclick={() => showApiKey = showApiKey === apiKey.key ? null : apiKey.key}
-                          title={showApiKey === apiKey.key ? $t("settings.apiKeys.hide") : $t("settings.apiKeys.show")}
-                        >
-                          {#if showApiKey === apiKey.key}
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-                              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                              <line x1="1" y1="1" x2="23" y2="23"/>
-                            </svg>
-                          {:else}
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                              <circle cx="12" cy="12" r="3"/>
-                            </svg>
-                          {/if}
-                        </button>
-                        <button
-                          class="btn-icon-tiny"
-                          onclick={() => copyApiKey(apiKey.key)}
-                          title={$t("settings.apiKeys.copy")}
-                        >
-                          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                          </svg>
-                        </button>
-                      </div>
-                      <span class="item-meta permissions-meta">
-                        {apiKey.permissions.length} {apiKey.permissions.length === 1 ? 'permission' : 'permissions'}
-                      </span>
-                    </div>
-                    <div class="item-actions">
-                      <button class="btn btn-sm" onclick={() => editApiKey(apiKey, index)}>{$t("common.edit")}</button>
-                      <button class="btn btn-sm btn-danger" onclick={() => removeApiKey(index)}>{$t("common.remove")}</button>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {:else}
-              <div class="empty-state">
-                <p>{$t("settings.apiKeys.noApiKeys")}</p>
               </div>
             {/if}
           </section>
@@ -1944,47 +2155,56 @@
     font-size: 0.8125rem;
   }
 
-  .permissions-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+  .permissions-simple {
+    display: flex;
+    flex-direction: column;
     gap: 0.5rem;
     margin-top: 0.5rem;
   }
 
-  .permission-item {
+  .permission-toggle {
     display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 1rem;
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: 0.375rem;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: background 0.15s, opacity 0.15s;
   }
 
-  .permission-item:hover {
+  .permission-toggle:hover:not(.disabled) {
     background: var(--bg-tertiary);
   }
 
-  .permission-item input[type="checkbox"] {
-    margin-top: 0.125rem;
+  .permission-toggle.disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 
-  .permission-label {
-    display: flex;
-    flex-direction: column;
-    gap: 0.125rem;
+  .permission-toggle.disabled input {
+    cursor: default;
   }
 
-  .permission-label strong {
-    font-size: 0.8125rem;
-    font-weight: 500;
+  .permission-toggle span {
+    font-size: 0.875rem;
   }
 
-  .permission-desc {
-    font-size: 0.6875rem;
+  .permission-toggle small {
+    font-size: 0.75rem;
     color: var(--text-secondary);
+    margin-left: 0.25rem;
+  }
+
+  .permission-toggle.permission-admin {
+    background: var(--bg-tertiary);
+    border-color: var(--accent);
+    margin-top: 0.5rem;
+  }
+
+  .permission-toggle.permission-admin span {
+    font-weight: 500;
   }
 
   .api-key-item {
@@ -2065,6 +2285,123 @@
   .empty-state p {
     margin: 0;
     font-size: 0.875rem;
+  }
+
+  /* Wizard section locking */
+  .wizard-section {
+    position: relative;
+    padding: 0.75rem;
+    margin: 0 -0.75rem;
+    border-radius: 0.375rem;
+    transition: opacity 0.2s;
+  }
+
+  .wizard-section.section-locked {
+    opacity: 0.5;
+    pointer-events: none;
+    background: var(--bg-tertiary);
+  }
+
+  .section-lock-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    z-index: 10;
+    white-space: nowrap;
+  }
+
+  /* Probe status */
+  .probe-status {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    padding: 0.25rem 0.5rem;
+    background: var(--bg-tertiary);
+    border-radius: 0.25rem;
+    align-self: flex-end;
+    margin-bottom: 0.25rem;
+  }
+
+  .probe-status.probe-success {
+    color: var(--success);
+  }
+
+  .probe-status .badge {
+    font-size: 0.65rem;
+    padding: 0.125rem 0.375rem;
+    background: var(--accent);
+    color: white;
+    border-radius: 0.25rem;
+  }
+
+  /* Multi-select dropdown */
+  .multi-select-dropdown {
+    position: relative;
+    width: 100%;
+  }
+
+  .dropdown-trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .dropdown-trigger:hover {
+    border-color: var(--accent);
+  }
+
+  .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    margin-top: 0.25rem;
+  }
+
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+  }
+
+  .dropdown-item:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .dropdown-item input[type="checkbox"] {
+    width: auto;
+    margin: 0;
   }
 
   @media (max-width: 768px) {

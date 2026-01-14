@@ -55,6 +55,69 @@ import { createTikaClient } from "../attachments/tika.js";
 import { createAntivirusScanner } from "../processor/antivirus.js";
 import { ImapFlow } from "imapflow";
 
+interface ImapProviderInfo {
+  name: string;
+  type: "gmail" | "outlook" | "yahoo" | "icloud" | "fastmail" | "generic";
+  requiresOAuth: boolean;
+  oauthSupported: boolean;
+}
+
+function detectImapProvider(host: string): ImapProviderInfo {
+  const hostLower = host.toLowerCase();
+
+  if (hostLower.includes("gmail") || hostLower.includes("google")) {
+    return {
+      name: "Gmail",
+      type: "gmail",
+      requiresOAuth: false, // App passwords work
+      oauthSupported: true,
+    };
+  }
+
+  if (hostLower.includes("outlook") || hostLower.includes("office365") || hostLower.includes("microsoft")) {
+    return {
+      name: "Microsoft Outlook",
+      type: "outlook",
+      requiresOAuth: false, // App passwords work for personal accounts
+      oauthSupported: true,
+    };
+  }
+
+  if (hostLower.includes("yahoo")) {
+    return {
+      name: "Yahoo Mail",
+      type: "yahoo",
+      requiresOAuth: false,
+      oauthSupported: true,
+    };
+  }
+
+  if (hostLower.includes("icloud") || hostLower.includes("apple") || hostLower.includes("me.com")) {
+    return {
+      name: "iCloud Mail",
+      type: "icloud",
+      requiresOAuth: false, // App-specific passwords
+      oauthSupported: false,
+    };
+  }
+
+  if (hostLower.includes("fastmail")) {
+    return {
+      name: "Fastmail",
+      type: "fastmail",
+      requiresOAuth: false,
+      oauthSupported: false,
+    };
+  }
+
+  return {
+    name: "Generic IMAP",
+    type: "generic",
+    requiresOAuth: false,
+    oauthSupported: false,
+  };
+}
+
 export interface DashboardRouterOptions {
   dashboardConfig: DashboardConfig;
   dryRun: boolean;
@@ -333,6 +396,91 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     }
   });
 
+  // Probe IMAP server (no auth required) - detect provider and capabilities
+  router.post("/api/probe-imap", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
+    try {
+      const body = await c.req.json<{ host: string; port?: number }>();
+      const { host, port = 993 } = body;
+
+      if (!host) {
+        return c.json({ success: false, error: "Host is required" });
+      }
+
+      // Detect provider from hostname
+      const providerInfo = detectImapProvider(host);
+
+      // Try TLS first (port 993), then STARTTLS (port 143)
+      const useTls = port === 993 || port === 465;
+
+      const client = new ImapFlow({
+        host,
+        port,
+        secure: useTls,
+        auth: { user: "probe@test.local", pass: "" },
+        logger: false,
+        // Don't actually authenticate - just connect to get greeting
+        disableAutoIdle: true,
+      });
+
+      const timeout = setTimeout(() => {
+        try { client.close(); } catch { /* ignore */ }
+      }, 10000);
+
+      try {
+        // Try to connect - this will fail auth but we can detect TLS support
+        await client.connect();
+        clearTimeout(timeout);
+
+        // If we got here, TLS connection worked (auth will fail separately)
+        const capabilities = Array.from(client.capabilities.keys());
+        await client.logout().catch(() => { /* ignore */ });
+
+        const authMethods: ("basic" | "oauth2")[] = ["basic"];
+        if (capabilities.some(cap => cap.toUpperCase().includes("AUTH=XOAUTH2") || cap.toUpperCase().includes("SASL-IR"))) {
+          authMethods.push("oauth2");
+        }
+
+        return c.json({
+          success: true,
+          provider: providerInfo,
+          suggestedTls: useTls ? "tls" : "starttls",
+          authMethods,
+          capabilities,
+        });
+      } catch (error) {
+        clearTimeout(timeout);
+
+        // Check if it's an auth error (connection succeeded but auth failed)
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        if (errorMsg.includes("Invalid credentials") ||
+            errorMsg.includes("AUTHENTICATIONFAILED") ||
+            errorMsg.includes("authentication failed") ||
+            errorMsg.includes("Login failed")) {
+          // Connection worked, just auth failed (expected since we sent dummy creds)
+          return c.json({
+            success: true,
+            provider: providerInfo,
+            suggestedTls: useTls ? "tls" : "starttls",
+            authMethods: providerInfo.oauthSupported ? ["basic", "oauth2"] : ["basic"],
+          });
+        }
+
+        // Real connection error
+        return c.json({
+          success: false,
+          provider: providerInfo,
+          suggestedTls: useTls ? "tls" : "starttls",
+          error: errorMsg,
+        });
+      }
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: error instanceof Error ? error.message : "Invalid request",
+      });
+    }
+  });
+
   // Test IMAP connection endpoint
   router.post("/api/test-imap", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
     try {
@@ -370,12 +518,25 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         await client.connect();
         clearTimeout(timeout);
 
-        const capabilities = Array.from(client.capabilities);
+        const capabilities = Array.from(client.capabilities.keys());
+
+        // List all folders
+        const folders: string[] = [];
+        try {
+          const mailboxes = await client.list();
+          for (const mailbox of mailboxes) {
+            folders.push(mailbox.path);
+          }
+        } catch {
+          // Folder listing failed, but connection succeeded
+        }
+
         await client.logout();
 
         return c.json({
           success: true,
           capabilities,
+          folders,
         });
       } catch (error) {
         clearTimeout(timeout);
@@ -486,8 +647,48 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       const body = await c.req.json<{ config: unknown; reload?: boolean }>();
       const { config: newConfig, reload = true } = body;
 
+      // Preserve masked passwords from current config
+      const currentConfig = getCurrentConfig();
+      const configToSave = newConfig as Config;
+
+      if (currentConfig) {
+        // Preserve account passwords
+        for (const account of configToSave.accounts) {
+          const existingAccount = currentConfig.accounts.find((a) => a.name === account.name);
+          if (existingAccount) {
+            if (account.imap.password === "********") {
+              account.imap.password = existingAccount.imap.password;
+            }
+            if (account.imap.oauth_client_secret === "********") {
+              account.imap.oauth_client_secret = existingAccount.imap.oauth_client_secret;
+            }
+            if (account.imap.oauth_refresh_token === "********") {
+              account.imap.oauth_refresh_token = existingAccount.imap.oauth_refresh_token;
+            }
+          }
+        }
+
+        // Preserve provider API keys
+        for (const provider of configToSave.llm_providers) {
+          const existingProvider = currentConfig.llm_providers.find((p) => p.name === provider.name);
+          if (existingProvider && provider.api_key === "********") {
+            provider.api_key = existingProvider.api_key;
+          }
+        }
+
+        // Preserve dashboard API keys
+        if (configToSave.dashboard?.api_keys && currentConfig.dashboard?.api_keys) {
+          for (const apiKey of configToSave.dashboard.api_keys) {
+            const existingKey = currentConfig.dashboard.api_keys.find((k) => k.name === apiKey.name);
+            if (existingKey && apiKey.key === "********") {
+              apiKey.key = existingKey.key;
+            }
+          }
+        }
+      }
+
       // Write config to file
-      const yamlContent = yamlStringify(newConfig, { lineWidth: 0 });
+      const yamlContent = yamlStringify(configToSave, { lineWidth: 0 });
       writeFileSync(configPath, yamlContent, "utf-8");
 
       // Optionally reload config

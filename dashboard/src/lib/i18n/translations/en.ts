@@ -275,9 +275,9 @@ const en = {
   "settings.sections.global": "Global Settings",
   "settings.sections.accounts": "Email Accounts",
   "settings.sections.providers": "LLM Providers",
+  "settings.sections.apikeys": "API Keys",
   "settings.sections.attachments": "Attachments",
   "settings.sections.antivirus": "Antivirus",
-  "settings.sections.dashboard": "Dashboard",
 
   // Settings - Global Form Fields
   "settings.global.pollingInterval": "Polling Interval",
