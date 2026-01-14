@@ -99,6 +99,9 @@
     background: var(--bg-secondary);
     border-radius: 0.5rem;
     margin-bottom: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 220px);
   }
 
   .card-header {
@@ -171,7 +174,7 @@
   }
 
   .logs-container {
-    max-height: 500px;
+    flex: 1;
     overflow-y: auto;
     font-family: monospace;
     font-size: 0.75rem;

@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { connectionState } from "../stores/websocket";
   import { stats, serviceStatus } from "../stores/data";
+  import { t } from "../i18n";
   import * as api from "../api";
   import type { HealthCheckResult } from "../api";
 
@@ -168,11 +169,11 @@
 </script>
 
 <div class="debug">
-  <h2>Debug & Troubleshooting</h2>
+  <h2>{$t("debug.title")}</h2>
 
   <div class="debug-grid">
     <section class="debug-section">
-      <h3>Connection Status</h3>
+      <h3>{$t("common.status")}</h3>
       <div class="debug-items">
         <div class="debug-item">
           <span class="debug-label">WebSocket</span>
