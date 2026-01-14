@@ -26,6 +26,22 @@ This protects against accidental pushes to production branches and gives the use
 
 ## Priority Guidelines
 
+### Git Commits (HIGH PRIORITY)
+
+**Commit frequently during development.** Don't wait until all work is complete.
+
+1. **Commit after completing a logical unit of work** - feature, bugfix, refactor
+2. **Commit before switching tasks** - Even if incomplete, commit WIP with descriptive message
+3. **Use clear commit messages** - Describe what changed and why
+4. **Never leave uncommitted changes overnight** - Risk of losing work
+
+Example commit workflow:
+```
+feat(dashboard): add IMAP probe endpoint
+feat(dashboard): add port locking to account wizard
+fix(probe): use socket connection instead of auth
+```
+
 ### Documentation Updates (HIGH PRIORITY)
 
 When making changes to the codebase, documentation MUST be reviewed and updated:
@@ -148,6 +164,28 @@ Located in `dashboard/` with separate `package.json`.
 2. Test with `pnpm dashboard:dev`
 3. Build with `pnpm dashboard:build`
 4. Update `docs/dashboard.md` if UI features change
+
+### Browser Testing with Playwright MCP
+
+For end-to-end testing of dashboard features, use Playwright MCP tools:
+
+1. **Start the app**: `pnpm dev` (runs backend with hot reload + serves dashboard)
+2. **Navigate**: Use `mcp__plugin_playwright_playwright__browser_navigate` to open `http://localhost:8085`
+3. **Capture state**: Use `mcp__plugin_playwright_playwright__browser_snapshot` to get accessibility tree
+4. **Interact**: Use `mcp__plugin_playwright_playwright__browser_click`, `browser_type`, `browser_select_option`
+5. **Verify API responses**: Use `mcp__plugin_playwright_playwright__browser_evaluate` for fetch calls
+
+Example workflow:
+```
+1. Start app: pnpm dev
+2. Navigate to dashboard
+3. Click Settings > Email Accounts > Add Account
+4. Fill IMAP host, press Enter to probe
+5. Verify port locking, TLS mode options, OAuth detection
+6. Test TLS mode switching updates port correctly
+```
+
+This is useful for testing complex UI flows like the account wizard, configuration changes, etc.
 
 ## Build & Test Commands
 
