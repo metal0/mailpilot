@@ -18,8 +18,8 @@ export function parseDuration(duration: string): number {
     );
   }
 
-  const value = parseInt(match[1]!, 10);
-  const unit = match[2]!;
+  const value = parseInt(match[1] ?? "0", 10);
+  const unit = match[2] ?? "";
   const multiplier = MULTIPLIERS[unit];
 
   if (multiplier === undefined) {

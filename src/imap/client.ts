@@ -75,11 +75,14 @@ export function createImapClient(options: ImapClientOptions): ImapClient {
 
       await retryIndefinitely(async () => {
         if (config.auth === "oauth2") {
+          if (!config.oauth_client_id || !config.oauth_client_secret || !config.oauth_refresh_token) {
+            throw new Error("OAuth2 auth requires oauth_client_id, oauth_client_secret, and oauth_refresh_token");
+          }
           const provider = providerInfo.type === "gmail" ? "gmail" : "outlook";
           const credentials: OAuthCredentials = {
-            clientId: config.oauth_client_id!,
-            clientSecret: config.oauth_client_secret!,
-            refreshToken: config.oauth_refresh_token!,
+            clientId: config.oauth_client_id,
+            clientSecret: config.oauth_client_secret,
+            refreshToken: config.oauth_refresh_token,
           };
 
           const accessToken = await getAccessToken(provider, credentials);

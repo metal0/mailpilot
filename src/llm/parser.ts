@@ -124,7 +124,7 @@ export const RESPONSE_SCHEMA = `{
     {
       "type": "move" | "spam" | "flag" | "read" | "delete" | "noop",
       "folder": "string (required for move action)",
-      "flags": ["string array (required for flag action, e.g., \"\\\\Flagged\", \"\\\\Seen\")"],
+      "flags": ["string array (required for flag action, e.g., 'Flagged', 'Seen')"],
       "reason": "string (optional, for audit log)"
     }
   ]

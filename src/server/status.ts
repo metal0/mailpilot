@@ -63,7 +63,7 @@ export function incrementAccountErrors(accountName: string): void {
 export function createStatusRouter(serverConfig: ServerConfig): Hono {
   const router = new Hono();
 
-  router.get("/status", async (c) => {
+  router.get("/status", (c) => {
     if (serverConfig.auth_token) {
       const authHeader = c.req.header("Authorization");
       const token = authHeader?.replace("Bearer ", "");

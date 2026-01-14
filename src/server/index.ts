@@ -34,7 +34,7 @@ export function startServer(
   );
 }
 
-export async function stopServer(): Promise<void> {
+export function stopServer(): void {
   if (server) {
     server.close();
     server = null;

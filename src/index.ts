@@ -38,7 +38,7 @@ async function main(): Promise<void> {
 
   onShutdown(async () => {
     await dispatchShutdown("shutdown");
-    await stopServer();
+    stopServer();
     closeDatabase();
   });
 

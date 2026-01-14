@@ -1,0 +1,151 @@
+# OAuth2 Setup Guide
+
+OAuth2 is required for Gmail and Microsoft 365 accounts. This guide covers setup for common providers.
+
+## Gmail OAuth2
+
+### Step 1: Create Google Cloud Project
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing
+3. Enable the Gmail API:
+   - Navigation menu > APIs & Services > Library
+   - Search for "Gmail API" and enable it
+
+### Step 2: Configure OAuth Consent Screen
+
+1. Go to APIs & Services > OAuth consent screen
+2. Select "External" user type
+3. Fill in app information:
+   - App name: "Mailpilot"
+   - User support email: your email
+   - Developer contact: your email
+4. Add scopes:
+   - `https://mail.google.com/` (full Gmail access)
+5. Add your email as a test user
+
+### Step 3: Create OAuth Credentials
+
+1. Go to APIs & Services > Credentials
+2. Create Credentials > OAuth client ID
+3. Application type: Desktop app
+4. Download the JSON file
+
+### Step 4: Get Refresh Token
+
+Use the OAuth Playground or a script to get a refresh token:
+
+**Option A: OAuth Playground**
+1. Go to [OAuth 2.0 Playground](https://developers.google.com/oauthplayground/)
+2. Click gear icon > Use your own OAuth credentials
+3. Enter your Client ID and Secret
+4. Select Gmail API v1 > `https://mail.google.com/`
+5. Authorize APIs
+6. Exchange authorization code for tokens
+7. Copy the refresh token
+
+**Option B: Script**
+```bash
+# Install oauth2-cli or use any OAuth2 tool
+npx oauth2-cli \
+  --client-id YOUR_CLIENT_ID \
+  --client-secret YOUR_CLIENT_SECRET \
+  --auth-url https://accounts.google.com/o/oauth2/auth \
+  --token-url https://oauth2.googleapis.com/token \
+  --scope "https://mail.google.com/"
+```
+
+### Step 5: Configure Mailpilot
+
+```yaml
+accounts:
+  - name: gmail
+    imap:
+      host: imap.gmail.com
+      port: 993
+      auth: oauth2
+      username: you@gmail.com
+      oauth_client_id: ${GMAIL_CLIENT_ID}
+      oauth_client_secret: ${GMAIL_CLIENT_SECRET}
+      oauth_refresh_token: ${GMAIL_REFRESH_TOKEN}
+```
+
+## Microsoft 365 / Outlook OAuth2
+
+### Step 1: Register Azure AD Application
+
+1. Go to [Azure Portal](https://portal.azure.com/)
+2. Navigate to Azure Active Directory > App registrations
+3. New registration:
+   - Name: "Mailpilot"
+   - Supported account types: Accounts in any organizational directory
+   - Redirect URI: `http://localhost` (Web)
+
+### Step 2: Configure API Permissions
+
+1. Go to API permissions
+2. Add permission > Microsoft Graph > Delegated permissions
+3. Add:
+   - `IMAP.AccessAsUser.All`
+   - `offline_access`
+4. Grant admin consent (if required)
+
+### Step 3: Create Client Secret
+
+1. Go to Certificates & secrets
+2. New client secret
+3. Copy the secret value immediately
+
+### Step 4: Get Refresh Token
+
+```bash
+# Request authorization code
+open "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=YOUR_CLIENT_ID&response_type=code&redirect_uri=http://localhost&scope=https://outlook.office.com/IMAP.AccessAsUser.All%20offline_access"
+
+# Exchange code for tokens
+curl -X POST https://login.microsoftonline.com/common/oauth2/v2.0/token \
+  -d "client_id=YOUR_CLIENT_ID" \
+  -d "client_secret=YOUR_CLIENT_SECRET" \
+  -d "code=AUTHORIZATION_CODE" \
+  -d "redirect_uri=http://localhost" \
+  -d "grant_type=authorization_code"
+```
+
+### Step 5: Configure Mailpilot
+
+```yaml
+accounts:
+  - name: outlook
+    imap:
+      host: outlook.office365.com
+      port: 993
+      auth: oauth2
+      username: you@company.com
+      oauth_client_id: ${OUTLOOK_CLIENT_ID}
+      oauth_client_secret: ${OUTLOOK_CLIENT_SECRET}
+      oauth_refresh_token: ${OUTLOOK_REFRESH_TOKEN}
+```
+
+## Token Refresh
+
+Mailpilot automatically refreshes OAuth2 tokens when they expire. The refresh token itself is long-lived but may need to be regenerated if:
+
+- You revoke app access
+- The token expires (typically 90 days for inactive accounts)
+- Security policies force re-authentication
+
+## Troubleshooting
+
+### "Invalid grant" error
+- Refresh token has expired - regenerate it
+- User revoked access - re-authorize
+
+### "Access denied" error
+- Check OAuth scopes are correct
+- Verify app permissions in provider console
+- For Microsoft: may need admin consent
+
+### Connection timeout
+- Verify OAuth credentials are correct
+- Check that IMAP is enabled for the account
+- For Gmail: enable "Less secure app access" is NOT needed with OAuth2

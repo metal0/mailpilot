@@ -9,7 +9,7 @@ export async function ensureFolderExists(
   imapClient: ImapClient,
   folderName: string
 ): Promise<void> {
-  const cacheKey = `${folderName}`;
+  const cacheKey = folderName;
   if (createdFolders.has(cacheKey)) {
     return;
   }

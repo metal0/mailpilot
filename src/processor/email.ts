@@ -64,14 +64,12 @@ function transformParsedMail(parsed: ParsedMail, uid: number): ParsedEmail {
   }
 
   const attachments: AttachmentInfo[] = [];
-  if (parsed.attachments) {
-    for (const att of parsed.attachments) {
-      attachments.push({
-        filename: att.filename ?? "unnamed",
-        contentType: att.contentType,
-        size: att.size,
-      });
-    }
+  for (const att of parsed.attachments) {
+    attachments.push({
+      filename: att.filename ?? "unnamed",
+      contentType: att.contentType,
+      size: att.size,
+    });
   }
 
   logger.debug("Parsed email", {
@@ -99,12 +97,17 @@ function transformParsedMail(parsed: ParsedMail, uid: number): ParsedEmail {
 }
 
 function extractFrom(parsed: ParsedMail): string {
-  if (parsed.from?.value[0]) {
-    const addr = parsed.from.value[0];
-    if (addr.address && addr.name) {
-      return `${addr.name} <${addr.address}>`;
+  const firstAddr = parsed.from?.value[0];
+  if (firstAddr) {
+    if (firstAddr.address && firstAddr.name) {
+      return `${firstAddr.name} <${firstAddr.address}>`;
     }
-    return addr.address ?? addr.name ?? "unknown";
+    if (firstAddr.address) {
+      return firstAddr.address;
+    }
+    if (firstAddr.name) {
+      return firstAddr.name;
+    }
   }
   return "unknown";
 }

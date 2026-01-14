@@ -44,7 +44,7 @@ const webhookEventSchema = z.enum([
 ]);
 
 const webhookConfigSchema = z.object({
-  url: z.string().url(),
+  url: z.url(),
   events: z.array(webhookEventSchema).min(1),
   headers: z.record(z.string(), z.string()).optional(),
 });
@@ -74,7 +74,7 @@ const accountConfigSchema = z.object({
 
 const llmProviderSchema = z.object({
   name: z.string().min(1),
-  api_url: z.string().url(),
+  api_url: z.url(),
   api_key: z.string().optional(),
   default_model: z.string().min(1),
   max_body_tokens: z.number().int().positive().default(4000),

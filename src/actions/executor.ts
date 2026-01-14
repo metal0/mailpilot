@@ -27,7 +27,7 @@ export async function executeAction(ctx: ActionContext): Promise<void> {
   });
 
   switch (action.type) {
-    case "move":
+    case "move": {
       if (!action.folder) {
         logger.warn("Move action missing folder, skipping", { uid });
         break;
@@ -47,6 +47,7 @@ export async function executeAction(ctx: ActionContext): Promise<void> {
       await ensureFolderExists(imapClient, action.folder);
       await moveToFolder(imapClient, folder, uid, action.folder);
       break;
+    }
 
     case "spam":
       await imapClient.markAsSpam(uid, folder);
