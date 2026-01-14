@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { filteredLogs, logLevel, selectedAccount, accountList } from "../stores/data";
+  import { t } from "../i18n";
   import * as api from "../api";
 
   let loading = $state(false);
@@ -47,36 +48,36 @@
 
 <div class="card">
   <div class="card-header">
-    <h2 class="card-title">System Logs</h2>
+    <h2 class="card-title">{$t("logs.title")}</h2>
     <div class="filters">
       <input
         type="text"
         class="search-input"
-        placeholder="Search logs..."
+        placeholder={$t("common.search")}
         bind:value={searchQuery}
       />
       <select class="filter-select" bind:value={$selectedAccount}>
-        <option value={null}>All Accounts</option>
+        <option value={null}>{$t("common.all")} {$t("common.accounts")}</option>
         {#each $accountList as name}
           <option value={name}>{name}</option>
         {/each}
       </select>
       <select class="filter-select" bind:value={$logLevel}>
-        <option value="">All Levels</option>
-        <option value="debug">Debug</option>
-        <option value="info">Info</option>
-        <option value="warn">Warn</option>
-        <option value="error">Error</option>
+        <option value="">{$t("common.all")}</option>
+        <option value="debug">{$t("logs.debug")}</option>
+        <option value="info">{$t("logs.info")}</option>
+        <option value="warn">{$t("logs.warn")}</option>
+        <option value="error">{$t("logs.error")}</option>
       </select>
-      <button class="btn btn-sm" onclick={loadLogs}>Refresh</button>
+      <button class="btn btn-sm" onclick={loadLogs}>{$t("common.refresh")}</button>
     </div>
   </div>
 
   <div class="logs-container">
     {#if loading}
-      <div class="loading">Loading logs...</div>
+      <div class="loading">{$t("common.loading")}</div>
     {:else if searchedLogs.length === 0}
-      <div class="empty">{searchQuery ? "No matching logs found" : "No logs available"}</div>
+      <div class="empty">{$t("logs.noLogs")}</div>
     {:else}
       {#each searchedLogs as log}
         <div class="log-entry {getLevelClass(log.level)}">

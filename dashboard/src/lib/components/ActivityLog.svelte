@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { filteredActivity, searchQuery, selectedAccount, accountList, type AuditEntry } from "../stores/data";
+  import { t } from "../i18n";
   import * as api from "../api";
   import EmailPreview from "./EmailPreview.svelte";
 
@@ -82,45 +83,45 @@
 
 <div class="card">
   <div class="card-header">
-    <h2 class="card-title">Activity Log</h2>
+    <h2 class="card-title">{$t("activity.title")}</h2>
     <div class="filters">
       <input
         type="text"
         class="search-input"
-        placeholder="Search by subject or message ID..."
+        placeholder={$t("activity.searchPlaceholder")}
         bind:value={$searchQuery}
       />
       <select class="filter-select" bind:value={$selectedAccount}>
-        <option value={null}>All Accounts</option>
+        <option value={null}>{$t("common.all")} {$t("common.accounts")}</option>
         {#each $accountList as name}
           <option value={name}>{name}</option>
         {/each}
       </select>
       <select class="filter-select" bind:value={actionTypeFilter}>
-        <option value="">All Actions</option>
+        <option value="">{$t("common.all")} {$t("common.actions")}</option>
         {#each actionTypes as type}
           <option value={type}>{type}</option>
         {/each}
       </select>
       <a href={api.exportCsvUrl({ accountName: $selectedAccount ?? undefined })} class="btn btn-secondary btn-sm">
-        Export CSV
+        {$t("activity.exportCsv")}
       </a>
     </div>
   </div>
 
   <div class="table-container">
     {#if loading}
-      <div class="loading">Loading...</div>
+      <div class="loading">{$t("common.loading")}</div>
     {:else if $filteredActivity.length === 0}
-      <div class="empty">No activity yet</div>
+      <div class="empty">{$t("activity.noActivity")}</div>
     {:else}
       <table>
         <thead>
           <tr>
-            <th>Time</th>
-            <th>Account</th>
-            <th>Subject</th>
-            <th>Actions</th>
+            <th>{$t("common.time")}</th>
+            <th>{$t("common.account")}</th>
+            <th>{$t("activity.subject")}</th>
+            <th>{$t("common.actions")}</th>
             <th></th>
           </tr>
         </thead>
@@ -144,7 +145,7 @@
                 {/each}
               </td>
               <td>
-                <button class="btn-icon" onclick={() => openPreview(entry)} title="Preview">
+                <button class="btn-icon" onclick={() => openPreview(entry)} title={$t("activity.preview")}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                     <circle cx="12" cy="12" r="3" />
@@ -161,11 +162,11 @@
   {#if totalPages > 1}
     <div class="pagination">
       <button class="btn btn-sm" disabled={page <= 1} onclick={() => { page--; loadActivity(); }}>
-        Previous
+        &laquo;
       </button>
-      <span class="page-info">Page {page} of {totalPages}</span>
+      <span class="page-info">{$t("activity.page")} {page} {$t("activity.of")} {totalPages}</span>
       <button class="btn btn-sm" disabled={page >= totalPages} onclick={() => { page++; loadActivity(); }}>
-        Next
+        &raquo;
       </button>
     </div>
   {/if}

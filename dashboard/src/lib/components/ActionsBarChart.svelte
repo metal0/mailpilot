@@ -1,5 +1,6 @@
 <script lang="ts">
   import { stats } from "../stores/data";
+  import { t } from "../i18n";
 
   const actionColors: Record<string, string> = {
     move: "#3b82f6",
@@ -21,7 +22,7 @@
 </script>
 
 <div class="chart-card">
-  <h3>Actions by Type</h3>
+  <h3>{$t("chart.actionsByType")}</h3>
   {#if $stats?.actionBreakdown && $stats.actionBreakdown.length > 0}
     <div class="bar-chart">
       {#each $stats.actionBreakdown as action}
@@ -39,8 +40,7 @@
     </div>
   {:else}
     <div class="empty-state">
-      <p>No actions recorded yet</p>
-      <span>Process emails to see action breakdown</span>
+      <p>{$t("chart.noData")}</p>
     </div>
   {/if}
 </div>
@@ -109,13 +109,8 @@
   }
 
   .empty-state p {
-    margin: 0 0 0.25rem;
+    margin: 0;
     font-size: 0.75rem;
     color: var(--text-secondary);
-  }
-
-  .empty-state span {
-    font-size: 0.625rem;
-    color: var(--text-muted);
   }
 </style>
