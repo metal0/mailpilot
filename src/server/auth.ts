@@ -122,7 +122,7 @@ export function createSessionMiddleware(sessionTtl: string) {
         httpOnly: true,
         secure: false,
         sameSite: "Strict",
-        path: "/dashboard",
+        path: "/",
         maxAge: 60 * 60 * 24,
       });
     }
@@ -145,21 +145,21 @@ export function setSessionCookie(c: Context, sessionId: string): void {
     httpOnly: true,
     secure: false,
     sameSite: "Lax",
-    path: "/dashboard",
+    path: "/",
     maxAge: 60 * 60 * 24,
   });
 }
 
 export function clearSessionCookie(c: Context): void {
   deleteCookie(c, SESSION_COOKIE, {
-    path: "/dashboard",
+    path: "/",
   });
 }
 
 export function requireAuth(c: Context): AuthContext | Response {
   const auth = getAuthContext(c);
   if (!auth) {
-    return c.redirect("/dashboard/login");
+    return c.redirect("/login");
   }
   return auth;
 }
