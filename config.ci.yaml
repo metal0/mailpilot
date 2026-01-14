@@ -1,0 +1,18 @@
+# CI test configuration - used to verify the Docker image starts correctly
+# This config is intentionally minimal and won't actually process emails
+
+accounts:
+  - name: ci-test
+    host: localhost
+    port: 993
+    tls: true
+    username: test@example.com
+    password: not-a-real-password
+
+llm:
+  providers:
+    - name: ci-test
+      type: openai
+      base_url: https://api.openai.com/v1
+      api_key: sk-not-a-real-key
+      model: gpt-4o-mini

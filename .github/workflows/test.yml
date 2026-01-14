@@ -47,3 +47,41 @@ jobs:
 
       - name: Unit tests
         run: pnpm test:unit
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: mailpilot:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test startup
+        run: |
+          docker run -d --name mailpilot-test \
+            -v ${{ github.workspace }}/config.ci.yaml:/app/config.yaml:ro \
+            mailpilot:test
+
+          sleep 5
+          docker logs mailpilot-test 2>&1 | tee startup.log
+
+          if grep -q "Configuration loaded successfully" startup.log; then
+            echo "✓ Startup test passed"
+          else
+            echo "✗ Startup test failed"
+            cat startup.log
+            exit 1
+          fi
+
+          docker stop mailpilot-test
+          docker rm mailpilot-test
