@@ -10,7 +10,6 @@ import {
 import { getProcessedCount } from "../storage/processed.js";
 import {
   getActionCount,
-  getAuditEntries,
   getActionBreakdown,
   getAuditEntriesPaginated,
   exportAuditLog,
@@ -24,15 +23,8 @@ import {
   checkRateLimit,
   recordFailedLogin,
   clearFailedLogins,
-  validateCsrf,
-  getCsrfToken,
   requireAuthOrApiKey,
 } from "./auth.js";
-import {
-  renderSetupPage,
-  renderLoginPage,
-  renderDashboard,
-} from "./templates.js";
 import { getAccountStatuses, getUptime } from "./status.js";
 import { getDetailedProviderStats } from "../llm/providers.js";
 import { getRecentLogs, type LogLevel } from "../utils/logger.js";
@@ -60,151 +52,101 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
 
   router.use("*", createSessionMiddleware(sessionTtl));
 
-  router.get("/dashboard", (c) => {
-    if (getUserCount() === 0) {
-      return c.redirect("/dashboard/setup");
-    }
-
+  // Auth status endpoint - used by SPA to check authentication state
+  router.get("/dashboard/api/auth", (c) => {
     const auth = getAuthContext(c);
+    const needsSetup = getUserCount() === 0;
+
+    if (needsSetup) {
+      return c.json({ authenticated: false, needsSetup: true });
+    }
+
     if (!auth) {
-      return c.redirect("/dashboard/login");
+      return c.json({ authenticated: false, needsSetup: false });
     }
 
-    const accounts = getAccountStatuses();
-    const totals = {
-      emailsProcessed: getProcessedCount(),
-      actionsTaken: getActionCount(),
-      errors: accounts.reduce((sum, a) => sum + a.errors, 0),
-    };
-
-    return c.html(
-      renderDashboard({
-        username: auth.user.username,
-        uptime: getUptime(),
-        totals,
-        accounts,
-        recentActivity: getAuditEntries(undefined, 20),
-      })
-    );
+    return c.json({
+      authenticated: true,
+      needsSetup: false,
+      user: { username: auth.user.username },
+    });
   });
 
-  router.get("/dashboard/setup", (c) => {
-    if (getUserCount() > 0) {
-      return c.json({ error: "Setup already completed" }, 403);
-    }
-    const csrfToken = getCsrfToken(c);
-    return c.html(renderSetupPage({ csrfToken }));
-  });
-
-  router.post("/dashboard/setup", async (c) => {
+  // Setup endpoint - create first admin account
+  router.post("/dashboard/api/setup", async (c) => {
     if (getUserCount() > 0) {
       return c.json({ error: "Setup already completed" }, 403);
     }
 
-    const body = await c.req.parseBody();
-    const username = body["username"] as string;
-    const password = body["password"] as string;
-    const confirm = body["confirm"] as string;
-    const csrfToken = body["_csrf"] as string;
-
-    if (!validateCsrf(c, csrfToken)) {
-      return c.html(renderSetupPage({ error: "Invalid request. Please try again.", csrfToken: getCsrfToken(c) }));
-    }
+    const body = await c.req.json<{ username: string; password: string; confirm: string }>();
+    const { username, password, confirm } = body;
 
     if (!username || username.length < 3) {
-      return c.html(renderSetupPage({ error: "Username must be at least 3 characters", csrfToken: getCsrfToken(c) }));
+      return c.json({ error: "Username must be at least 3 characters" }, 400);
     }
 
     if (!password || password.length < 8) {
-      return c.html(renderSetupPage({ error: "Password must be at least 8 characters", csrfToken: getCsrfToken(c) }));
+      return c.json({ error: "Password must be at least 8 characters" }, 400);
     }
 
     if (password !== confirm) {
-      return c.html(renderSetupPage({ error: "Passwords do not match", csrfToken: getCsrfToken(c) }));
+      return c.json({ error: "Passwords do not match" }, 400);
     }
 
     const user = await createUser(username, password);
     const session = createSession(user.id, sessionTtl);
     setSessionCookie(c, session.id);
 
-    return c.redirect("/dashboard");
+    return c.json({ success: true, user: { username: user.username } });
   });
 
-  router.get("/dashboard/login", (c) => {
+  // Login endpoint
+  router.post("/dashboard/api/login", async (c) => {
     if (getUserCount() === 0) {
-      return c.redirect("/dashboard/setup");
-    }
-
-    const auth = getAuthContext(c);
-    if (auth) {
-      return c.redirect("/dashboard");
-    }
-
-    const csrfToken = getCsrfToken(c);
-    return c.html(renderLoginPage({ csrfToken }));
-  });
-
-  router.post("/dashboard/login", async (c) => {
-    if (getUserCount() === 0) {
-      return c.redirect("/dashboard/setup");
-    }
-
-    const body = await c.req.parseBody();
-    const username = body["username"] as string;
-    const password = body["password"] as string;
-    const csrfToken = body["_csrf"] as string;
-
-    // CSRF validation
-    if (!validateCsrf(c, csrfToken)) {
-      return c.html(renderLoginPage({ error: "Invalid request. Please try again.", csrfToken: getCsrfToken(c), username }));
+      return c.json({ error: "Setup required", needsSetup: true }, 400);
     }
 
     // Rate limiting
     const rateLimit = checkRateLimit(c);
     if (!rateLimit.allowed) {
       const minutes = Math.ceil((rateLimit.retryAfter ?? 900) / 60);
-      return c.html(renderLoginPage({
+      return c.json({
         error: `Too many login attempts. Try again in ${minutes} minutes.`,
-        csrfToken: getCsrfToken(c),
-        username,
-      }));
+        retryAfter: rateLimit.retryAfter,
+      }, 429);
     }
 
+    const body = await c.req.json<{ username: string; password: string }>();
+    const { username, password } = body;
+
     if (!username || !password) {
-      return c.html(renderLoginPage({
-        error: "Please enter username and password",
-        csrfToken: getCsrfToken(c),
-        username,
-      }));
+      return c.json({ error: "Username and password required" }, 400);
     }
 
     const user = await verifyPassword(username, password);
     if (!user) {
       recordFailedLogin(c);
-      return c.html(renderLoginPage({
-        error: "Invalid username or password",
-        csrfToken: getCsrfToken(c),
-        username,
-      }));
+      return c.json({ error: "Invalid username or password" }, 401);
     }
 
     clearFailedLogins(c);
     const session = createSession(user.id, sessionTtl);
     setSessionCookie(c, session.id);
 
-    return c.redirect("/dashboard");
+    return c.json({ success: true, user: { username: user.username } });
   });
 
-  router.post("/dashboard/logout", (c) => {
+  // Logout endpoint
+  router.post("/dashboard/api/logout", (c) => {
     const auth = getAuthContext(c);
     if (auth) {
       deleteSession(auth.sessionId);
     }
     clearSessionCookie(c);
-    return c.redirect("/dashboard/login");
+    return c.json({ success: true });
   });
 
-  // API endpoints with API key support
+  // Stats endpoint
   router.get("/dashboard/api/stats", requireAuthOrApiKey("read:stats"), (c) => {
     const accounts = getAccountStatuses();
     const pausedAccountsList = getPausedAccounts();

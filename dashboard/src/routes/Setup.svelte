@@ -1,23 +1,11 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { setup } from "../lib/stores/auth";
 
   let username = $state("");
   let password = $state("");
   let confirm = $state("");
   let loading = $state(false);
   let error = $state<string | null>(null);
-  let csrfToken = $state("");
-
-  onMount(async () => {
-    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
-    if (csrfMeta) {
-      csrfToken = csrfMeta.getAttribute("content") ?? "";
-    }
-    if (!csrfToken) {
-      const match = document.cookie.match(/csrf_token=([^;]+)/);
-      csrfToken = match?.[1] ?? "";
-    }
-  });
 
   async function handleSubmit(e: Event) {
     e.preventDefault();
@@ -40,24 +28,12 @@
     loading = true;
     error = null;
 
-    try {
-      const res = await fetch("/dashboard/setup", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ username, password, confirm, _csrf: csrfToken }),
-        redirect: "manual",
-      });
+    const result = await setup(username, password, confirm);
 
-      if (res.type === "opaqueredirect" || res.status === 302) {
-        window.location.reload();
-      } else {
-        const text = await res.text();
-        const errorMatch = text.match(/class="error">([^<]+)/);
-        error = errorMatch?.[1] ?? "Setup failed";
-        loading = false;
-      }
-    } catch (e) {
-      error = e instanceof Error ? e.message : "Setup failed";
+    if (result.success) {
+      window.location.reload();
+    } else {
+      error = result.error ?? "Setup failed";
       loading = false;
     }
   }
@@ -79,8 +55,6 @@
     {/if}
 
     <form onsubmit={handleSubmit}>
-      <input type="hidden" name="_csrf" value={csrfToken} />
-
       <div class="form-group">
         <label for="username">Username</label>
         <input

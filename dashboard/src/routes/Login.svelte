@@ -1,26 +1,10 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { login } from "../lib/stores/auth";
-  import { addToast } from "../lib/stores/toast";
 
   let username = $state("");
   let password = $state("");
   let loading = $state(false);
   let error = $state<string | null>(null);
-  let csrfToken = $state("");
-
-  onMount(async () => {
-    // Get CSRF token from a meta tag or cookie
-    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
-    if (csrfMeta) {
-      csrfToken = csrfMeta.getAttribute("content") ?? "";
-    }
-    // Fallback: try to get from cookie
-    if (!csrfToken) {
-      const match = document.cookie.match(/csrf_token=([^;]+)/);
-      csrfToken = match?.[1] ?? "";
-    }
-  });
 
   async function handleSubmit(e: Event) {
     e.preventDefault();
@@ -33,7 +17,7 @@
     loading = true;
     error = null;
 
-    const result = await login(username, password, csrfToken);
+    const result = await login(username, password);
 
     if (result.success) {
       window.location.reload();
@@ -60,8 +44,6 @@
     {/if}
 
     <form onsubmit={handleSubmit}>
-      <input type="hidden" name="_csrf" value={csrfToken} />
-
       <div class="form-group">
         <label for="username">Username</label>
         <input

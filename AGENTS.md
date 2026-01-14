@@ -1,0 +1,238 @@
+# AI/LLM Integration in Mailpilot
+
+This document describes how Mailpilot uses AI/LLM services for email classification and processing.
+
+## Overview
+
+Mailpilot uses LLM APIs to classify incoming emails and determine actions (move to folder, flag, mark as read, delete, etc.). The system is provider-agnostic and supports any OpenAI-compatible API.
+
+## Supported Providers
+
+| Provider | API Format | Models |
+|----------|------------|--------|
+| OpenAI | OpenAI Chat Completions | gpt-4o, gpt-4o-mini, gpt-4-turbo |
+| Anthropic | OpenAI-compatible | claude-3-opus, claude-3-sonnet, claude-3-haiku |
+| Azure OpenAI | OpenAI-compatible | gpt-4, gpt-35-turbo |
+| Ollama | OpenAI-compatible | llama3, mistral, mixtral |
+| Any OpenAI-compatible | OpenAI Chat Completions | varies |
+
+## Configuration
+
+```yaml
+llm_providers:
+  - name: openai
+    api_url: https://api.openai.com/v1/chat/completions
+    api_key: ${OPENAI_API_KEY}
+    default_model: gpt-4o-mini
+    max_body_tokens: 4000      # Max tokens for email body
+    max_thread_tokens: 2000    # Max tokens for thread context
+    rate_limit_rpm: 60         # Requests per minute limit
+
+accounts:
+  - name: personal
+    llm:
+      provider: openai         # Reference to provider above
+      model: gpt-4o-mini       # Override default model
+```
+
+## Classification Flow
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  IMAP Fetch     │────▶│  Build Prompt    │────▶│  LLM Request    │
+│  (email data)   │     │  (context + rules)│    │  (classification)│
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+                                                          │
+                                                          ▼
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  Execute Action │◀────│  Parse Response  │◀────│  JSON Response  │
+│  (move/flag/etc)│     │  (validate JSON) │     │  (actions array)│
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+```
+
+## Prompt Structure
+
+The prompt sent to the LLM contains:
+
+1. **Base Prompt**: User-defined classification rules
+2. **Folder Context**: Available folders (predefined or existing)
+3. **Response Schema**: Required JSON format
+4. **Email Data**: From, Subject, Date, Body, Attachment names
+
+Example prompt structure:
+```
+[Your classification rules from config]
+
+---
+
+## Allowed Folders
+You may ONLY move emails to these folders:
+- Work
+- Personal
+- Finance
+- Archive
+
+## Response Format
+You MUST respond with valid JSON in this exact format:
+{
+  "actions": [
+    { "type": "move", "folder": "FolderName" },
+    { "type": "flag", "flags": ["Important"] }
+  ],
+  "reasoning": "Brief explanation"
+}
+
+---
+
+## Email to Classify
+
+**From:** sender@example.com
+**Subject:** Invoice #12345
+**Date:** 2026-01-14T12:00:00Z
+**Attachments:** invoice.pdf
+
+**Body:**
+Please find attached the invoice for January...
+```
+
+## Response Schema
+
+The LLM must return valid JSON with an `actions` array:
+
+```typescript
+interface LlmResponse {
+  actions: LlmAction[];
+  reasoning?: string;
+}
+
+type LlmAction =
+  | { type: "move"; folder: string }
+  | { type: "spam" }
+  | { type: "flag"; flags: string[] }
+  | { type: "read" }
+  | { type: "delete" }
+  | { type: "noop"; reason?: string };
+```
+
+## Rate Limiting
+
+Mailpilot enforces rate limits per provider:
+
+- **RPM Limit**: Configurable requests per minute
+- **429 Handling**: Respects `Retry-After` header
+- **Exponential Backoff**: 3 retries with increasing delays
+- **Queue**: Requests wait if limit reached
+
+## Token Management
+
+Email content is truncated to fit within token limits:
+
+- **Body**: Truncated to `max_body_tokens` (default: 4000 chars ≈ 1000 tokens)
+- **Thread Context**: Truncated to `max_thread_tokens` (default: 2000 chars)
+- **Truncation**: Breaks at word boundaries, adds `[Content truncated...]`
+
+## Error Handling
+
+| Error | Handling |
+|-------|----------|
+| API timeout | Retry up to 3 times with backoff |
+| Rate limit (429) | Wait for Retry-After, then retry |
+| Invalid JSON response | Attempt recovery parsing, fallback to noop |
+| Network error | Retry with exponential backoff |
+| Provider unavailable | Log error, skip email processing |
+
+## PGP Encrypted Emails
+
+Emails detected as PGP encrypted are automatically skipped:
+
+- Checks `Content-Type: multipart/encrypted`
+- Checks for `application/pgp-encrypted` attachments
+- Checks for `-----BEGIN PGP MESSAGE-----` markers
+
+Skipped emails are logged with action `noop` and reason "PGP encrypted email".
+
+## Dry Run Mode
+
+Set `dry_run: true` in config to:
+- Process emails through classification
+- Log what actions would be taken
+- Skip actual action execution
+
+Useful for testing classification rules before enabling.
+
+## Audit Logging
+
+All classifications are logged to SQLite:
+
+```sql
+SELECT * FROM audit_log ORDER BY created_at DESC;
+```
+
+Fields: message_id, account_name, actions (JSON), provider, model, subject (if enabled), timestamp.
+
+## Writing Effective Prompts
+
+### Do
+- Be specific about folder purposes
+- Include examples of email types
+- Define clear rules for edge cases
+- Use consistent terminology
+
+### Don't
+- Include folder lists (injected automatically)
+- Include JSON schema (injected automatically)
+- Over-complicate with too many rules
+- Use ambiguous language
+
+### Example Base Prompt
+
+```yaml
+default_prompt: |
+  You are an email classifier for a software developer.
+
+  Classification rules:
+  - Receipts, invoices, order confirmations → Finance
+  - GitHub notifications, CI/CD alerts → Development
+  - Meeting invites, calendar updates → Calendar
+  - Newsletters, marketing emails → flag as "Newsletter", no move
+  - Spam, phishing attempts → Spam
+  - Personal correspondence from known contacts → Personal
+  - Everything else → leave in INBOX (noop)
+
+  When uncertain, prefer noop over incorrect classification.
+```
+
+## Monitoring
+
+### Dashboard Stats
+- Emails processed count
+- Actions taken breakdown
+- Provider request counts
+- Rate limit status
+
+### Health Check
+```bash
+curl http://localhost:8080/health
+```
+
+### Provider Stats
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/status
+```
+
+## Troubleshooting
+
+### LLM Returns Invalid JSON
+- Check if response is being truncated (increase `max_tokens` on provider)
+- Verify prompt isn't too long
+- Check provider logs for errors
+
+### Rate Limiting Issues
+- Reduce `rate_limit_rpm` in config
+- Add delays between account processing
+- Use cheaper/faster model for high-volume accounts
+
+### Classification Accuracy
+- Review audit log for patterns
+- Refine prompt with specific examples
+- Consider using more capable model
