@@ -112,16 +112,13 @@ export function startServer(
 
       // Handle WebSocket upgrade
       if (dashboardConfig?.enabled && server) {
-        const httpServer = (server as unknown as { server?: { on: (event: string, handler: (...args: unknown[]) => void) => void } }).server;
-        if (httpServer) {
-          httpServer.on("upgrade", (request: unknown, socket: unknown, head: unknown) => {
-            const req = request as import("node:http").IncomingMessage;
-            if (req.url === "/ws") {
-              handleUpgrade(req, socket as import("node:stream").Duplex, head as Buffer);
-            }
-          });
-          logger.info("WebSocket upgrade handler registered", { path: "/ws" });
-        }
+        server.on("upgrade", (request: unknown, socket: unknown, head: unknown) => {
+          const req = request as import("node:http").IncomingMessage;
+          if (req.url === "/ws") {
+            handleUpgrade(req, socket as import("node:stream").Duplex, head as Buffer);
+          }
+        });
+        logger.info("WebSocket upgrade handler registered", { path: "/ws" });
       }
     }
   );

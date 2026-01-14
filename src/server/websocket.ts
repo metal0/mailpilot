@@ -102,11 +102,17 @@ function authenticateRequest(request: IncomingMessage): AuthResult {
 
   // Try session cookie auth
   const cookieHeader = request.headers.cookie;
+  logger.debug("WebSocket auth attempt", { hasCookie: !!cookieHeader });
+
   if (cookieHeader) {
     const cookies = parseCookie(cookieHeader);
     const sessionId = cookies[SESSION_COOKIE];
+    logger.debug("WebSocket session check", { hasSessionId: !!sessionId });
+
     if (sessionId) {
       const session = getSession(sessionId);
+      logger.debug("WebSocket session lookup", { sessionFound: !!session });
+
       if (session) {
         const user = getUserById(session.userId);
         if (user) {
