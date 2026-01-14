@@ -185,6 +185,8 @@ accounts:
     prompt_file: ./prompts/custom.md
 ```
 
+See [Prompt System](./prompt-system.md) for details on how prompts are constructed and best practices for writing classification rules.
+
 ## Duration Format
 
 All duration fields use human-readable strings:

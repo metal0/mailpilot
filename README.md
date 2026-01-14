@@ -183,6 +183,21 @@ The LLM can return these actions:
 | `delete` | Delete message | - |
 | `noop` | Take no action | - |
 
+### Prompt System
+
+Mailpilot automatically constructs prompts by combining:
+
+1. **Your base prompt** - Classification rules from `default_prompt` or `prompt_override`
+2. **Folder information** - Injected based on folder mode:
+   - Predefined: list of allowed folders
+   - Auto-create: existing folders (to prevent duplicates)
+3. **Response schema** - JSON format the LLM must follow
+4. **Email content** - From, Subject, Date, Body, Attachments
+
+Your prompt should focus on classification logic - don't include folder lists or JSON schemas as these are injected automatically.
+
+See [docs/prompt-system.md](docs/prompt-system.md) for detailed documentation on writing effective prompts.
+
 ## API Endpoints
 
 ### Health Check
