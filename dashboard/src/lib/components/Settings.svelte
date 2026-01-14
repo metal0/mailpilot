@@ -60,8 +60,25 @@
   interface DashboardConfig {
     enabled?: boolean;
     session_ttl?: string;
-    api_keys?: { name: string; key: string; permissions: string[] }[];
+    api_keys?: ApiKey[];
   }
+
+  interface ApiKey {
+    name: string;
+    key: string;
+    permissions: string[];
+  }
+
+  const API_KEY_PERMISSIONS = [
+    { value: "read:stats", label: "Read Stats", description: "View dashboard statistics" },
+    { value: "read:activity", label: "Read Activity", description: "View activity log" },
+    { value: "read:logs", label: "Read Logs", description: "View system logs" },
+    { value: "read:export", label: "Read Export", description: "Export data" },
+    { value: "read:*", label: "Read All", description: "All read permissions" },
+    { value: "write:accounts", label: "Write Accounts", description: "Manage email accounts" },
+    { value: "write:*", label: "Write All", description: "All write permissions" },
+    { value: "*", label: "Full Access", description: "All permissions" },
+  ] as const;
 
   interface AntivirusConfig {
     enabled?: boolean;
@@ -139,6 +156,9 @@
   // Editing state
   let editingAccount = $state<Account | null>(null);
   let editingProvider = $state<LlmProvider | null>(null);
+  let editingApiKey = $state<ApiKey | null>(null);
+  let editingApiKeyIndex = $state<number | null>(null);
+  let showApiKey = $state<string | null>(null);
 
   // IMAP test state
   let testingConnection = $state(false);
@@ -405,6 +425,71 @@
       config.llm_providers = config.llm_providers.filter(p => p.name !== name);
       config = { ...config };
     }
+  }
+
+  function generateApiKey(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const prefix = 'mp_';
+    let key = prefix;
+    for (let i = 0; i < 32; i++) {
+      key += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return key;
+  }
+
+  function addApiKey() {
+    editingApiKey = {
+      name: "",
+      key: generateApiKey(),
+      permissions: ["read:stats"],
+    };
+    editingApiKeyIndex = null;
+  }
+
+  function editApiKey(apiKey: ApiKey, index: number) {
+    editingApiKey = JSON.parse(JSON.stringify(apiKey));
+    editingApiKeyIndex = index;
+  }
+
+  function saveApiKey() {
+    if (!config || !editingApiKey) return;
+
+    config.dashboard = config.dashboard ?? { api_keys: [] };
+    config.dashboard.api_keys = config.dashboard.api_keys ?? [];
+
+    if (editingApiKeyIndex !== null) {
+      config.dashboard.api_keys[editingApiKeyIndex] = editingApiKey;
+    } else {
+      config.dashboard.api_keys.push(editingApiKey);
+    }
+    config = { ...config };
+    editingApiKey = null;
+    editingApiKeyIndex = null;
+  }
+
+  function removeApiKey(index: number) {
+    if (!config?.dashboard?.api_keys) return;
+    const apiKey = config.dashboard.api_keys[index];
+    if (confirm($t("settings.apiKeys.removeConfirm", { name: apiKey.name }))) {
+      config.dashboard.api_keys.splice(index, 1);
+      config = { ...config };
+    }
+  }
+
+  function toggleApiKeyPermission(permission: string) {
+    if (!editingApiKey) return;
+
+    const idx = editingApiKey.permissions.indexOf(permission);
+    if (idx >= 0) {
+      editingApiKey.permissions.splice(idx, 1);
+    } else {
+      editingApiKey.permissions.push(permission);
+    }
+    editingApiKey = { ...editingApiKey };
+  }
+
+  function copyApiKey(key: string) {
+    navigator.clipboard.writeText(key);
   }
 
   async function testImapConnection() {
@@ -1102,6 +1187,145 @@
                 <input type="text" bind:value={config.dashboard.session_ttl} placeholder="24h" />
               </label>
             </div>
+
+            <h4>{$t("settings.apiKeys.sectionTitle")}</h4>
+            <p class="help-text api-keys-help">{$t("settings.apiKeys.description")}</p>
+
+            {#if editingApiKey}
+              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+              <div class="modal-overlay" onclick={() => { editingApiKey = null; editingApiKeyIndex = null; }}>
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                <div class="modal" onclick={(e) => e.stopPropagation()}>
+                  <h3>{editingApiKeyIndex !== null ? $t("settings.apiKeys.editApiKey") : $t("settings.apiKeys.newApiKey")}</h3>
+
+                  <div class="form-group">
+                    <label>
+                      <span class="label-text">{$t("settings.apiKeys.name")}</span>
+                      <input type="text" bind:value={editingApiKey.name} placeholder="My Integration" />
+                    </label>
+                  </div>
+
+                  <div class="form-group">
+                    <label>
+                      <span class="label-text">{$t("settings.apiKeys.key")}</span>
+                      <div class="api-key-input-row">
+                        <input
+                          type="text"
+                          value={editingApiKey.key}
+                          readonly
+                          class="api-key-input"
+                        />
+                        <button
+                          class="btn btn-secondary btn-sm"
+                          onclick={() => { editingApiKey!.key = generateApiKey(); editingApiKey = { ...editingApiKey! }; }}
+                          title={$t("settings.apiKeys.regenerate")}
+                        >
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6"/>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                          </svg>
+                        </button>
+                        <button
+                          class="btn btn-secondary btn-sm"
+                          onclick={() => copyApiKey(editingApiKey!.key)}
+                          title={$t("settings.apiKeys.copy")}
+                        >
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                          </svg>
+                        </button>
+                      </div>
+                      <p class="help-text">{$t("settings.apiKeys.keyNote")}</p>
+                    </label>
+                  </div>
+
+                  <div class="form-group">
+                    <span class="label-text">{$t("settings.apiKeys.permissions")}</span>
+                    <div class="permissions-grid">
+                      {#each API_KEY_PERMISSIONS as perm}
+                        <label class="permission-item">
+                          <input
+                            type="checkbox"
+                            checked={editingApiKey.permissions.includes(perm.value)}
+                            onchange={() => toggleApiKeyPermission(perm.value)}
+                          />
+                          <span class="permission-label">
+                            <strong>{perm.label}</strong>
+                            <span class="permission-desc">{perm.description}</span>
+                          </span>
+                        </label>
+                      {/each}
+                    </div>
+                  </div>
+
+                  <div class="modal-actions">
+                    <button class="btn btn-secondary" onclick={() => { editingApiKey = null; editingApiKeyIndex = null; }}>{$t("common.cancel")}</button>
+                    <button class="btn btn-primary" onclick={saveApiKey} disabled={!editingApiKey.name}>{$t("settings.apiKeys.saveApiKey")}</button>
+                  </div>
+                </div>
+              </div>
+            {/if}
+
+            <div class="section-header api-keys-header">
+              <span></span>
+              <button class="btn btn-secondary btn-sm" onclick={addApiKey}>+ {$t("settings.apiKeys.add")}</button>
+            </div>
+
+            {#if config.dashboard?.api_keys && config.dashboard.api_keys.length > 0}
+              <div class="items-list">
+                {#each config.dashboard.api_keys as apiKey, index}
+                  <div class="list-item api-key-item">
+                    <div class="item-info">
+                      <strong>{apiKey.name}</strong>
+                      <div class="api-key-meta">
+                        <span class="api-key-value" class:blurred={showApiKey !== apiKey.key}>
+                          {showApiKey === apiKey.key ? apiKey.key : apiKey.key.slice(0, 8) + '••••••••'}
+                        </span>
+                        <button
+                          class="btn-icon-tiny"
+                          onclick={() => showApiKey = showApiKey === apiKey.key ? null : apiKey.key}
+                          title={showApiKey === apiKey.key ? $t("settings.apiKeys.hide") : $t("settings.apiKeys.show")}
+                        >
+                          {#if showApiKey === apiKey.key}
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                              <line x1="1" y1="1" x2="23" y2="23"/>
+                            </svg>
+                          {:else}
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                              <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                          {/if}
+                        </button>
+                        <button
+                          class="btn-icon-tiny"
+                          onclick={() => copyApiKey(apiKey.key)}
+                          title={$t("settings.apiKeys.copy")}
+                        >
+                          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                          </svg>
+                        </button>
+                      </div>
+                      <span class="item-meta permissions-meta">
+                        {apiKey.permissions.length} {apiKey.permissions.length === 1 ? 'permission' : 'permissions'}
+                      </span>
+                    </div>
+                    <div class="item-actions">
+                      <button class="btn btn-sm" onclick={() => editApiKey(apiKey, index)}>{$t("common.edit")}</button>
+                      <button class="btn btn-sm btn-danger" onclick={() => removeApiKey(index)}>{$t("common.remove")}</button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <div class="empty-state">
+                <p>{$t("settings.apiKeys.noApiKeys")}</p>
+              </div>
+            {/if}
           </section>
         {/if}
       </div>
@@ -1697,6 +1921,150 @@
     margin-top: 1.5rem;
     padding-top: 1.5rem;
     border-top: 1px solid var(--border-color);
+  }
+
+  /* API Keys Section */
+  .api-keys-help {
+    margin: 0 0 1rem;
+    color: var(--text-secondary);
+  }
+
+  .api-keys-header {
+    margin-bottom: 0.75rem;
+  }
+
+  .api-key-input-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .api-key-input {
+    flex: 1;
+    font-family: monospace;
+    font-size: 0.8125rem;
+  }
+
+  .permissions-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .permission-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .permission-item:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .permission-item input[type="checkbox"] {
+    margin-top: 0.125rem;
+  }
+
+  .permission-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .permission-label strong {
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  .permission-desc {
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+  }
+
+  .api-key-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .api-key-item .item-info {
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .api-key-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .api-key-value {
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    transition: filter 0.15s;
+  }
+
+  .api-key-value.blurred {
+    filter: blur(3px);
+    user-select: none;
+  }
+
+  .api-key-value.blurred:hover {
+    filter: blur(1px);
+  }
+
+  .btn-icon-tiny {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 0.25rem;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .btn-icon-tiny:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .permissions-meta {
+    font-size: 0.6875rem;
+  }
+
+  .api-key-item .item-actions {
+    justify-content: flex-end;
+    border-top: 1px solid var(--border-color);
+    padding-top: 0.5rem;
+  }
+
+  .empty-state {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+    background: var(--bg-primary);
+    border: 1px dashed var(--border-color);
+    border-radius: 0.5rem;
+  }
+
+  .empty-state p {
+    margin: 0;
+    font-size: 0.875rem;
   }
 
   @media (max-width: 768px) {

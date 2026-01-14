@@ -345,6 +345,24 @@ const en = {
   "settings.unsavedModal.message": "You have unsaved changes in Settings. If you leave now, your changes will be lost.",
   "settings.unsavedModal.discard": "Discard Changes",
 
+  // Settings - API Keys
+  "settings.apiKeys.sectionTitle": "API Keys",
+  "settings.apiKeys.description": "API keys allow external applications to access the Mailpilot API. Each key can have specific permissions.",
+  "settings.apiKeys.add": "Add API Key",
+  "settings.apiKeys.newApiKey": "New API Key",
+  "settings.apiKeys.editApiKey": "Edit API Key",
+  "settings.apiKeys.name": "Name",
+  "settings.apiKeys.key": "API Key",
+  "settings.apiKeys.permissions": "Permissions",
+  "settings.apiKeys.saveApiKey": "Save API Key",
+  "settings.apiKeys.removeConfirm": "Remove API key \"{name}\"? This cannot be undone.",
+  "settings.apiKeys.noApiKeys": "No API keys configured",
+  "settings.apiKeys.regenerate": "Regenerate key",
+  "settings.apiKeys.copy": "Copy to clipboard",
+  "settings.apiKeys.show": "Show key",
+  "settings.apiKeys.hide": "Hide key",
+  "settings.apiKeys.keyNote": "Save this key securely - it won't be shown again after closing this dialog.",
+
   // Debug
   "debug.title": "Debug Information",
   "debug.systemInfo": "System Info",
