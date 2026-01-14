@@ -132,7 +132,7 @@ const apiKeyConfigSchema = z.object({
 });
 
 const dashboardConfigSchema = z.object({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().default(true),
   session_secret: z.string().optional(),
   session_ttl: durationSchema.default("24h"),
   api_keys: z.array(apiKeyConfigSchema).default([]),

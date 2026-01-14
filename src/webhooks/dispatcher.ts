@@ -29,6 +29,11 @@ export function registerWebhooks(
   });
 }
 
+export function unregisterWebhooks(accountName: string): void {
+  accountWebhooks.delete(accountName);
+  logger.debug("Unregistered webhooks for account", { account: accountName });
+}
+
 export function registerGlobalWebhooks(webhooks: WebhookConfig[]): void {
   globalWebhooks.push(...webhooks);
   logger.debug("Registered global webhooks", { count: webhooks.length });

@@ -6,8 +6,8 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
-# Build dashboard and copy to dist
-RUN cd dashboard && pnpm install && pnpm build && cp -r dist ../dist/dashboard
+# Build dashboard (outputs directly to dist/dashboard)
+RUN cd dashboard && pnpm install && pnpm build
 
 FROM node:22-slim
 WORKDIR /app

@@ -6,11 +6,12 @@
   import ActivityLog from "../lib/components/ActivityLog.svelte";
   import LogViewer from "../lib/components/LogViewer.svelte";
   import Sidebar from "../lib/components/Sidebar.svelte";
+  import Settings from "../lib/components/Settings.svelte";
   import { connect, disconnect } from "../lib/stores/websocket";
   import { stats, activity, logs } from "../lib/stores/data";
   import * as api from "../lib/api";
 
-  type Tab = "overview" | "activity" | "logs";
+  type Tab = "overview" | "activity" | "logs" | "settings";
   let currentTab: Tab = $state("overview");
 
   onMount(async () => {
@@ -45,6 +46,15 @@
 <div class="dashboard">
   <Header />
 
+  {#if $stats?.dryRun}
+    <div class="dry-run-banner">
+      <span class="banner-icon">&#9888;</span>
+      <span class="banner-text">
+        <strong>Dry Run Mode</strong> — No actions are being executed. Emails are classified but not modified.
+      </span>
+    </div>
+  {/if}
+
   <main class="main">
     <div class="container">
       <div class="tabs">
@@ -69,6 +79,13 @@
         >
           Logs
         </button>
+        <button
+          class="tab-btn"
+          class:active={currentTab === "settings"}
+          onclick={() => switchTab("settings")}
+        >
+          Settings
+        </button>
       </div>
 
       {#if currentTab === "overview"}
@@ -85,13 +102,11 @@
         <ActivityLog />
       {:else if currentTab === "logs"}
         <LogViewer />
+      {:else if currentTab === "settings"}
+        <Settings />
       {/if}
     </div>
   </main>
-
-  <footer class="footer">
-    <p>Mailpilot Dashboard - Real-time updates enabled</p>
-  </footer>
 </div>
 
 <style>
@@ -99,6 +114,26 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+  }
+
+  .dry-run-banner {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: #1f2937;
+    padding: 0.75rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    font-size: 0.9375rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .banner-icon {
+    font-size: 1.25rem;
+  }
+
+  .banner-text strong {
+    font-weight: 600;
   }
 
   .main {
@@ -153,14 +188,6 @@
 
   .sidebar-content {
     min-width: 0;
-  }
-
-  .footer {
-    padding: 1rem 2rem;
-    text-align: center;
-    color: var(--text-muted);
-    font-size: 0.75rem;
-    border-top: 1px solid var(--border-color);
   }
 
   @media (max-width: 1200px) {

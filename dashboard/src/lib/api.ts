@@ -111,6 +111,20 @@ export async function triggerProcess(name: string, folder = "INBOX"): Promise<{ 
   });
 }
 
+// Config Reload
+export interface ReloadResult {
+  success: boolean;
+  added: string[];
+  removed: string[];
+  restarted: string[];
+  unchanged: string[];
+  errors: string[];
+}
+
+export async function reloadConfig(): Promise<ReloadResult> {
+  return fetchJson(`${BASE_URL}/reload-config`, { method: "POST" });
+}
+
 // Email Preview
 export interface EmailPreview {
   messageId: string;
@@ -124,6 +138,18 @@ export interface EmailPreview {
 
 export async function fetchEmailPreview(account: string, folder: string, uid: number): Promise<EmailPreview> {
   return fetchJson(`${BASE_URL}/emails/${encodeURIComponent(account)}/${encodeURIComponent(folder)}/${uid}`);
+}
+
+// Config Editor
+export async function fetchConfig(): Promise<{ config: unknown; configPath: string }> {
+  return fetchJson(`${BASE_URL}/config`);
+}
+
+export async function saveConfig(config: unknown, reload = true): Promise<{ success: boolean; reloadResult?: ReloadResult }> {
+  return fetchJson(`${BASE_URL}/config`, {
+    method: "PUT",
+    body: JSON.stringify({ config, reload }),
+  });
 }
 
 // Export

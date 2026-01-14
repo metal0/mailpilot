@@ -81,6 +81,10 @@ export function incrementAccountErrors(accountName: string): void {
   }
 }
 
+export function removeAccountStatus(accountName: string): void {
+  accountStatuses.delete(accountName);
+}
+
 export function getUptime(): number {
   return Math.floor((Date.now() - startTime) / 1000);
 }

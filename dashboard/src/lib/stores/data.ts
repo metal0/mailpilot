@@ -67,6 +67,7 @@ export interface DeadLetterEntry {
 
 export interface DashboardStats {
   uptime: number;
+  dryRun: boolean;
   totals: {
     emailsProcessed: number;
     actionsTaken: number;

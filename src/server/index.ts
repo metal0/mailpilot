@@ -44,6 +44,8 @@ export interface StartServerOptions {
   dashboardConfig?: DashboardConfig;
   attachmentsConfig?: AttachmentsConfig;
   antivirusConfig?: AntivirusConfig;
+  dryRun?: boolean;
+  configPath?: string;
 }
 
 export function startServer(
@@ -51,7 +53,9 @@ export function startServer(
   accounts: AccountConfig[],
   dashboardConfig?: DashboardConfig,
   attachmentsConfig?: AttachmentsConfig,
-  antivirusConfig?: AntivirusConfig
+  antivirusConfig?: AntivirusConfig,
+  dryRun = false,
+  configPath?: string
 ): void {
   const app = new Hono();
 
@@ -84,7 +88,11 @@ export function startServer(
     app.get("/favicon.ico", serveStatic({ path: "./dist/dashboard/favicon.ico" }));
 
     // Dashboard router (API endpoints)
-    app.route("/", createDashboardRouter(dashboardConfig));
+    app.route("/", createDashboardRouter({
+      dashboardConfig,
+      dryRun,
+      ...(configPath && { configPath }),
+    }));
 
     // SPA fallback - serve index.html for dashboard routes
     app.get("/", serveStatic({ path: "./dist/dashboard/index.html" }));

@@ -1,14 +1,20 @@
 import type { Config, AccountConfig } from "../config/schema.js";
+import { loadConfig } from "../config/loader.js";
 import { createImapClient, type ImapClient } from "../imap/client.js";
 import { startIdleLoop, stopIdleLoop } from "../imap/idle.js";
 import { createAccountContext, type AccountContext } from "./context.js";
 import { processMailbox } from "../processor/worker.js";
-import { registerWebhooks } from "../webhooks/dispatcher.js";
-import { updateAccountStatus } from "../server/status.js";
+import { registerWebhooks, unregisterWebhooks } from "../webhooks/dispatcher.js";
+import { updateAccountStatus, removeAccountStatus } from "../server/status.js";
+import { registerProviders } from "../llm/providers.js";
 import { createLogger } from "../utils/logger.js";
 import { isShutdownInProgress, onShutdown } from "../utils/shutdown.js";
 
 const logger = createLogger("account-manager");
+
+// Store current config path and config for reload
+let currentConfigPath: string | null = null;
+let currentConfig: Config | null = null;
 
 const activeClients = new Map<string, ImapClient>();
 const accountContexts = new Map<string, AccountContext>();
@@ -317,4 +323,237 @@ export async function triggerProcessing(accountName: string, folder = "INBOX"): 
     });
     return false;
   }
+}
+
+// Store config path for reloading
+export function setConfigPath(path: string): void {
+  currentConfigPath = path;
+}
+
+export function setCurrentConfig(config: Config): void {
+  currentConfig = config;
+}
+
+export function getCurrentConfig(): Config | null {
+  return currentConfig;
+}
+
+// Stop a single account gracefully
+async function stopAccount(accountName: string): Promise<void> {
+  const client = activeClients.get(accountName);
+  const ctx = accountContexts.get(accountName);
+
+  if (!client || !ctx) {
+    return;
+  }
+
+  logger.info("Stopping account", { accountName });
+
+  // Stop IDLE loops
+  const watchFolders = ctx.account.folders?.watch ?? ["INBOX"];
+  for (const folder of watchFolders) {
+    stopIdleLoop(`${accountName}:${folder}`);
+  }
+
+  // Clear processing queue entries for this account
+  for (const [key, status] of processingQueue) {
+    if (status.accountName === accountName) {
+      processingQueue.delete(key);
+    }
+  }
+
+  // Clear debounce tracking
+  for (const key of lastProcessedAt.keys()) {
+    if (key.startsWith(`${accountName}:`)) {
+      lastProcessedAt.delete(key);
+    }
+  }
+
+  // Disconnect IMAP client
+  try {
+    await client.disconnect();
+  } catch (error) {
+    logger.debug("Error disconnecting account (ignored)", {
+      accountName,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  // Cleanup
+  activeClients.delete(accountName);
+  accountContexts.delete(accountName);
+  pausedAccounts.delete(accountName);
+  unregisterWebhooks(accountName);
+  removeAccountStatus(accountName);
+
+  logger.info("Account stopped", { accountName });
+}
+
+// Compare account configs to detect changes
+function accountConfigChanged(oldConfig: AccountConfig, newConfig: AccountConfig): boolean {
+  // Compare IMAP settings
+  if (
+    oldConfig.imap.host !== newConfig.imap.host ||
+    oldConfig.imap.port !== newConfig.imap.port ||
+    oldConfig.imap.username !== newConfig.imap.username ||
+    oldConfig.imap.password !== newConfig.imap.password ||
+    oldConfig.imap.auth !== newConfig.imap.auth ||
+    oldConfig.imap.tls !== newConfig.imap.tls
+  ) {
+    return true;
+  }
+
+  // Compare LLM settings
+  if (
+    oldConfig.llm?.provider !== newConfig.llm?.provider ||
+    oldConfig.llm?.model !== newConfig.llm?.model
+  ) {
+    return true;
+  }
+
+  // Compare folder settings
+  const oldFolders = oldConfig.folders?.watch ?? ["INBOX"];
+  const newFolders = newConfig.folders?.watch ?? ["INBOX"];
+  if (JSON.stringify(oldFolders.sort()) !== JSON.stringify(newFolders.sort())) {
+    return true;
+  }
+
+  return false;
+}
+
+export interface ReloadResult {
+  success: boolean;
+  added: string[];
+  removed: string[];
+  restarted: string[];
+  unchanged: string[];
+  errors: string[];
+}
+
+export async function reloadConfig(): Promise<ReloadResult> {
+  if (!currentConfigPath) {
+    throw new Error("Config path not set - cannot reload");
+  }
+
+  const result: ReloadResult = {
+    success: true,
+    added: [],
+    removed: [],
+    restarted: [],
+    unchanged: [],
+    errors: [],
+  };
+
+  logger.info("Reloading configuration", { path: currentConfigPath });
+
+  let newConfig: Config;
+  try {
+    newConfig = loadConfig(currentConfigPath);
+  } catch (error) {
+    logger.error("Failed to load config", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    result.success = false;
+    result.errors.push(error instanceof Error ? error.message : String(error));
+    return result;
+  }
+
+  const oldConfig = currentConfig;
+  if (!oldConfig) {
+    result.success = false;
+    result.errors.push("No current config to compare against");
+    return result;
+  }
+
+  // Update LLM providers
+  registerProviders(newConfig.llm_providers);
+
+  // Find accounts to add, remove, or restart
+  const oldAccountNames = new Set(oldConfig.accounts.map((a) => a.name));
+  const newAccountNames = new Set(newConfig.accounts.map((a) => a.name));
+
+  const toAdd: AccountConfig[] = [];
+  const toRemove: string[] = [];
+  const toRestart: AccountConfig[] = [];
+
+  // Find removed accounts
+  for (const name of oldAccountNames) {
+    if (!newAccountNames.has(name)) {
+      toRemove.push(name);
+    }
+  }
+
+  // Find new and changed accounts
+  for (const newAccount of newConfig.accounts) {
+    if (!oldAccountNames.has(newAccount.name)) {
+      toAdd.push(newAccount);
+    } else {
+      const oldAccount = oldConfig.accounts.find((a) => a.name === newAccount.name);
+      if (oldAccount && accountConfigChanged(oldAccount, newAccount)) {
+        toRestart.push(newAccount);
+      } else {
+        result.unchanged.push(newAccount.name);
+      }
+    }
+  }
+
+  // Stop removed accounts
+  for (const name of toRemove) {
+    try {
+      await stopAccount(name);
+      result.removed.push(name);
+    } catch (error) {
+      logger.error("Failed to stop removed account", {
+        accountName: name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      result.errors.push(`Failed to stop ${name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // Restart changed accounts
+  for (const account of toRestart) {
+    try {
+      await stopAccount(account.name);
+      await startAccount(newConfig, account);
+      result.restarted.push(account.name);
+    } catch (error) {
+      logger.error("Failed to restart account", {
+        accountName: account.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      result.errors.push(`Failed to restart ${account.name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // Start new accounts
+  for (const account of toAdd) {
+    try {
+      await startAccount(newConfig, account);
+      result.added.push(account.name);
+    } catch (error) {
+      logger.error("Failed to start new account", {
+        accountName: account.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      result.errors.push(`Failed to start ${account.name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // Update current config
+  currentConfig = newConfig;
+
+  if (result.errors.length > 0) {
+    result.success = false;
+  }
+
+  logger.info("Configuration reloaded", {
+    added: result.added.length,
+    removed: result.removed.length,
+    restarted: result.restarted.length,
+    unchanged: result.unchanged.length,
+    errors: result.errors.length,
+  });
+
+  return result;
 }

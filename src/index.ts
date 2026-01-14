@@ -4,7 +4,7 @@ import { cleanupProcessedMessages } from "./storage/processed.js";
 import { cleanupAuditLog } from "./storage/audit.js";
 import { registerProviders } from "./llm/providers.js";
 import { startServer, stopServer } from "./server/index.js";
-import { startAccount, setupAccountShutdown } from "./accounts/manager.js";
+import { startAccount, setupAccountShutdown, setConfigPath, setCurrentConfig } from "./accounts/manager.js";
 import { dispatchStartup, dispatchShutdown } from "./webhooks/dispatcher.js";
 import {
   createLogger,
@@ -23,6 +23,10 @@ async function main(): Promise<void> {
 
   const configPath = process.env["CONFIG_PATH"] ?? "./config.yaml";
   const config = loadConfig(configPath);
+
+  // Store for hot reload
+  setConfigPath(configPath);
+  setCurrentConfig(config);
 
   const loggingConfig = config.logging ?? { level: "info" as const };
   const stateConfig = config.state ?? {
@@ -45,7 +49,7 @@ async function main(): Promise<void> {
 
   registerProviders(config.llm_providers);
 
-  startServer(serverConfig, config.accounts, dashboardConfig, config.attachments, config.antivirus);
+  startServer(serverConfig, config.accounts, dashboardConfig, config.attachments, config.antivirus, config.dry_run, configPath);
 
   await dispatchStartup();
 

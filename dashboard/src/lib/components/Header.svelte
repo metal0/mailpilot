@@ -2,11 +2,61 @@
   import { theme } from "../stores/theme";
   import { auth, logout } from "../stores/auth";
   import { connectionState } from "../stores/websocket";
+  import { stats } from "../stores/data";
+  import * as api from "../api";
   import ThemeToggle from "./ThemeToggle.svelte";
+
+  let reloading = $state(false);
+  let reloadMessage = $state<{ type: "success" | "error"; text: string } | null>(null);
 
   async function handleLogout() {
     await logout();
     window.location.reload();
+  }
+
+  async function handleReloadConfig() {
+    if (reloading) return;
+
+    reloading = true;
+    reloadMessage = null;
+
+    try {
+      const result = await api.reloadConfig();
+
+      if (result.success) {
+        const parts: string[] = [];
+        if (result.added.length > 0) parts.push(`${result.added.length} added`);
+        if (result.removed.length > 0) parts.push(`${result.removed.length} removed`);
+        if (result.restarted.length > 0) parts.push(`${result.restarted.length} restarted`);
+        if (result.unchanged.length > 0) parts.push(`${result.unchanged.length} unchanged`);
+
+        reloadMessage = {
+          type: "success",
+          text: parts.length > 0 ? `Config reloaded: ${parts.join(", ")}` : "Config reloaded (no changes)",
+        };
+
+        // Refresh stats after reload
+        const newStats = await api.fetchStats();
+        stats.set(newStats);
+      } else {
+        reloadMessage = {
+          type: "error",
+          text: result.errors?.join(", ") || "Failed to reload config",
+        };
+      }
+    } catch (error) {
+      reloadMessage = {
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to reload config",
+      };
+    } finally {
+      reloading = false;
+
+      // Clear message after 5 seconds
+      setTimeout(() => {
+        reloadMessage = null;
+      }, 5000);
+    }
   }
 </script>
 
@@ -41,6 +91,33 @@
         />
       </svg>
     </a>
+
+    <button
+      class="btn btn-secondary btn-sm reload-btn"
+      onclick={handleReloadConfig}
+      disabled={reloading}
+      title="Reload configuration from disk"
+    >
+      <svg
+        class="reload-icon"
+        class:spinning={reloading}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path d="M23 4v6h-6" />
+        <path d="M1 20v-6h6" />
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+      </svg>
+      {reloading ? "Reloading..." : "Reload Config"}
+    </button>
+
+    {#if reloadMessage}
+      <div class="reload-message reload-{reloadMessage.type}">
+        {reloadMessage.text}
+      </div>
+    {/if}
 
     <ThemeToggle />
 
@@ -141,6 +218,52 @@
   .github-icon {
     width: 1.5rem;
     height: 1.5rem;
+  }
+
+  .reload-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .reload-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  .reload-icon {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .reload-icon.spinning {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .reload-message {
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  .reload-success {
+    background: color-mix(in srgb, var(--success) 20%, transparent);
+    color: var(--success);
+  }
+
+  .reload-error {
+    background: color-mix(in srgb, var(--error) 20%, transparent);
+    color: var(--error);
   }
 
   .user-info {

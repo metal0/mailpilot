@@ -1,5 +1,5 @@
-import { Hono } from "hono";
-import type { DashboardConfig } from "../config/schema.js";
+import { Hono, type Context } from "hono";
+import type { DashboardConfig, ApiKeyPermission } from "../config/schema.js";
 import {
   getUserCount,
   createUser,
@@ -37,7 +37,11 @@ import {
   triggerProcessing,
   getPausedAccounts,
   getAccountClient,
+  reloadConfig,
+  getCurrentConfig,
 } from "../accounts/manager.js";
+import { writeFileSync } from "node:fs";
+import { stringify as yamlStringify } from "yaml";
 import { fetchAndParseEmail } from "../processor/email.js";
 import {
   getDeadLetterEntries,
@@ -46,28 +50,57 @@ import {
   removeDeadLetter,
 } from "../storage/dead-letter.js";
 
-export function createDashboardRouter(config: DashboardConfig): Hono {
+export interface DashboardRouterOptions {
+  dashboardConfig: DashboardConfig;
+  dryRun: boolean;
+  configPath?: string;
+}
+
+export function createDashboardRouter(options: DashboardRouterOptions): Hono {
   const router = new Hono();
+  const { dashboardConfig: config, dryRun, configPath } = options;
   const sessionTtl = config.session_ttl;
 
   router.use("*", createSessionMiddleware(sessionTtl));
 
+  // Create auth bypass middleware for dry run mode
+  const requireAuthOrApiKeyWithDryRun = (permission?: ApiKeyPermission) => {
+    if (dryRun) {
+      // In dry run mode, skip all authentication
+      return async (_c: Context, next: () => Promise<void>) => {
+        await next();
+      };
+    }
+    return requireAuthOrApiKey(permission);
+  };
+
   // Auth status endpoint - used by SPA to check authentication state
   router.get("/api/auth", (c) => {
+    // In dry run mode, always return authenticated
+    if (dryRun) {
+      return c.json({
+        authenticated: true,
+        needsSetup: false,
+        dryRun: true,
+        user: { username: "dev" },
+      });
+    }
+
     const auth = getAuthContext(c);
     const needsSetup = getUserCount() === 0;
 
     if (needsSetup) {
-      return c.json({ authenticated: false, needsSetup: true });
+      return c.json({ authenticated: false, needsSetup: true, dryRun: false });
     }
 
     if (!auth) {
-      return c.json({ authenticated: false, needsSetup: false });
+      return c.json({ authenticated: false, needsSetup: false, dryRun: false });
     }
 
     return c.json({
       authenticated: true,
       needsSetup: false,
+      dryRun: false,
       user: { username: auth.user.username },
     });
   });
@@ -147,12 +180,13 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
   });
 
   // Stats endpoint
-  router.get("/api/stats", requireAuthOrApiKey("read:stats"), (c) => {
+  router.get("/api/stats", requireAuthOrApiKeyWithDryRun("read:stats"), (c) => {
     const accounts = getAccountStatuses();
     const pausedAccountsList = getPausedAccounts();
 
     return c.json({
       uptime: getUptime(),
+      dryRun,
       totals: {
         emailsProcessed: getProcessedCount(),
         actionsTaken: getActionCount(),
@@ -169,7 +203,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
     });
   });
 
-  router.get("/api/activity", requireAuthOrApiKey("read:activity"), (c) => {
+  router.get("/api/activity", requireAuthOrApiKeyWithDryRun("read:activity"), (c) => {
     const page = parseInt(c.req.query("page") ?? "1", 10);
     const pageSize = parseInt(c.req.query("pageSize") ?? "20", 10);
 
@@ -189,7 +223,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
     return c.json(getAuditEntriesPaginated(page, pageSize, filters));
   });
 
-  router.get("/api/logs", requireAuthOrApiKey("read:logs"), (c) => {
+  router.get("/api/logs", requireAuthOrApiKeyWithDryRun("read:logs"), (c) => {
     const limit = parseInt(c.req.query("limit") ?? "100", 10);
     const levelFilter = c.req.query("level") as LogLevel | undefined;
     const accountName = c.req.query("accountName");
@@ -207,7 +241,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
     return c.json({ logs });
   });
 
-  router.get("/api/export", requireAuthOrApiKey("read:export"), (c) => {
+  router.get("/api/export", requireAuthOrApiKeyWithDryRun("read:export"), (c) => {
     const format = c.req.query("format") ?? "json";
     const filters: AuditFilters = {};
 
@@ -250,28 +284,28 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
   });
 
   // Account management actions
-  router.post("/api/accounts/:name/pause", requireAuthOrApiKey("write:accounts"), (c) => {
+  router.post("/api/accounts/:name/pause", requireAuthOrApiKeyWithDryRun("write:accounts"), (c) => {
     const name = c.req.param("name");
     const success = pauseAccount(name);
 
     return c.json({ success, paused: success ? true : isAccountPaused(name) });
   });
 
-  router.post("/api/accounts/:name/resume", requireAuthOrApiKey("write:accounts"), (c) => {
+  router.post("/api/accounts/:name/resume", requireAuthOrApiKeyWithDryRun("write:accounts"), (c) => {
     const name = c.req.param("name");
     const success = resumeAccount(name);
 
     return c.json({ success, paused: success ? false : isAccountPaused(name) });
   });
 
-  router.post("/api/accounts/:name/reconnect", requireAuthOrApiKey("write:accounts"), async (c) => {
+  router.post("/api/accounts/:name/reconnect", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
     const name = c.req.param("name");
     const success = await reconnectAccount(name);
 
     return c.json({ success });
   });
 
-  router.post("/api/accounts/:name/process", requireAuthOrApiKey("write:accounts"), async (c) => {
+  router.post("/api/accounts/:name/process", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
     const name = c.req.param("name");
     const folder = c.req.query("folder") ?? "INBOX";
     const success = await triggerProcessing(name, folder);
@@ -279,8 +313,90 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
     return c.json({ success });
   });
 
+  // Config reload endpoint
+  router.post("/api/reload-config", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
+    try {
+      const result = await reloadConfig();
+      return c.json(result);
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
+  });
+
+  // Config read endpoint (masks sensitive values)
+  router.get("/api/config", requireAuthOrApiKeyWithDryRun("read:stats"), (c) => {
+    const currentConfig = getCurrentConfig();
+    if (!currentConfig) {
+      return c.json({ error: "Config not loaded" }, 500);
+    }
+
+    // Deep clone to avoid mutating original
+    const safeConfig = JSON.parse(JSON.stringify(currentConfig));
+
+    // Mask sensitive fields in accounts
+    for (const account of safeConfig.accounts) {
+      if (account.imap.password) {
+        account.imap.password = "********";
+      }
+      if (account.imap.oauth_client_secret) {
+        account.imap.oauth_client_secret = "********";
+      }
+      if (account.imap.oauth_refresh_token) {
+        account.imap.oauth_refresh_token = "********";
+      }
+    }
+
+    // Mask API keys in providers
+    for (const provider of safeConfig.llm_providers) {
+      if (provider.api_key) {
+        provider.api_key = "********";
+      }
+    }
+
+    // Mask dashboard API keys
+    if (safeConfig.dashboard?.api_keys) {
+      for (const key of safeConfig.dashboard.api_keys) {
+        key.key = "********";
+      }
+    }
+
+    return c.json({ config: safeConfig, configPath });
+  });
+
+  // Config write endpoint
+  router.put("/api/config", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
+    if (!configPath) {
+      return c.json({ error: "Config path not set" }, 500);
+    }
+
+    try {
+      const body = await c.req.json<{ config: unknown; reload?: boolean }>();
+      const { config: newConfig, reload = true } = body;
+
+      // Write config to file
+      const yamlContent = yamlStringify(newConfig, { lineWidth: 0 });
+      writeFileSync(configPath, yamlContent, "utf-8");
+
+      // Optionally reload config
+      if (reload) {
+        const reloadResult = await reloadConfig();
+        return c.json({ success: true, reloadResult });
+      }
+
+      return c.json({ success: true });
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
+  });
+
   // Dead letter queue endpoints
-  router.get("/api/dead-letter", requireAuthOrApiKey("read:activity"), (c) => {
+  router.get("/api/dead-letter", requireAuthOrApiKeyWithDryRun("read:activity"), (c) => {
     const accountName = c.req.query("accountName");
     const entries = getDeadLetterEntries(accountName);
     return c.json({
@@ -289,7 +405,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
     });
   });
 
-  router.post("/api/dead-letter/:id/retry", requireAuthOrApiKey("write:accounts"), (c) => {
+  router.post("/api/dead-letter/:id/retry", requireAuthOrApiKeyWithDryRun("write:accounts"), (c) => {
     const id = parseInt(c.req.param("id"), 10);
     if (isNaN(id)) {
       return c.json({ error: "Invalid ID" }, 400);
@@ -300,7 +416,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
     return c.json({ success });
   });
 
-  router.post("/api/dead-letter/:id/dismiss", requireAuthOrApiKey("write:accounts"), (c) => {
+  router.post("/api/dead-letter/:id/dismiss", requireAuthOrApiKeyWithDryRun("write:accounts"), (c) => {
     const id = parseInt(c.req.param("id"), 10);
     if (isNaN(id)) {
       return c.json({ error: "Invalid ID" }, 400);
@@ -311,7 +427,7 @@ export function createDashboardRouter(config: DashboardConfig): Hono {
   });
 
   // Email preview endpoint
-  router.get("/api/emails/:account/:folder/:uid", requireAuthOrApiKey("read:activity"), async (c) => {
+  router.get("/api/emails/:account/:folder/:uid", requireAuthOrApiKeyWithDryRun("read:activity"), async (c) => {
     const accountName = c.req.param("account");
     const folder = c.req.param("folder");
     const uid = parseInt(c.req.param("uid"), 10);

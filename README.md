@@ -258,15 +258,21 @@ dashboard:
       permissions: [read:stats, read:activity]
 ```
 
-Then visit `http://localhost:8080/dashboard`. On first visit, you'll create an admin account.
+Then visit `http://localhost:8080/`. On first visit, you'll create an admin account.
+
+> **Note**: The dashboard is enabled by default. To disable, set `dashboard.enabled: false` in your config.
 
 **Features**:
+- **Visual Configuration Editor** - Edit all settings through the UI with helpful tooltips
+- **Live Config Reload** - Apply configuration changes without restarting
 - Real-time updates via WebSocket (no page refresh needed)
 - Dark/light mode toggle
 - Email preview before manual processing
 - Search and filter audit logs
 - Dead letter queue management
 - Account pause/resume/reconnect controls
+
+**Development Mode**: When `dry_run: true` is set, authentication is bypassed and a banner indicates no actions are being taken. This is ideal for testing classification rules.
 
 **API Key Permissions**:
 - `read:stats` - Access stats endpoint
@@ -528,6 +534,12 @@ If you hit LLM API rate limits, configure `rate_limit_rpm` in your provider sett
 ### Dry Run Mode
 
 Set `dry_run: true` in config to log actions without executing them. Useful for testing classification rules.
+
+In dry run mode:
+- All email classification works normally
+- Actions are logged but not executed
+- Dashboard authentication is bypassed (auto-logged in as "dev")
+- A prominent banner indicates dry run mode is active
 
 ## License
 
