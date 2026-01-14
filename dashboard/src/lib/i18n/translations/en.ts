@@ -340,6 +340,11 @@ const en = {
   "settings.dashboard.sectionTitle": "Dashboard Settings",
   "settings.dashboard.lockoutNote": "Note: The dashboard cannot be disabled from here to prevent lockout. Edit config.yaml directly to disable.",
 
+  // Settings - Unsaved Changes Modal
+  "settings.unsavedModal.title": "Unsaved Changes",
+  "settings.unsavedModal.message": "You have unsaved changes in Settings. If you leave now, your changes will be lost.",
+  "settings.unsavedModal.discard": "Discard Changes",
+
   // Debug
   "debug.title": "Debug Information",
   "debug.systemInfo": "System Info",

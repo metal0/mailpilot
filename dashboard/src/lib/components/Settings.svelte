@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import * as api from "../api";
   import { stats, serviceStatus, type ServicesStatus } from "../stores/data";
+  import { settingsHasChanges } from "../stores/navigation";
   import { t } from "../i18n";
 
   interface Config {
@@ -93,6 +94,11 @@
   const hasChanges = $derived(() => {
     if (!config || !originalConfig) return false;
     return JSON.stringify(config) !== originalConfig;
+  });
+
+  // Sync hasChanges with global store for cross-component awareness
+  $effect(() => {
+    settingsHasChanges.set(hasChanges());
   });
 
   const changeCount = $derived(() => {

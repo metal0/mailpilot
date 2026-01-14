@@ -12,12 +12,14 @@
   import Debug from "../lib/components/Debug.svelte";
   import { connect, disconnect } from "../lib/stores/websocket";
   import { stats, activity, logs, deadLetters } from "../lib/stores/data";
-  import { navigation, type Tab } from "../lib/stores/navigation";
+  import { navigation, settingsHasChanges, type Tab } from "../lib/stores/navigation";
   import { t, initLocale } from "../lib/i18n";
   import * as api from "../lib/api";
 
   let currentTab: Tab = $state("overview");
   let activityInitialFilter: "all" | "activity" | "errors" = $state("all");
+  let showUnsavedModal = $state(false);
+  let pendingTab: Tab | null = $state(null);
 
   $effect(() => {
     if ($navigation) {
@@ -57,11 +59,46 @@
   });
 
   function switchTab(tab: Tab) {
+    if (currentTab === "settings" && $settingsHasChanges && tab !== "settings") {
+      pendingTab = tab;
+      showUnsavedModal = true;
+      return;
+    }
     currentTab = tab;
+  }
+
+  function confirmLeaveSettings() {
+    if (pendingTab) {
+      settingsHasChanges.set(false);
+      currentTab = pendingTab;
+      pendingTab = null;
+    }
+    showUnsavedModal = false;
+  }
+
+  function cancelLeaveSettings() {
+    pendingTab = null;
+    showUnsavedModal = false;
   }
 </script>
 
 <div class="dashboard">
+  {#if showUnsavedModal}
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div class="modal-overlay" onclick={cancelLeaveSettings}>
+      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+      <div class="modal modal-warning" onclick={(e) => e.stopPropagation()}>
+        <div class="warning-icon">&#9888;</div>
+        <h3>{$t("settings.unsavedModal.title")}</h3>
+        <p>{$t("settings.unsavedModal.message")}</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick={cancelLeaveSettings}>{$t("common.cancel")}</button>
+          <button class="btn btn-danger" onclick={confirmLeaveSettings}>{$t("settings.unsavedModal.discard")}</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <Header />
 
   {#if $stats?.dryRun}
@@ -331,5 +368,84 @@
   .github-icon {
     width: 1.25rem;
     height: 1.25rem;
+  }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+
+  .modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
+    width: 100%;
+    max-width: 400px;
+  }
+
+  .modal-warning {
+    text-align: center;
+  }
+
+  .modal-warning .warning-icon {
+    font-size: 2.5rem;
+    margin-bottom: var(--space-2);
+    color: var(--warning);
+  }
+
+  .modal-warning h3 {
+    margin: 0 0 var(--space-3);
+    color: var(--warning);
+    font-size: var(--text-lg);
+  }
+
+  .modal-warning p {
+    margin: 0 0 var(--space-5);
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-3);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .btn-secondary:hover {
+    background: var(--border-color);
+  }
+
+  .btn-danger {
+    background: var(--error);
+    color: white;
+  }
+
+  .btn-danger:hover {
+    background: color-mix(in srgb, var(--error) 85%, black);
   }
 </style>

@@ -9,6 +9,9 @@ export interface NavigationState {
 
 export const navigation = writable<NavigationState | null>(null);
 
+// Track if settings has unsaved changes
+export const settingsHasChanges = writable<boolean>(false);
+
 export function navigateTo(tab: Tab, options?: { activityFilter?: "all" | "activity" | "errors" }) {
   navigation.set({
     tab,
