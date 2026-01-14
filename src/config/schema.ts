@@ -127,6 +127,7 @@ export const configSchema = z.object({
   polling_interval: durationSchema.default("30s"),
   concurrency_limit: z.number().int().positive().default(5),
   dry_run: z.boolean().default(false),
+  add_processing_headers: z.boolean().default(false),
   backlog: backlogConfigSchema.optional(),
   state: stateConfigSchema.optional(),
   llm_providers: z.array(llmProviderSchema).min(1),

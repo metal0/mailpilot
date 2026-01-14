@@ -25,6 +25,9 @@ export interface ImapClient {
   markAsRead(uid: number, folder: string): Promise<void>;
   markAsSpam(uid: number, folder: string): Promise<void>;
   createFolder(folderName: string): Promise<void>;
+  getMessageFlags(uid: number, folder: string): Promise<string[]>;
+  appendMessage(folder: string, source: Buffer, flags?: string[], date?: Date): Promise<number>;
+  fetchMessageSource(uid: number, folder: string): Promise<Buffer>;
 }
 
 export interface MessageInfo {
@@ -248,6 +251,46 @@ export function createImapClient(options: ImapClientOptions): ImapClient {
         } else {
           throw error;
         }
+      }
+    },
+
+    async getMessageFlags(uid: number, folder: string): Promise<string[]> {
+      const lock = await client.getMailboxLock(folder);
+      try {
+        const msg = await client.fetchOne(uid, { flags: true }, { uid: true });
+        if (!msg) {
+          return [];
+        }
+        return msg.flags ? Array.from(msg.flags) : [];
+      } finally {
+        lock.release();
+      }
+    },
+
+    async appendMessage(
+      folder: string,
+      source: Buffer,
+      flags?: string[],
+      date?: Date
+    ): Promise<number> {
+      const result = await client.append(folder, source, flags, date);
+      if (!result || !result.uid) {
+        throw new Error("Failed to append message - no UID returned");
+      }
+      log.debug("Appended message", { folder, uid: result.uid });
+      return result.uid;
+    },
+
+    async fetchMessageSource(uid: number, folder: string): Promise<Buffer> {
+      const lock = await client.getMailboxLock(folder);
+      try {
+        const msg = await client.fetchOne(uid, { source: true }, { uid: true });
+        if (!msg || !msg.source) {
+          throw new Error(`Failed to fetch message source for UID ${uid}`);
+        }
+        return msg.source;
+      } finally {
+        lock.release();
       }
     },
   };

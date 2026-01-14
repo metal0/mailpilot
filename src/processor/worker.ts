@@ -11,6 +11,7 @@ import { classifyEmail } from "../llm/client.js";
 import { loadPrompt } from "../config/loader.js";
 import { executeAction } from "../actions/executor.js";
 import type { LlmAction } from "../llm/parser.js";
+import { addProcessingHeaders } from "./headers.js";
 
 const logger = createLogger("worker");
 
@@ -139,6 +140,23 @@ async function processMessage(
 
     if (!config.dry_run) {
       await executeActions(ctx, folder, uid, actions);
+
+      // Add processing headers if enabled and message wasn't moved
+      if (config.add_processing_headers) {
+        const hasMoveAction = actions.some((a) => a.type === "move");
+        const hasDeleteAction = actions.some((a) => a.type === "delete");
+
+        if (!hasMoveAction && !hasDeleteAction) {
+          await addProcessingHeaders(imapClient, folder, uid, {
+            actions,
+            model,
+          });
+        } else {
+          log.debug("Skipping header injection for moved/deleted message", {
+            messageId,
+          });
+        }
+      }
     } else {
       log.info("Dry run - skipping action execution", { messageId, actions });
     }
