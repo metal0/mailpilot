@@ -12,7 +12,12 @@ import { loadPrompt } from "../config/loader.js";
 import { executeAction } from "../actions/executor.js";
 import type { LlmAction } from "../llm/parser.js";
 import { addProcessingHeaders } from "./headers.js";
-import type { AttachmentProcessor } from "../attachments/index.js";
+import {
+  type AttachmentProcessor,
+  type ExtractedAttachment,
+  buildMultimodalContent,
+  hasImages,
+} from "../attachments/index.js";
 
 const logger = createLogger("worker");
 
@@ -114,6 +119,25 @@ async function processMessage(
       }
     }
 
+    // Attachment content extraction
+    let extractedAttachments: ExtractedAttachment[] = [];
+    if (needsAttachmentExtraction && attachmentProcessor && email.attachments.length > 0) {
+      try {
+        extractedAttachments = await attachmentProcessor.extract(email.attachments);
+        log.debug("Extracted attachment content", {
+          messageId,
+          count: extractedAttachments.length,
+          withText: extractedAttachments.filter((a) => a.text).length,
+          withImages: extractedAttachments.filter((a) => a.imageBase64).length,
+        });
+      } catch (error) {
+        log.warn("Attachment extraction failed, continuing without", {
+          messageId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     const foldersConfig = account.folders ?? { watch: ["INBOX"], mode: "predefined" as const };
     const stateConfig = config.state ?? { audit_subjects: false };
 
@@ -131,6 +155,7 @@ async function processMessage(
       date: email.date,
       body: truncatedBody,
       attachmentNames: email.attachments.map((a) => a.filename),
+      ...(extractedAttachments.length > 0 && { extractedAttachments }),
     };
 
     const promptOptions: PromptOptions = {
@@ -147,12 +172,24 @@ async function processMessage(
 
     const prompt = buildPrompt(emailContext, promptOptions);
 
-    log.debug("Classifying email", { messageId, promptLength: prompt.length });
+    // Build multimodal content if we have images and provider supports vision
+    const useMultimodal = provider.supports_vision && hasImages(extractedAttachments);
+    const multimodalContent = useMultimodal
+      ? buildMultimodalContent(prompt, extractedAttachments)
+      : undefined;
+
+    log.debug("Classifying email", {
+      messageId,
+      promptLength: prompt.length,
+      useMultimodal,
+      imageCount: useMultimodal ? extractedAttachments.filter((a) => a.imageBase64).length : 0,
+    });
 
     const actions = await classifyEmail({
       provider,
       model,
       prompt,
+      ...(multimodalContent && { multimodalContent }),
     });
 
     log.info("Classification complete", {

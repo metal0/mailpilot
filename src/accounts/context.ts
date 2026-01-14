@@ -2,11 +2,13 @@ import type { AccountConfig, Config, LlmProviderConfig } from "../config/schema.
 import type { ImapClient } from "../imap/client.js";
 import { getProviderForAccount } from "../llm/providers.js";
 import { createAntivirusScanner, type AntivirusScanner } from "../processor/antivirus.js";
+import { createAttachmentProcessor, type AttachmentProcessor } from "../attachments/index.js";
 import { createLogger } from "../utils/logger.js";
 
 const logger = createLogger("account-context");
 
 let sharedAvScanner: AntivirusScanner | undefined;
+let sharedAttachmentProcessor: AttachmentProcessor | undefined;
 
 export interface AccountContext {
   config: Config;
@@ -15,6 +17,7 @@ export interface AccountContext {
   provider: LlmProviderConfig;
   model: string;
   antivirusScanner?: AntivirusScanner;
+  attachmentProcessor?: AttachmentProcessor;
 }
 
 export function createAccountContext(
@@ -49,6 +52,21 @@ export function createAccountContext(
     antivirusScanner = sharedAvScanner;
   }
 
+  // Initialize shared attachment processor if enabled
+  let attachmentProcessor: AttachmentProcessor | undefined;
+  const attConfig = config.attachments;
+  if (attConfig?.enabled) {
+    if (!sharedAttachmentProcessor) {
+      sharedAttachmentProcessor = createAttachmentProcessor(attConfig);
+      logger.info("Attachment processor initialized", {
+        tikaUrl: attConfig.tika_url ?? "http://localhost:9998",
+        maxSizeMb: attConfig.max_size_mb,
+        extractImages: attConfig.extract_images,
+      });
+    }
+    attachmentProcessor = sharedAttachmentProcessor;
+  }
+
   const context: AccountContext = {
     config,
     account,
@@ -59,6 +77,10 @@ export function createAccountContext(
 
   if (antivirusScanner) {
     context.antivirusScanner = antivirusScanner;
+  }
+
+  if (attachmentProcessor) {
+    context.attachmentProcessor = attachmentProcessor;
   }
 
   return context;

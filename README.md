@@ -6,6 +6,9 @@ AI-powered email processing daemon that uses LLM classification to automatically
 
 - **IMAP Support**: Connects to any IMAP server with IDLE push notifications (falls back to polling)
 - **LLM Classification**: Uses OpenAI-compatible APIs to classify emails and determine actions
+- **Attachment Extraction**: Extract text from PDF, DOCX, Excel via Apache Tika sidecar
+- **Multimodal Vision**: Send images to vision-capable LLMs (GPT-4o, Claude) for analysis
+- **Antivirus Scanning**: Optional ClamAV integration for malware detection
 - **Multiple Actions**: Move to folders, mark as spam, flag, mark read, delete, or take no action
 - **Multi-Account**: Process multiple email accounts with per-account configuration
 - **Rate Limiting**: Per-provider rate limiting with automatic 429 retry handling
@@ -312,6 +315,107 @@ docker build -t mailpilot .
 docker run -v $(pwd)/config.yaml:/app/config.yaml:ro mailpilot
 ```
 
+### Full Featured Deployment
+
+For all optional features (attachment extraction, antivirus scanning), use `docker-compose.full.yaml`:
+
+```bash
+docker compose -f docker-compose.full.yaml up -d
+```
+
+This includes:
+- **Apache Tika** sidecar for attachment text extraction (PDF, DOCX, Excel, images with OCR)
+- **ClamAV** sidecar for virus scanning
+
+## Attachment Extraction
+
+Mailpilot can extract text from email attachments using Apache Tika, enabling LLM classification based on attachment content.
+
+### Configuration
+
+```yaml
+attachments:
+  enabled: true
+  tika_url: http://tika:9998    # Tika server URL (default: http://localhost:9998)
+  timeout: 30s                  # Extraction timeout
+  max_size_mb: 10               # Max attachment size to process
+  max_extracted_chars: 10000    # Truncate extracted text
+  extract_images: false         # Extract images for vision models
+  allowed_types:                # Content types to process
+    - application/pdf
+    - application/msword
+    - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+    - application/vnd.ms-excel
+    - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+    - text/plain
+    - text/csv
+    - text/html
+    - image/png
+    - image/jpeg
+```
+
+### Supported File Types
+
+| Type | Extension | Extraction |
+|------|-----------|------------|
+| PDF | .pdf | Text via Tika |
+| Word | .doc, .docx | Text via Tika |
+| Excel | .xls, .xlsx | Text via Tika |
+| Plain Text | .txt, .csv | Direct read |
+| HTML | .html | Text via Tika |
+| Images | .png, .jpg | OCR via Tika + optional vision |
+
+### Multimodal Vision Support
+
+For vision-capable LLMs (GPT-4o, Claude 3), images can be sent directly for analysis:
+
+```yaml
+llm_providers:
+  - name: openai-vision
+    api_url: https://api.openai.com/v1/chat/completions
+    api_key: ${OPENAI_API_KEY}
+    default_model: gpt-4o
+    supports_vision: true       # Enable multimodal
+
+attachments:
+  enabled: true
+  extract_images: true          # Include images for vision models
+```
+
+When both `supports_vision` and `extract_images` are enabled, images are sent as base64-encoded data alongside the text prompt.
+
+### Security
+
+Attachment extraction uses Docker container isolation:
+
+- Tika runs in a separate container with resource limits
+- Attachments are not stored, only streamed to Tika
+- Size limits prevent memory exhaustion
+- Content type filtering blocks potentially dangerous files
+
+## Antivirus Scanning
+
+Mailpilot can scan attachments for malware using ClamAV before processing.
+
+### Configuration
+
+```yaml
+antivirus:
+  enabled: true
+  host: clamav                  # ClamAV host
+  port: 3310                    # ClamAV port
+  timeout: 30s                  # Scan timeout
+  on_virus_detected: quarantine # quarantine | delete | flag_only
+```
+
+### Actions on Detection
+
+| Action | Behavior |
+|--------|----------|
+| `quarantine` | Move email to Quarantine folder |
+| `delete` | Delete the infected email |
+| `flag_only` | Add $Virus flag and continue processing |
+
 ## Development
 
 ```bash
@@ -348,15 +452,19 @@ src/
   accounts/
     manager.ts       # Account lifecycle management
     context.ts       # Per-account context
+  attachments/
+    tika.ts          # Apache Tika HTTP client
+    processor.ts     # Attachment extraction logic
+    index.ts         # Public exports
   imap/
     client.ts        # IMAP connection wrapper
     idle.ts          # IDLE/polling loop
     oauth.ts         # OAuth2 token handling
     detection.ts     # Provider detection (Gmail, Outlook, etc.)
   llm/
-    client.ts        # LLM API client
+    client.ts        # LLM API client (with multimodal support)
     parser.ts        # Response parsing and validation
-    prompt.ts        # Prompt building
+    prompt.ts        # Prompt building (with attachments)
     providers.ts     # Provider registry
     rate-limiter.ts  # Per-provider rate limiting
   processor/

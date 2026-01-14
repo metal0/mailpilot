@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import type { ServerConfig, AccountConfig, DashboardConfig } from "../config/schema.js";
+import type { ServerConfig, AccountConfig, DashboardConfig, AttachmentsConfig, AntivirusConfig } from "../config/schema.js";
 import { createLogger, setLogsBroadcast } from "../utils/logger.js";
-import { healthRouter } from "./health.js";
+import { healthRouter, setHealthConfig } from "./health.js";
 import {
   createStatusRouter,
   initializeAccountStatuses,
@@ -38,14 +38,30 @@ function checkDashboardWarning(): void {
   }
 }
 
+export interface StartServerOptions {
+  serverConfig: ServerConfig;
+  accounts: AccountConfig[];
+  dashboardConfig?: DashboardConfig;
+  attachmentsConfig?: AttachmentsConfig;
+  antivirusConfig?: AntivirusConfig;
+}
+
 export function startServer(
   serverConfig: ServerConfig,
   accounts: AccountConfig[],
-  dashboardConfig?: DashboardConfig
+  dashboardConfig?: DashboardConfig,
+  attachmentsConfig?: AttachmentsConfig,
+  antivirusConfig?: AntivirusConfig
 ): void {
   const app = new Hono();
 
   initializeAccountStatuses(accounts);
+
+  // Set health config for /health endpoint
+  setHealthConfig({
+    ...(attachmentsConfig && { attachments: attachmentsConfig }),
+    ...(antivirusConfig && { antivirus: antivirusConfig }),
+  });
 
   app.route("/", healthRouter);
   app.route("/", createStatusRouter(serverConfig));

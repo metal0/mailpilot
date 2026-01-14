@@ -8,13 +8,15 @@ Mailpilot uses LLM APIs to classify incoming emails and determine actions (move 
 
 ## Supported Providers
 
-| Provider | API Format | Models |
-|----------|------------|--------|
-| OpenAI | OpenAI Chat Completions | gpt-4o, gpt-4o-mini, gpt-4-turbo |
-| Anthropic | OpenAI-compatible | claude-3-opus, claude-3-sonnet, claude-3-haiku |
-| Azure OpenAI | OpenAI-compatible | gpt-4, gpt-35-turbo |
-| Ollama | OpenAI-compatible | llama3, mistral, mixtral |
-| Any OpenAI-compatible | OpenAI Chat Completions | varies |
+| Provider | API Format | Models | Vision |
+|----------|------------|--------|--------|
+| OpenAI | OpenAI Chat Completions | gpt-4o, gpt-4o-mini, gpt-4-turbo | gpt-4o, gpt-4-turbo |
+| Anthropic | OpenAI-compatible | claude-3-opus, claude-3-sonnet, claude-3-haiku | claude-3-* models |
+| Azure OpenAI | OpenAI-compatible | gpt-4, gpt-35-turbo | gpt-4 vision |
+| Ollama | OpenAI-compatible | llama3, mistral, mixtral | llava, bakllava |
+| Any OpenAI-compatible | OpenAI Chat Completions | varies | depends on model |
+
+Set `supports_vision: true` in provider config to enable multimodal image support.
 
 ## Configuration
 
@@ -27,6 +29,7 @@ llm_providers:
     max_body_tokens: 4000      # Max tokens for email body
     max_thread_tokens: 2000    # Max tokens for thread context
     rate_limit_rpm: 60         # Requests per minute limit
+    supports_vision: false     # Enable for image support (gpt-4o, claude-3)
 
 accounts:
   - name: personal
@@ -58,6 +61,7 @@ The prompt sent to the LLM contains:
 2. **Folder Context**: Available folders (predefined or existing)
 3. **Response Schema**: Required JSON format
 4. **Email Data**: From, Subject, Date, Body, Attachment names
+5. **Extracted Attachments** (optional): Text content from PDF, DOCX, etc.
 
 Example prompt structure:
 ```
@@ -150,6 +154,73 @@ Emails detected as PGP encrypted are automatically skipped:
 - Checks for `-----BEGIN PGP MESSAGE-----` markers
 
 Skipped emails are logged with action `noop` and reason "PGP encrypted email".
+
+## Attachment Extraction
+
+When attachment extraction is enabled, Mailpilot extracts text from supported file types and includes it in the LLM prompt.
+
+### How Attachments Appear in Prompts
+
+```
+## Attachments
+
+### invoice.pdf (application/pdf, 245.0 KB)
+[Extracted text, truncated]
+```
+Invoice #12345
+Date: January 1, 2026
+Amount Due: $500.00
+...
+```
+
+### scan.png (image/png, 128.0 KB)
+[Image attachment - will be included for vision-capable models]
+```
+
+### Extraction Process
+
+1. **Filter**: Only allowed content types are processed
+2. **Size Check**: Attachments over `max_size_mb` are skipped
+3. **Extract**: Text extracted via Apache Tika
+4. **Truncate**: Long content truncated to `max_extracted_chars`
+5. **Format**: Added to prompt with filename and metadata
+
+### Multimodal (Vision) Support
+
+For vision-capable LLMs (GPT-4o, Claude 3), images can be sent directly:
+
+```yaml
+llm_providers:
+  - name: openai-vision
+    api_url: https://api.openai.com/v1/chat/completions
+    api_key: ${OPENAI_API_KEY}
+    default_model: gpt-4o
+    supports_vision: true       # Required for image support
+
+attachments:
+  enabled: true
+  extract_images: true          # Include base64 images
+```
+
+When both flags are enabled:
+- Images are base64-encoded and sent as content parts
+- OCR text from Tika is also included
+- LLM can "see" the images alongside text
+
+### Writing Prompts for Attachments
+
+When attachments are enabled, consider adding rules like:
+
+```yaml
+default_prompt: |
+  Classification rules:
+  - Invoices (from PDF content or email body) → Finance
+  - Contracts with signatures → Legal
+  - Screenshots of errors → Development/Support
+  - Scanned documents → Review folder
+```
+
+The LLM will see extracted text in the prompt and can classify based on attachment content.
 
 ## Dry Run Mode
 

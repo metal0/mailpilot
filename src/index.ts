@@ -45,7 +45,7 @@ async function main(): Promise<void> {
 
   registerProviders(config.llm_providers);
 
-  startServer(serverConfig, config.accounts, dashboardConfig);
+  startServer(serverConfig, config.accounts, dashboardConfig, config.attachments, config.antivirus);
 
   await dispatchStartup();
 
