@@ -74,6 +74,7 @@ Edit all settings through the UI without manually editing YAML:
 - Navigate to Settings page
 - Edit configuration with helpful tooltips
 - Validate changes before applying
+- **Unsaved Changes Indicator**: Shows how many settings have been modified with a visual badge next to the save button. The save button is disabled until changes are made.
 - **Live Config Reload**: Apply changes without restarting Mailpilot
 
 ### Raw YAML Editor
@@ -99,6 +100,17 @@ The dashboard uses WebSocket connections for instant updates:
 ### Dark/Light Mode
 
 Toggle between dark and light themes using the button in the header. Your preference is saved in localStorage.
+
+### Language Settings
+
+The dashboard supports internationalization (i18n). To change the language:
+
+1. Click on your username in the header
+2. Select "User Settings"
+3. Choose your preferred language from the dropdown
+4. Click "Save"
+
+Your language preference is saved in localStorage and persists across sessions. Currently, English is the only available language, but the infrastructure supports additional languages.
 
 ### Activity Log
 
