@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import type { AccountConfig, ServerConfig } from "../config/schema.js";
 import { getProcessedCount } from "../storage/processed.js";
 import { getActionCount } from "../storage/audit.js";
-import { getProviderStats } from "../llm/providers.js";
+import { getProviderStats, getProviderForAccount } from "../llm/providers.js";
 
 let cachedVersion: string | null = null;
 
@@ -176,13 +176,16 @@ export function createStatusRouter(serverConfig: ServerConfig): Hono {
 
 export function initializeAccountStatuses(accounts: AccountConfig[]): void {
   for (const account of accounts) {
+    // Resolve actual LLM provider/model (even if using defaults)
+    const llmInfo = getProviderForAccount(account.llm?.provider, account.llm?.model);
+
     accountStatuses.set(account.name, {
       connected: false,
       idleSupported: false,
       lastScan: null,
       errors: 0,
-      llmProvider: account.llm?.provider ?? "default",
-      llmModel: account.llm?.model ?? "default",
+      llmProvider: llmInfo?.provider.name ?? "none",
+      llmModel: llmInfo?.model ?? "none",
       imapHost: account.imap.host,
       imapPort: account.imap.port,
       paused: false,

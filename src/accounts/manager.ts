@@ -6,7 +6,7 @@ import { createAccountContext, type AccountContext } from "./context.js";
 import { processMailbox } from "../processor/worker.js";
 import { registerWebhooks, unregisterWebhooks } from "../webhooks/dispatcher.js";
 import { updateAccountStatus, removeAccountStatus } from "../server/status.js";
-import { registerProviders } from "../llm/providers.js";
+import { registerProviders, getProviderForAccount } from "../llm/providers.js";
 import { createLogger } from "../utils/logger.js";
 import { isShutdownInProgress, onShutdown } from "../utils/shutdown.js";
 
@@ -54,11 +54,14 @@ export async function startAccount(
     await imapClient.connect();
     activeClients.set(account.name, imapClient);
 
+    // Resolve actual LLM provider/model (even if using defaults)
+    const llmInfo = getProviderForAccount(account.llm?.provider, account.llm?.model);
+
     updateAccountStatus(account.name, {
       connected: true,
       idleSupported: imapClient.providerInfo.supportsIdle,
-      llmProvider: account.llm?.provider ?? "default",
-      llmModel: account.llm?.model ?? "default",
+      llmProvider: llmInfo?.provider.name ?? "none",
+      llmModel: llmInfo?.model ?? "none",
       imapHost: account.imap.host,
       imapPort: account.imap.port,
     });

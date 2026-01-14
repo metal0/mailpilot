@@ -824,7 +824,6 @@
                             editingAccount!.llm.provider = (e.target as HTMLSelectElement).value || undefined;
                           }}
                         >
-                          <option value="">{$t("settings.accounts.default")}</option>
                           {#each config?.llm_providers ?? [] as provider}
                             <option value={provider.name}>{provider.name}</option>
                           {/each}
