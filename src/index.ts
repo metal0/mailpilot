@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { loadConfig } from "./config/loader.js";
 import { initDatabase, closeDatabase } from "./storage/database.js";
 import { cleanupProcessedMessages } from "./storage/processed.js";
@@ -15,8 +16,18 @@ import { setupShutdownHandlers, onShutdown } from "./utils/shutdown.js";
 
 const logger = createLogger("main");
 
+function getVersion(): string {
+  try {
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as { version: string };
+    return pkg.version;
+  } catch {
+    return "unknown";
+  }
+}
+
 async function main(): Promise<void> {
-  logger.info("Mailpilot starting");
+  const version = getVersion();
+  logger.info(`Mailpilot v${version} starting`);
 
   setupShutdownHandlers();
   setupAccountShutdown();
