@@ -12,7 +12,6 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
     environment:
-      - NODE_ENV=production
       - LLM_OPENAI_API_KEY=${LLM_OPENAI_API_KEY}
       - STATUS_API_TOKEN=${STATUS_API_TOKEN}
     healthcheck:
