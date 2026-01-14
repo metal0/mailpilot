@@ -383,6 +383,7 @@ describe("Endpoint Permission Requirements", () => {
     "/dashboard/api/accounts/:name/process": "write:accounts",
     "/dashboard/api/dead-letter/:id/retry": "write:accounts",
     "/dashboard/api/dead-letter/:id/dismiss": "write:accounts",
+    "/dashboard/api/config/raw": "write:accounts",
   };
 
   it("maps all read endpoints correctly", () => {

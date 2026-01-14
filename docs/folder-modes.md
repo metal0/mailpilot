@@ -24,6 +24,22 @@ folders:
 - If LLM suggests a folder not in the list, the action is skipped
 - Folders are created automatically if they don't exist
 
+### Auto-Discovery (No Allowed Folders)
+
+If you use predefined mode but don't specify any `allowed` folders, Mailpilot will automatically discover existing folders via IMAP and use them as the allowed list:
+
+```yaml
+folders:
+  watch: [INBOX]
+  mode: predefined
+  # No 'allowed' list - existing folders are auto-discovered
+```
+
+This is useful when:
+- You want to restrict to existing folders without manually listing them
+- You're migrating from another system with an existing folder structure
+- You want predefined behavior without the maintenance overhead
+
 **Best for:**
 - Structured folder hierarchies
 - Compliance requirements

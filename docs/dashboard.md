@@ -76,6 +76,17 @@ Edit all settings through the UI without manually editing YAML:
 - Validate changes before applying
 - **Live Config Reload**: Apply changes without restarting Mailpilot
 
+### Raw YAML Editor
+
+For advanced users who prefer direct YAML editing:
+
+1. Navigate to Settings page
+2. Click "Edit YAML" button next to the config file path
+3. Edit the raw YAML directly in the browser
+4. Save to apply changes (with optional config reload)
+
+**Warning**: The raw YAML editor bypasses validation. Invalid YAML or incorrect configuration values may prevent Mailpilot from starting properly. Use with caution.
+
 ### Real-Time Updates
 
 The dashboard uses WebSocket connections for instant updates:
@@ -290,6 +301,8 @@ When the dashboard is enabled but no account exists:
 | `/api/export` | GET | Session/Key | `read:export` | Export audit data |
 | `/api/config` | GET | Session/Key | `read:config` | Get configuration |
 | `/api/config` | PUT | Session/Key | `write:config` | Update configuration |
+| `/api/config/raw` | GET | Session/Key | `write:accounts` | Get raw YAML config |
+| `/api/config/raw` | PUT | Session/Key | `write:accounts` | Save raw YAML config |
 | `/api/dead-letter` | GET | Session/Key | `read:activity` | Get dead letters |
 | `/api/dead-letter/:id/retry` | POST | Session/Key | `write:accounts` | Retry failed email |
 | `/api/dead-letter/:id/dismiss` | POST | Session/Key | `write:accounts` | Dismiss entry |
