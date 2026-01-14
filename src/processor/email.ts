@@ -18,12 +18,18 @@ export interface AttachmentInfo {
   filename: string;
   contentType: string;
   size: number;
+  content?: Buffer;
+}
+
+export interface FetchOptions {
+  includeAttachmentContent?: boolean;
 }
 
 export async function fetchAndParseEmail(
   client: ImapFlow,
   folder: string,
-  uid: number
+  uid: number,
+  options: FetchOptions = {}
 ): Promise<ParsedEmail> {
   const lock = await client.getMailboxLock(folder);
 
@@ -44,13 +50,17 @@ export async function fetchAndParseEmail(
 
     const parsed = await simpleParser(message.source);
 
-    return transformParsedMail(parsed, uid);
+    return transformParsedMail(parsed, uid, options);
   } finally {
     lock.release();
   }
 }
 
-function transformParsedMail(parsed: ParsedMail, uid: number): ParsedEmail {
+function transformParsedMail(
+  parsed: ParsedMail,
+  uid: number,
+  options: FetchOptions = {}
+): ParsedEmail {
   const from = extractFrom(parsed);
   const subject = parsed.subject ?? "(no subject)";
   const date = parsed.date?.toISOString() ?? new Date().toISOString();
@@ -65,11 +75,19 @@ function transformParsedMail(parsed: ParsedMail, uid: number): ParsedEmail {
 
   const attachments: AttachmentInfo[] = [];
   for (const att of parsed.attachments) {
-    attachments.push({
+    const info: AttachmentInfo = {
       filename: att.filename ?? "unnamed",
       contentType: att.contentType,
       size: att.size,
-    });
+    };
+
+    if (options.includeAttachmentContent) {
+      info.content = Buffer.isBuffer(att.content)
+        ? att.content
+        : Buffer.from(att.content);
+    }
+
+    attachments.push(info);
   }
 
   logger.debug("Parsed email", {

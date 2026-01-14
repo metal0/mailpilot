@@ -1,0 +1,227 @@
+# Antivirus Scanning
+
+Mailpilot supports optional antivirus scanning of email attachments using ClamAV.
+
+## Overview
+
+When enabled, Mailpilot scans all email attachments before LLM classification. If a virus is detected, the email is handled according to your configured action (quarantine, delete, or flag).
+
+## Requirements
+
+ClamAV is resource-intensive due to loading virus definitions into memory.
+
+### Resource Requirements
+
+| Resource | Minimum | Recommended |
+|----------|---------|-------------|
+| **Memory** | 1 GB | 2 GB |
+| **Disk** | 500 MB | 1 GB |
+| **CPU** | 1 core | 2 cores |
+| **Startup time** | 2-5 minutes | - |
+
+The high memory requirement is because ClamAV loads its entire virus signature database (~400MB) into RAM for fast scanning.
+
+### Startup Time
+
+ClamAV takes 2-5 minutes to start because it must:
+1. Download/update virus definitions (first run)
+2. Load all signatures into memory
+
+The Docker health check is configured with a 5-minute `start_period` to accommodate this.
+
+## Configuration
+
+### 1. Enable ClamAV in docker-compose.yaml
+
+Uncomment the ClamAV service in `docker-compose.yaml`:
+
+```yaml
+services:
+  mailpilot:
+    # ... existing config ...
+    depends_on:
+      clamav:
+        condition: service_healthy
+
+  clamav:
+    image: clamav/clamav:latest
+    container_name: mailpilot-clamav
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+    volumes:
+      - clamav-db:/var/lib/clamav
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+volumes:
+  clamav-db:
+```
+
+### 2. Enable in config.yaml
+
+Add the antivirus configuration:
+
+```yaml
+antivirus:
+  enabled: true
+  host: clamav          # Docker service name
+  port: 3310            # ClamAV daemon port
+  timeout: 30s          # Scan timeout per attachment
+  on_virus_detected: quarantine  # quarantine | delete | flag_only
+```
+
+### 3. Start the services
+
+```bash
+docker compose up -d
+```
+
+Wait for ClamAV to become healthy (2-5 minutes):
+
+```bash
+docker compose ps
+# Wait until clamav shows "healthy"
+```
+
+## Actions on Virus Detection
+
+| Action | Behavior |
+|--------|----------|
+| `quarantine` | Move email to "Quarantine" folder, skip LLM processing |
+| `delete` | Delete the email immediately |
+| `flag_only` | Flag email with `$Virus` and `\Flagged`, continue processing |
+
+### Quarantine Folder
+
+When using `quarantine` action, Mailpilot moves infected emails to a folder named "Quarantine". This folder is created automatically if it doesn't exist.
+
+Review quarantined emails periodically - false positives are possible.
+
+## Non-Docker Deployment
+
+If running Mailpilot outside Docker, install ClamAV separately:
+
+### Ubuntu/Debian
+
+```bash
+sudo apt install clamav clamav-daemon
+sudo systemctl enable clamav-daemon
+sudo systemctl start clamav-daemon
+```
+
+### macOS
+
+```bash
+brew install clamav
+# Edit /opt/homebrew/etc/clamav/clamd.conf
+# Start: clamd
+```
+
+### Configuration
+
+Point Mailpilot to your ClamAV daemon:
+
+```yaml
+antivirus:
+  enabled: true
+  host: localhost       # or IP address
+  port: 3310
+```
+
+## Monitoring
+
+### Check ClamAV Status
+
+```bash
+# Docker
+docker compose exec clamav clamdscan --version
+
+# Check if responsive
+docker compose exec clamav clamdscan --ping 1
+```
+
+### View Scan Logs
+
+Mailpilot logs all scan results:
+
+```bash
+# Successful scans (debug level)
+2024-01-15T10:30:00Z [DEBUG] [antivirus] Attachment clean {"filename":"report.pdf"}
+
+# Virus detected (warn level)
+2024-01-15T10:30:01Z [WARN ] [antivirus] Virus detected {"filename":"malware.exe","virus":"Win.Malware.Generic"}
+```
+
+## Troubleshooting
+
+### ClamAV Won't Start
+
+**Symptom**: Container keeps restarting or stays unhealthy.
+
+**Cause**: Usually insufficient memory.
+
+**Fix**: Ensure at least 1GB RAM is available:
+
+```yaml
+deploy:
+  resources:
+    limits:
+      memory: 2G
+    reservations:
+      memory: 1G
+```
+
+### Scan Timeouts
+
+**Symptom**: Scans fail with timeout errors.
+
+**Cause**: Large attachments or slow system.
+
+**Fix**: Increase timeout in config:
+
+```yaml
+antivirus:
+  timeout: 60s  # Increase from default 30s
+```
+
+### Connection Refused
+
+**Symptom**: `ECONNREFUSED` errors in logs.
+
+**Cause**: ClamAV not running or wrong host/port.
+
+**Fix**:
+1. Check ClamAV is running: `docker compose ps`
+2. Verify host/port in config matches your setup
+3. If using Docker, use service name (`clamav`) not `localhost`
+
+### High Memory Usage
+
+**Expected**: ClamAV uses 1-2GB RAM by design.
+
+**If excessive**: Check for memory leaks by restarting:
+
+```bash
+docker compose restart clamav
+```
+
+## Performance Considerations
+
+- **Scan time**: Typically 100-500ms per attachment
+- **Memory**: Fixed ~1GB regardless of scan volume
+- **CPU**: Spikes during scans, idle otherwise
+- **Network**: Virus definitions update daily (~10MB)
+
+For high-volume deployments, consider:
+- Running ClamAV on a dedicated host
+- Using multiple ClamAV instances behind a load balancer
+- Caching scan results (not built-in, requires custom implementation)

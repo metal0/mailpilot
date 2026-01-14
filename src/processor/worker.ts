@@ -4,7 +4,8 @@ import { createLogger } from "../utils/logger.js";
 import { isShutdownInProgress } from "../utils/shutdown.js";
 import { isMessageProcessed, markMessageProcessed } from "../storage/processed.js";
 import { logAction } from "../storage/audit.js";
-import { fetchAndParseEmail } from "./email.js";
+import { fetchAndParseEmail, type ParsedEmail } from "./email.js";
+import type { AntivirusScanner } from "./antivirus.js";
 import { buildPrompt, truncateToTokens, type EmailContext, type PromptOptions } from "../llm/prompt.js";
 import { classifyEmail } from "../llm/client.js";
 import { loadPrompt } from "../config/loader.js";
@@ -19,6 +20,7 @@ export interface WorkerContext {
   imapClient: ImapClient;
   provider: LlmProviderConfig;
   model: string;
+  antivirusScanner?: AntivirusScanner;
 }
 
 export async function processMailbox(
@@ -64,7 +66,7 @@ async function processMessage(
   uid: number,
   messageId: string
 ): Promise<boolean> {
-  const { account, imapClient, provider, model, config } = ctx;
+  const { account, imapClient, provider, model, config, antivirusScanner } = ctx;
   const log = logger.child(account.name);
 
   if (isMessageProcessed(messageId, account.name)) {
@@ -73,7 +75,21 @@ async function processMessage(
   }
 
   try {
-    const email = await fetchAndParseEmail(imapClient.client, folder, uid);
+    const avConfig = config.antivirus;
+    const needsAvScan = Boolean(antivirusScanner && avConfig?.enabled);
+
+    const email = await fetchAndParseEmail(imapClient.client, folder, uid, {
+      includeAttachmentContent: needsAvScan,
+    });
+
+    // Antivirus scanning
+    if (needsAvScan && email.attachments.length > 0) {
+      const avResult = await scanEmailAttachments(ctx, email, folder, uid);
+      if (avResult === "skip") {
+        markMessageProcessed(messageId, account.name);
+        return true;
+      }
+    }
 
     const foldersConfig = account.folders ?? { watch: ["INBOX"], mode: "predefined" as const };
     const stateConfig = config.state ?? { audit_subjects: false };
@@ -159,4 +175,55 @@ async function executeActions(
       accountConfig: account,
     });
   }
+}
+
+async function scanEmailAttachments(
+  ctx: WorkerContext,
+  email: ParsedEmail,
+  folder: string,
+  uid: number
+): Promise<"continue" | "skip"> {
+  const { config, imapClient, antivirusScanner, account } = ctx;
+  const log = logger.child(account.name);
+  const avConfig = config.antivirus;
+
+  if (!antivirusScanner || !avConfig) {
+    return "continue";
+  }
+
+  for (const attachment of email.attachments) {
+    if (!attachment.content) {
+      continue;
+    }
+
+    const result = await antivirusScanner.scan(attachment.content, attachment.filename);
+
+    if (result.infected) {
+      log.warn("Virus detected in attachment", {
+        messageId: email.messageId,
+        filename: attachment.filename,
+        virus: result.virus,
+        action: avConfig.on_virus_detected,
+      });
+
+      switch (avConfig.on_virus_detected) {
+        case "quarantine":
+          await imapClient.moveMessage(uid, folder, "Quarantine");
+          log.info("Moved infected email to Quarantine", { messageId: email.messageId });
+          return "skip";
+
+        case "delete":
+          await imapClient.deleteMessage(uid, folder);
+          log.info("Deleted infected email", { messageId: email.messageId });
+          return "skip";
+
+        case "flag_only":
+          await imapClient.flagMessage(uid, folder, ["$Virus", "\\Flagged"]);
+          log.info("Flagged infected email", { messageId: email.messageId });
+          return "continue";
+      }
+    }
+  }
+
+  return "continue";
 }
