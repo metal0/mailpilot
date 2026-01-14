@@ -6,16 +6,27 @@
 
   let loading = $state(false);
   let searchQuery = $state("");
+  let lineLimit = $state<number>(
+    (typeof localStorage !== "undefined" && parseInt(localStorage.getItem("logs-line-limit") || "25", 10)) || 25
+  );
 
-  const searchedLogs = $derived(
-    searchQuery
+  function setLineLimit(limit: number) {
+    lineLimit = limit;
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("logs-line-limit", limit.toString());
+    }
+  }
+
+  const searchedLogs = $derived.by(() => {
+    const filtered = searchQuery
       ? $filteredLogs.filter(log =>
           log.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
           log.context.toLowerCase().includes(searchQuery.toLowerCase()) ||
           (log.meta && JSON.stringify(log.meta).toLowerCase().includes(searchQuery.toLowerCase()))
         )
-      : $filteredLogs
-  );
+      : $filteredLogs;
+    return filtered.slice(0, lineLimit);
+  });
 
   async function loadLogs() {
     loading = true;
@@ -35,6 +46,11 @@
   function formatTime(timestamp: string): string {
     // Extract just the time portion (HH:MM:SS)
     return timestamp.substring(11, 19);
+  }
+
+  function formatUtcTooltip(timestamp: string): string {
+    const date = new Date(timestamp);
+    return date.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
   }
 
   function getLevelClass(level: string): string {
@@ -69,6 +85,12 @@
         <option value="warn">{$t("logs.warn")}</option>
         <option value="error">{$t("logs.error")}</option>
       </select>
+      <select class="filter-select" bind:value={lineLimit} onchange={(e) => setLineLimit(parseInt(e.currentTarget.value, 10))}>
+        <option value={10}>10 rows</option>
+        <option value={25}>25 rows</option>
+        <option value={50}>50 rows</option>
+        <option value={100}>100 rows</option>
+      </select>
       <button class="btn btn-sm" onclick={loadLogs}>{$t("common.refresh")}</button>
     </div>
   </div>
@@ -81,7 +103,7 @@
     {:else}
       {#each searchedLogs as log}
         <div class="log-entry {getLevelClass(log.level)}">
-          <span class="log-time">{formatTime(log.timestamp)}</span>
+          <span class="log-time" title={formatUtcTooltip(log.timestamp)}>{formatTime(log.timestamp)}</span>
           <span class="log-level">{log.level.toUpperCase()}</span>
           <span class="log-context">[{log.context}]</span>
           <span class="log-message">{log.message}</span>

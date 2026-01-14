@@ -2,6 +2,9 @@
   import { auth, logout } from "../stores/auth";
   import { connectionState } from "../stores/websocket";
   import { t } from "../i18n";
+  import { generateSystemNotifications } from "../stores/notifications";
+  import { stats, deadLetters } from "../stores/data";
+  import { onMount } from "svelte";
   import ThemeToggle from "./ThemeToggle.svelte";
   import UserSettings from "./UserSettings.svelte";
 
@@ -21,6 +24,12 @@
     userMenuOpen = false;
     userSettingsOpen = true;
   }
+
+  $effect(() => {
+    if ($stats || $deadLetters) {
+      generateSystemNotifications();
+    }
+  });
 </script>
 
 <header class="header">
@@ -48,12 +57,12 @@
         class="user-menu-trigger"
         onclick={() => userMenuOpen = !userMenuOpen}
         onblur={() => setTimeout(closeMenu, 200)}
+        title={$auth.username}
       >
         <svg class="user-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
           <circle cx="12" cy="7" r="4" />
         </svg>
-        <span class="username">{$auth.username}</span>
         <svg class="chevron" class:open={userMenuOpen} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9" />
         </svg>
@@ -61,6 +70,10 @@
 
       {#if userMenuOpen}
         <div class="user-dropdown">
+          <div class="dropdown-user-header">
+            <span class="dropdown-username">{$auth.username}</span>
+          </div>
+          <div class="dropdown-divider"></div>
           <button class="dropdown-item" onclick={openUserSettings}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="3" />
@@ -188,8 +201,14 @@
     color: var(--text-secondary);
   }
 
-  .username {
+  .dropdown-user-header {
+    padding: 0.75rem 0.875rem;
+  }
+
+  .dropdown-username {
     font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
   }
 
   .chevron {
@@ -253,8 +272,9 @@
       padding: 0.75rem 1rem;
     }
 
-    .username {
-      display: none;
+    .notification-dropdown {
+      width: 280px;
+      right: -1rem;
     }
   }
 </style>

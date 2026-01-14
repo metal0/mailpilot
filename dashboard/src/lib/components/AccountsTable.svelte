@@ -9,6 +9,42 @@
   let selectedAccounts = $state<Set<string>>(new Set());
   let bulkActionLoading = $state(false);
 
+  // Smart hybrid timestamp formatting
+  function formatLastScan(timestamp: string | null): string {
+    if (!timestamp) return $t("accounts.never");
+
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+
+    // Less than 24 hours: show relative time
+    if (diffMs < 24 * 60 * 60 * 1000) {
+      if (diffMins < 1) return $t("time.justNow");
+      if (diffMins < 60) return `${diffMins}m ago`;
+      return `${diffHours}h ago`;
+    }
+
+    // More than 24 hours: show date
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
+  function formatUtcTooltip(timestamp: string | null): string {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    return date.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
+  }
+
+  function getActionRate(account: AccountStatus): string | null {
+    if (account.emailsProcessed === 0) return null;
+    return Math.round((account.actionsTaken / account.emailsProcessed) * 100) + "%";
+  }
+
+  function hasRecentErrors(account: AccountStatus): boolean {
+    return account.errors > 0;
+  }
+
   function toggleDropdown(accountName: string, event: MouseEvent) {
     if (openDropdown === accountName) {
       openDropdown = null;
@@ -187,12 +223,9 @@
             <input type="checkbox" checked={selectedAccounts.size > 0} onchange={toggleSelectAll} />
           </th>
           <th>{$t("common.name")}</th>
-          <th>LLM</th>
+          <th>Action Rate</th>
           <th>{$t("accounts.lastScan")}</th>
-          <th class="num">{$t("accounts.processed")}</th>
-          <th class="num">{$t("common.actions")}</th>
-          <th class="num">{$t("accounts.errorsCount")}</th>
-          <th>{$t("common.actions")}</th>
+          <th class="actions-header"></th>
         </tr>
       </thead>
       <tbody>
@@ -207,48 +240,66 @@
               </td>
               <td class="name-cell">
                 <span
-                  class="status-indicator"
-                  class:connected={account.connected}
+                  class="status-dot-inline"
+                  class:connected={account.connected && !account.paused}
                   class:paused={account.paused}
+                  class:disconnected={!account.connected && !account.paused}
                   title={account.paused ? $t("accounts.paused") : account.connected ? $t("accounts.connected") : $t("accounts.disconnected")}
                 ></span>
-                {account.name}
-                {#if account.idleSupported}
-                  <span class="badge">{$t("accounts.idle")}</span>
-                {/if}
                 {#if account.paused}
-                  <span class="badge badge-warning">{$t("accounts.paused")}</span>
+                  <span class="status-text paused">{$t("accounts.paused")}</span>
+                {/if}
+                {#if hasRecentErrors(account)}
+                  <span class="error-indicator" title="{account.errors} errors - check logs">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/>
+                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                  </span>
+                {/if}
+                <span class="account-name">{account.name}</span>
+                {#if account.idleSupported && account.connected && !account.paused}
+                  <span class="idle-badge">{$t("accounts.idle")}</span>
+                {/if}
+                <span class="llm-info">{account.llmProvider}/{account.llmModel}</span>
+              </td>
+              <td class="rate-cell">
+                {#if getActionRate(account)}
+                  <span class="rate-value">{getActionRate(account)}</span>
+                {:else}
+                  <span class="rate-empty">—</span>
                 {/if}
               </td>
-              <td class="llm-cell">{account.llmProvider}/{account.llmModel}</td>
-              <td class="time-cell">{account.lastScan ?? $t("accounts.never")}</td>
-              <td class="num">{account.emailsProcessed}</td>
-              <td class="num">{account.actionsTaken}</td>
-              <td class="num errors">{account.errors}</td>
+              <td class="time-cell">
+                <span class="time-value" title={formatUtcTooltip(account.lastScan)}>{formatLastScan(account.lastScan)}</span>
+              </td>
               <td class="actions-cell">
-                <div class="dropdown">
-                  <button class="btn-sm btn-secondary dropdown-toggle" onclick={(e) => toggleDropdown(account.name, e)}>
-                    {$t("common.actions")}
-                  </button>
-                  {#if openDropdown === account.name && dropdownPosition}
-                    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                    <div class="dropdown-backdrop" onclick={closeDropdown}></div>
-                    <div
-                      class="dropdown-menu"
-                      style="position: fixed; top: {dropdownPosition.top}px; right: {dropdownPosition.right}px;"
-                    >
-                      <button class="dropdown-item" onclick={() => handlePause(account)}>
-                        {account.paused ? $t("accounts.resume") : $t("accounts.pause")}
-                      </button>
-                      <button class="dropdown-item" onclick={() => handleReconnect(account.name)}>
-                        {$t("accounts.reconnect")}
-                      </button>
-                      <button class="dropdown-item" onclick={() => handleProcess(account.name)}>
-                        {$t("accounts.processNow")}
-                      </button>
-                    </div>
-                  {/if}
-                </div>
+                <button class="action-btn" onclick={(e) => toggleDropdown(account.name, e)} title={$t("common.actions")}>
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="6" r="2"/>
+                    <circle cx="12" cy="12" r="2"/>
+                    <circle cx="12" cy="18" r="2"/>
+                  </svg>
+                </button>
+                {#if openDropdown === account.name && dropdownPosition}
+                  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                  <div class="dropdown-backdrop" onclick={closeDropdown}></div>
+                  <div
+                    class="dropdown-menu"
+                    style="position: fixed; top: {dropdownPosition.top}px; right: {dropdownPosition.right}px;"
+                  >
+                    <button class="dropdown-item" onclick={() => handlePause(account)}>
+                      {account.paused ? $t("accounts.resume") : $t("accounts.pause")}
+                    </button>
+                    <button class="dropdown-item" onclick={() => handleReconnect(account.name)}>
+                      {$t("accounts.reconnect")}
+                    </button>
+                    <button class="dropdown-item" onclick={() => handleProcess(account.name)}>
+                      {$t("accounts.processNow")}
+                    </button>
+                  </div>
+                {/if}
               </td>
           </tr>
         {/each}
@@ -260,20 +311,20 @@
 <style>
   .card {
     background: var(--bg-secondary);
-    border-radius: 0.5rem;
-    margin-bottom: 1.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
   }
 
   .card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 1.25rem;
+    padding: var(--space-4) var(--space-5);
     border-bottom: 1px solid var(--border-color);
   }
 
   .card-title {
-    font-size: 1rem;
+    font-size: var(--text-base);
     font-weight: 600;
     margin: 0;
   }
@@ -282,20 +333,20 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.75rem 1.25rem;
+    padding: var(--space-3) var(--space-5);
     background: var(--bg-tertiary);
     border-bottom: 1px solid var(--border-color);
   }
 
   .selection-count {
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--accent);
   }
 
   .bulk-buttons {
     display: flex;
-    gap: 0.5rem;
+    gap: var(--space-2);
   }
 
   .checkbox-cell {
@@ -305,10 +356,11 @@
 
   .checkbox-cell input {
     cursor: pointer;
+    accent-color: var(--accent);
   }
 
   tr.selected {
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
   }
 
   .table-container {
@@ -323,89 +375,179 @@
   th,
   td {
     text-align: left;
-    padding: 0.75rem 1rem;
+    padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid var(--border-color);
   }
 
   th {
-    color: var(--text-secondary);
+    color: var(--text-muted);
     font-weight: 500;
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    background: var(--bg-tertiary);
   }
 
-  .num {
-    text-align: right;
+  tbody tr {
+    transition: background var(--transition-fast);
+  }
+
+  tbody tr:hover {
+    background: var(--bg-tertiary);
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
   }
 
   .name-cell {
-    font-weight: 500;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--space-2);
   }
 
-  .status-indicator {
-    width: 0.5rem;
-    height: 0.5rem;
+  .status-dot-inline {
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    background: var(--error);
     flex-shrink: 0;
   }
 
-  .status-indicator.connected {
+  .status-dot-inline.connected {
     background: var(--success);
+    box-shadow: 0 0 4px var(--success);
   }
 
-  .status-indicator.paused {
+  .status-dot-inline.paused {
     background: var(--warning);
   }
 
-  .llm-cell,
-  .time-cell {
-    color: var(--text-secondary);
-    font-size: 0.875rem;
+  .status-dot-inline.disconnected {
+    background: var(--error);
   }
 
-  .errors {
-    color: var(--error);
-  }
-
-  .badge {
-    display: inline-block;
-    padding: 0.125rem 0.5rem;
-    background: var(--bg-tertiary);
-    border-radius: 0.25rem;
-    font-size: 0.625rem;
+  .status-text {
+    font-size: var(--text-xs);
+    font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-secondary);
-    margin-left: 0.5rem;
+    letter-spacing: 0.03em;
   }
 
-  .badge-warning {
-    background: #78350f;
+  .status-text.paused {
     color: var(--warning);
   }
 
+  .status-text.disconnected {
+    color: var(--error);
+  }
+
+  .error-indicator {
+    display: flex;
+    align-items: center;
+    color: var(--warning);
+    flex-shrink: 0;
+  }
+
+  .error-indicator svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .account-name {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .idle-badge {
+    padding: var(--space-1) var(--space-2);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .llm-info {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+  }
+
+  .rate-cell {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rate-value {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .rate-empty {
+    color: var(--text-muted);
+  }
+
+  .time-cell {
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+  }
+
+  .time-value {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .actions-header {
+    width: 48px;
+  }
+
   .actions-cell {
-    white-space: nowrap;
+    text-align: center;
+    position: relative;
+  }
+
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .action-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .action-btn svg {
+    width: 18px;
+    height: 18px;
   }
 
   .btn-sm {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.75rem;
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+    font-weight: 500;
     background: var(--accent);
     color: white;
     border: none;
-    border-radius: 0.25rem;
+    border-radius: var(--radius-md);
     cursor: pointer;
-    margin-right: 0.25rem;
+    transition: all var(--transition-fast);
   }
 
-  .btn-sm:hover {
+  .btn-sm:hover:not(:disabled) {
     background: var(--accent-hover);
+  }
+
+  .btn-sm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .btn-sm.btn-secondary {
@@ -413,22 +555,8 @@
     color: var(--text-primary);
   }
 
-  .btn-sm.btn-secondary:hover {
+  .btn-sm.btn-secondary:hover:not(:disabled) {
     background: var(--border-color);
-  }
-
-  .dropdown {
-    position: relative;
-    display: inline-block;
-  }
-
-  .dropdown-toggle::after {
-    content: "";
-    display: inline-block;
-    margin-left: 0.375rem;
-    border-top: 0.3em solid;
-    border-right: 0.3em solid transparent;
-    border-left: 0.3em solid transparent;
   }
 
   .dropdown-backdrop {
@@ -438,11 +566,11 @@
   }
 
   .dropdown-menu {
-    min-width: 120px;
-    background: var(--bg-secondary);
+    min-width: 140px;
+    background: var(--bg-elevated);
     border: 1px solid var(--border-color);
-    border-radius: 0.375rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
     z-index: 1000;
     overflow: hidden;
   }
@@ -450,22 +578,26 @@
   .dropdown-item {
     display: block;
     width: 100%;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.8125rem;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
     text-align: left;
     background: none;
     border: none;
     color: var(--text-primary);
     cursor: pointer;
-    transition: background 0.15s;
+    transition: background var(--transition-fast);
   }
 
   .dropdown-item:hover {
     background: var(--bg-tertiary);
   }
 
-  @media (max-width: 1024px) {
-    .actions-cell {
+  @media (max-width: 768px) {
+    .llm-info {
+      display: none;
+    }
+
+    .idle-badge {
       display: none;
     }
   }

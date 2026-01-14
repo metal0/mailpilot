@@ -48,16 +48,18 @@
 <style>
   .chart-card {
     background: var(--bg-secondary);
-    border-radius: 0.5rem;
-    padding: 1rem;
-    margin-top: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
   }
 
   .chart-card h3 {
-    margin: 0 0 0.75rem;
-    font-size: 0.8125rem;
+    margin: 0 0 var(--space-3);
+    font-size: var(--text-xs);
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
   .bar-chart {

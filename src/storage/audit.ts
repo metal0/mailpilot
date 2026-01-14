@@ -176,9 +176,9 @@ export function getActionBreakdown(): ActionBreakdown[] {
   // SQLite json_each to extract action types from the JSON array
   const stmt = db.prepare(`
     SELECT
-      json_extract(value, '$.type') as type,
+      json_extract(json_each.value, '$.type') as type,
       COUNT(*) as count
-    FROM audit_log, json_each(actions)
+    FROM audit_log, json_each(audit_log.actions)
     GROUP BY type
     ORDER BY count DESC
   `);

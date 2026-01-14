@@ -98,6 +98,9 @@ const en = {
   "sidebar.rateLimited": "Rate Limited",
   "sidebar.processingQueue": "Processing Queue",
   "sidebar.noActiveProcessing": "No active processing",
+  "sidebar.quickActions": "Quick Actions",
+  "sidebar.services": "Services",
+  "sidebar.recentErrors": "Recent Errors",
 
   // Activity Log
   "activity.title": "Activity Log",

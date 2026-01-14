@@ -147,7 +147,8 @@ export const filteredLogs = derived(
       result = result.filter((l) => levels.indexOf(l.level) >= minLevel);
     }
 
-    return result;
+    // Return in reverse chronological order (newest first)
+    return [...result].reverse();
   }
 );
 

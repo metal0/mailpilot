@@ -53,6 +53,7 @@ import {
 } from "../storage/dead-letter.js";
 import { createTikaClient } from "../attachments/tika.js";
 import { createAntivirusScanner } from "../processor/antivirus.js";
+import { ImapFlow } from "imapflow";
 
 export interface DashboardRouterOptions {
   dashboardConfig: DashboardConfig;
@@ -329,6 +330,65 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         success: false,
         error: error instanceof Error ? error.message : String(error),
       }, 500);
+    }
+  });
+
+  // Test IMAP connection endpoint
+  router.post("/api/test-imap", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
+    try {
+      const body = await c.req.json<{
+        host: string;
+        port: number;
+        tls: string;
+        auth: string;
+        username: string;
+        password?: string;
+        oauth_client_id?: string;
+        oauth_client_secret?: string;
+        oauth_refresh_token?: string;
+      }>();
+
+      const secure = body.tls === "tls" || body.tls === "auto";
+
+      const client = new ImapFlow({
+        host: body.host,
+        port: body.port || 993,
+        secure,
+        auth: {
+          user: body.username,
+          pass: body.password || "",
+        },
+        logger: false,
+      });
+
+      // Set a timeout for the connection test
+      const timeout = setTimeout(() => {
+        client.close();
+      }, 15000);
+
+      try {
+        await client.connect();
+        clearTimeout(timeout);
+
+        const capabilities = Array.from(client.capabilities);
+        await client.logout();
+
+        return c.json({
+          success: true,
+          capabilities,
+        });
+      } catch (error) {
+        clearTimeout(timeout);
+        return c.json({
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: error instanceof Error ? error.message : "Invalid request",
+      });
     }
   });
 

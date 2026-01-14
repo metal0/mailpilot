@@ -4,32 +4,46 @@
   import Stats from "../lib/components/Stats.svelte";
   import AccountsTable from "../lib/components/AccountsTable.svelte";
   import ActionsBarChart from "../lib/components/ActionsBarChart.svelte";
+  import ActionsPieChart from "../lib/components/ActionsPieChart.svelte";
   import ActivityLog from "../lib/components/ActivityLog.svelte";
   import LogViewer from "../lib/components/LogViewer.svelte";
   import Sidebar from "../lib/components/Sidebar.svelte";
   import Settings from "../lib/components/Settings.svelte";
   import Debug from "../lib/components/Debug.svelte";
   import { connect, disconnect } from "../lib/stores/websocket";
-  import { stats, activity, logs } from "../lib/stores/data";
+  import { stats, activity, logs, deadLetters } from "../lib/stores/data";
+  import { navigation, type Tab } from "../lib/stores/navigation";
   import { t, initLocale } from "../lib/i18n";
   import * as api from "../lib/api";
 
-  type Tab = "overview" | "activity" | "logs" | "settings" | "debug";
   let currentTab: Tab = $state("overview");
+  let activityInitialFilter: "all" | "activity" | "errors" = $state("all");
+
+  $effect(() => {
+    if ($navigation) {
+      currentTab = $navigation.tab;
+      if ($navigation.activityFilter) {
+        activityInitialFilter = $navigation.activityFilter;
+      }
+      navigation.set(null);
+    }
+  });
 
   onMount(async () => {
     initLocale();
     // Initial data load
     try {
-      const [statsData, activityData, logsData] = await Promise.all([
+      const [statsData, activityData, logsData, deadLetterData] = await Promise.all([
         api.fetchStats(),
         api.fetchActivity({ pageSize: 50 }),
         api.fetchLogs({ limit: 200 }),
+        api.fetchDeadLetters(),
       ]);
 
       stats.set(statsData);
       activity.set(activityData.entries);
       logs.set(logsData.logs);
+      deadLetters.set(deadLetterData.entries);
     } catch (e) {
       console.error("Failed to load initial data:", e);
     }
@@ -104,14 +118,17 @@
         <div class="overview-grid">
           <div class="main-content">
             <AccountsTable />
-            <ActionsBarChart />
+            <div class="charts-row">
+              <ActionsBarChart />
+              <ActionsPieChart />
+            </div>
           </div>
           <aside class="sidebar-content">
             <Sidebar />
           </aside>
         </div>
       {:else if currentTab === "activity"}
-        <ActivityLog />
+        <ActivityLog initialFilter={activityInitialFilter} />
       {:else if currentTab === "logs"}
         <LogViewer />
       {:else if currentTab === "settings"}
@@ -149,19 +166,19 @@
   }
 
   .dry-run-banner {
-    background: color-mix(in srgb, var(--warning) 15%, var(--bg-secondary));
+    background: var(--warning-muted);
     border-bottom: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
     color: var(--text-secondary);
-    padding: 0.5rem 2rem;
+    padding: var(--space-2) var(--space-6);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    font-size: 0.8125rem;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
   }
 
   .banner-icon {
-    font-size: 1rem;
+    font-size: var(--text-base);
     color: var(--warning);
   }
 
@@ -172,52 +189,71 @@
 
   .main {
     flex: 1;
-    padding: 1.5rem 0;
+    padding: var(--space-5) 0;
   }
 
   .container {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 0 2rem;
+    padding: 0 var(--space-6);
   }
 
   .tabs {
     display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 0.5rem;
+    gap: var(--space-1);
+    margin-bottom: var(--space-5);
+    background: var(--bg-secondary);
+    padding: var(--space-1);
+    border-radius: var(--radius-lg);
+    width: fit-content;
   }
 
   .tab-btn {
-    background: none;
+    background: transparent;
     border: none;
     color: var(--text-secondary);
-    padding: 0.5rem 1rem;
+    padding: var(--space-2) var(--space-4);
     cursor: pointer;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
     font-weight: 500;
-    transition: background 0.2s, color 0.2s;
+    transition: all var(--transition-fast);
   }
 
   .tab-btn:hover {
+    color: var(--text-primary);
     background: var(--bg-tertiary);
   }
 
   .tab-btn.active {
     background: var(--accent);
     color: white;
+    box-shadow: var(--shadow-sm);
   }
 
   .overview-grid {
     display: grid;
-    grid-template-columns: 1fr 320px;
-    gap: 1.5rem;
+    grid-template-columns: 1fr 340px;
+    gap: var(--space-5);
   }
 
   .main-content {
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+
+  .charts-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+  }
+
+  @media (max-width: 900px) {
+    .charts-row {
+      grid-template-columns: 1fr;
+    }
   }
 
   .sidebar-content {
@@ -236,16 +272,17 @@
 
   @media (max-width: 768px) {
     .container {
-      padding: 0 1rem;
+      padding: 0 var(--space-4);
     }
 
     .tabs {
+      width: 100%;
       overflow-x: auto;
     }
   }
 
   .footer {
-    padding: 1rem 2rem;
+    padding: var(--space-4) var(--space-6);
     border-top: 1px solid var(--border-color);
     display: flex;
     justify-content: space-between;
@@ -256,8 +293,8 @@
   .footer-left {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    font-size: 0.75rem;
+    gap: var(--space-4);
+    font-size: var(--text-xs);
     color: var(--text-secondary);
   }
 
@@ -267,7 +304,7 @@
 
   .connection-url {
     filter: blur(4px);
-    transition: filter 0.2s ease;
+    transition: filter var(--transition-base);
     cursor: pointer;
     user-select: none;
   }
@@ -280,11 +317,11 @@
   .github-link {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--space-2);
     color: var(--text-secondary);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
     text-decoration: none;
-    transition: color 0.2s;
+    transition: color var(--transition-fast);
   }
 
   .github-link:hover {

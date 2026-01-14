@@ -143,9 +143,9 @@ async function processMessage(
 
     // For auto_create mode, always fetch existing folders
     // For predefined mode with no allowed folders, auto-discover existing folders
-    const shouldDiscoverFolders =
-      foldersConfig.mode === "auto_create" ||
-      (foldersConfig.mode === "predefined" && (!foldersConfig.allowed || foldersConfig.allowed.length === 0));
+    const folderMode = account.folders?.mode ?? "predefined";
+    const hasNoAllowedFolders = !foldersConfig.allowed || foldersConfig.allowed.length === 0;
+    const shouldDiscoverFolders = folderMode === "auto_create" || hasNoAllowedFolders;
 
     const existingFolders = shouldDiscoverFolders
       ? await imapClient.listFolders()

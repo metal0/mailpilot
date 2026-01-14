@@ -191,6 +191,32 @@ export async function fetchHealthCheck(checkLlm = false): Promise<HealthCheckRes
   return fetchJson(`${BASE_URL}/health-check${checkLlm ? "?llm=true" : ""}`);
 }
 
+// Test IMAP Connection
+export interface ImapTestParams {
+  host: string;
+  port: number;
+  tls: string;
+  auth: string;
+  username: string;
+  password?: string;
+  oauth_client_id?: string;
+  oauth_client_secret?: string;
+  oauth_refresh_token?: string;
+}
+
+export interface ImapTestResult {
+  success: boolean;
+  error?: string;
+  capabilities?: string[];
+}
+
+export async function testImapConnection(params: ImapTestParams): Promise<ImapTestResult> {
+  return fetchJson(`${BASE_URL}/test-imap`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
 // Export
 export function exportCsvUrl(params: ActivityParams = {}): string {
   const searchParams = new URLSearchParams();

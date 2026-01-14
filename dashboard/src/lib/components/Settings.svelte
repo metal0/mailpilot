@@ -134,6 +134,10 @@
   let editingAccount = $state<Account | null>(null);
   let editingProvider = $state<LlmProvider | null>(null);
 
+  // IMAP test state
+  let testingConnection = $state(false);
+  let testResult = $state<{ success: boolean; error?: string; capabilities?: string[] } | null>(null);
+
   // Service status
   let services = $state<ServicesStatus | null>(null);
   let serviceCheckInterval: ReturnType<typeof setInterval> | null = null;
@@ -396,6 +400,32 @@
       config = { ...config };
     }
   }
+
+  async function testImapConnection() {
+    if (!editingAccount) return;
+
+    testingConnection = true;
+    testResult = null;
+
+    try {
+      const result = await api.testImapConnection({
+        host: editingAccount.imap.host,
+        port: editingAccount.imap.port ?? 993,
+        tls: editingAccount.imap.tls ?? "auto",
+        auth: editingAccount.imap.auth ?? "basic",
+        username: editingAccount.imap.username,
+        password: editingAccount.imap.password,
+        oauth_client_id: editingAccount.imap.oauth_client_id,
+        oauth_client_secret: editingAccount.imap.oauth_client_secret,
+        oauth_refresh_token: editingAccount.imap.oauth_refresh_token,
+      });
+      testResult = result;
+    } catch (e) {
+      testResult = { success: false, error: e instanceof Error ? e.message : "Test failed" };
+    } finally {
+      testingConnection = false;
+    }
+  }
 </script>
 
 {#if showPortWarning}
@@ -424,13 +454,20 @@
       <div class="config-path-row">
         <span class="config-path">{configPath}</span>
         <button
-          class="btn btn-small"
+          class="btn btn-icon"
           class:btn-active={yamlMode}
           onclick={toggleYamlMode}
           disabled={yamlLoading || saving}
           title={yamlMode ? $t("settings.backToForm") : $t("settings.editYaml")}
         >
-          {yamlLoading ? $t("common.loading") : yamlMode ? $t("settings.backToForm") : $t("settings.editYaml")}
+          {#if yamlLoading}
+            <span class="spinner-small"></span>
+          {:else}
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="16 18 22 12 16 6"/>
+              <polyline points="8 6 2 12 8 18"/>
+            </svg>
+          {/if}
         </button>
       </div>
     {/if}
@@ -528,6 +565,17 @@
                 </span>
               </label>
             </div>
+            {#if config.add_processing_headers}
+              <div class="warning-callout">
+                <strong>Warning:</strong> Enabling processing headers adds X-Mailpilot-* headers to every processed email. This can:
+                <ul>
+                  <li>Expose that you're using email automation software</li>
+                  <li>Reveal classification decisions to email recipients if forwarded</li>
+                  <li>Increase email size slightly</li>
+                </ul>
+                <em>Only enable if you need to track or debug email processing and understand the privacy implications.</em>
+              </div>
+            {/if}
 
             <div class="form-group">
               <label>
@@ -674,6 +722,42 @@
                       </label>
                     </div>
                   {/if}
+
+                  <div class="test-connection-row">
+                    <button
+                      class="btn btn-secondary btn-sm"
+                      onclick={testImapConnection}
+                      disabled={testingConnection || !editingAccount.imap.host || !editingAccount.imap.username}
+                    >
+                      {#if testingConnection}
+                        <span class="spinner"></span>
+                        Testing...
+                      {:else}
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                          <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                        Test Connection
+                      {/if}
+                    </button>
+                    {#if testResult}
+                      <span class="test-result" class:success={testResult.success} class:error={!testResult.success}>
+                        {#if testResult.success}
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                          Connection successful
+                        {:else}
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="15" y1="9" x2="9" y2="15"/>
+                            <line x1="9" y1="9" x2="15" y2="15"/>
+                          </svg>
+                          {testResult.error ?? "Connection failed"}
+                        {/if}
+                      </span>
+                    {/if}
+                  </div>
 
                   <h4>{$t("settings.accounts.foldersSection")}</h4>
                   <div class="form-group">
@@ -1053,9 +1137,11 @@
     border-radius: 0.25rem;
   }
 
-  .btn-small {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.6875rem;
+  .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.375rem;
     background: var(--bg-tertiary);
     color: var(--text-secondary);
     border: 1px solid var(--border-color);
@@ -1064,20 +1150,29 @@
     transition: all 0.15s;
   }
 
-  .btn-small:hover:not(:disabled) {
+  .btn-icon:hover:not(:disabled) {
     background: var(--bg-secondary);
     color: var(--text-primary);
   }
 
-  .btn-small.btn-active {
+  .btn-icon.btn-active {
     background: var(--accent);
     color: white;
     border-color: var(--accent);
   }
 
-  .btn-small:disabled {
+  .btn-icon:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .spinner-small {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
   }
 
   .yaml-editor-container {
@@ -1227,6 +1322,77 @@
     border-radius: 0.375rem;
     margin-bottom: 1rem;
     border-left: 3px solid var(--warning);
+  }
+
+  .warning-callout {
+    font-size: 0.8125rem;
+    color: var(--warning);
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
+    padding: 0.75rem 1rem;
+    border-radius: 0.375rem;
+    margin-bottom: 1rem;
+    border-left: 3px solid var(--warning);
+  }
+
+  .warning-callout ul {
+    margin: 0.5rem 0;
+    padding-left: 1.25rem;
+  }
+
+  .warning-callout li {
+    margin: 0.25rem 0;
+    color: var(--text-secondary);
+  }
+
+  .warning-callout em {
+    display: block;
+    margin-top: 0.5rem;
+    font-style: normal;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .test-connection-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .test-connection-row .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .test-connection-row .spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--text-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .test-result {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  .test-result.success {
+    color: var(--success);
+  }
+
+  .test-result.error {
+    color: var(--error);
   }
 
   .section-header {
