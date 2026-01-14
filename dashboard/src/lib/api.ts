@@ -218,10 +218,19 @@ export async function testImapConnection(params: ImapTestParams): Promise<ImapTe
   });
 }
 
+// IMAP Presets
+export interface ImapPreset {
+  name: string;
+  host: string;
+}
+
+export async function fetchImapPresets(): Promise<{ presets: ImapPreset[] }> {
+  return fetchJson(`${BASE_URL}/imap-presets`);
+}
+
 // Probe IMAP Server (no auth)
 export interface ImapProbeParams {
   host: string;
-  port: number;
 }
 
 export interface ImapProviderInfo {
@@ -231,12 +240,21 @@ export interface ImapProviderInfo {
   oauthSupported: boolean;
 }
 
+export interface ImapPortConfig {
+  port: number;
+  tls: "tls" | "starttls" | "none";
+}
+
 export interface ImapProbeResult {
   success: boolean;
   provider?: ImapProviderInfo;
-  suggestedTls?: "tls" | "starttls";
+  availablePorts?: ImapPortConfig[];
+  suggestedPort?: number;
+  suggestedTls?: "tls" | "starttls" | "none";
   authMethods?: ("basic" | "oauth2")[];
   capabilities?: string[];
+  portLocked?: boolean;
+  isPreset?: boolean;
   error?: string;
 }
 

@@ -54,12 +54,168 @@ import {
 import { createTikaClient } from "../attachments/tika.js";
 import { createAntivirusScanner } from "../processor/antivirus.js";
 import { ImapFlow } from "imapflow";
+import * as net from "node:net";
+import * as tls from "node:tls";
 
 interface ImapProviderInfo {
   name: string;
   type: "gmail" | "outlook" | "yahoo" | "icloud" | "fastmail" | "generic";
   requiresOAuth: boolean;
   oauthSupported: boolean;
+}
+
+interface ImapPreset {
+  name: string;
+  host: string;
+  ports: { port: number; tls: "tls" | "starttls" | "none" }[];
+  oauthSupported: boolean;
+}
+
+const IMAP_PRESETS: ImapPreset[] = [
+  { name: "Gmail", host: "imap.gmail.com", ports: [{ port: 993, tls: "tls" }], oauthSupported: true },
+  { name: "Outlook / Microsoft 365", host: "outlook.office365.com", ports: [{ port: 993, tls: "tls" }], oauthSupported: true },
+  { name: "Yahoo Mail", host: "imap.mail.yahoo.com", ports: [{ port: 993, tls: "tls" }], oauthSupported: true },
+  { name: "iCloud Mail", host: "imap.mail.me.com", ports: [{ port: 993, tls: "tls" }], oauthSupported: false },
+  { name: "Fastmail", host: "imap.fastmail.com", ports: [{ port: 993, tls: "tls" }], oauthSupported: false },
+  { name: "Zoho Mail", host: "imap.zoho.com", ports: [{ port: 993, tls: "tls" }], oauthSupported: false },
+  { name: "AOL Mail", host: "imap.aol.com", ports: [{ port: 993, tls: "tls" }], oauthSupported: false },
+  { name: "ProtonMail Bridge", host: "127.0.0.1", ports: [{ port: 1143, tls: "starttls" }], oauthSupported: false },
+];
+
+interface PortProbeResult {
+  port: number;
+  tls: "tls" | "starttls" | "none";
+  success: boolean;
+  capabilities?: string[];
+  authMethods?: ("basic" | "oauth2")[];
+}
+
+async function probeImapPort(
+  host: string,
+  port: number,
+  tlsMode: "tls" | "starttls" | "none",
+  timeoutMs = 5000
+): Promise<PortProbeResult> {
+  return new Promise((resolve) => {
+    let socket: net.Socket | tls.TLSSocket | undefined;
+    let resolved = false;
+    let dataBuffer = "";
+    let capabilities: string[] = [];
+    let greetingReceived = false;
+    let starttlsSent = false;
+
+    const cleanup = () => {
+      if (!resolved) {
+        resolved = true;
+        try { socket?.destroy(); } catch { /* ignore */ }
+      }
+    };
+
+    const finishSuccess = () => {
+      clearTimeout(timeout);
+      cleanup();
+      const authMethods: ("basic" | "oauth2")[] = ["basic"];
+      if (capabilities.some(cap => cap.toUpperCase().includes("AUTH=XOAUTH2"))) {
+        authMethods.push("oauth2");
+      }
+      resolve({ port, tls: tlsMode, success: true, capabilities, authMethods });
+    };
+
+    const finishFailure = () => {
+      clearTimeout(timeout);
+      cleanup();
+      resolve({ port, tls: tlsMode, success: false });
+    };
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve({ port, tls: tlsMode, success: false });
+    }, timeoutMs);
+
+    const parseCapabilities = (data: string) => {
+      // Parse capabilities from greeting or CAPABILITY response
+      const capMatch = data.match(/\[CAPABILITY ([^\]]+)\]/i) || data.match(/\* CAPABILITY (.+)/i);
+      if (capMatch?.[1]) {
+        capabilities = capMatch[1].split(" ").filter(c => c.length > 0);
+      }
+    };
+
+    const handleData = (data: Buffer) => {
+      dataBuffer += data.toString();
+
+      // Check for IMAP greeting
+      if (!greetingReceived && (dataBuffer.includes("* OK") || dataBuffer.includes("* PREAUTH"))) {
+        greetingReceived = true;
+        parseCapabilities(dataBuffer);
+
+        if (tlsMode === "tls" || tlsMode === "none") {
+          // For TLS mode, we already connected via TLS - success
+          // For none/insecure mode, plaintext connection works - success
+          finishSuccess();
+          return;
+        }
+
+        // For STARTTLS mode, check if server supports it and try to upgrade
+        // At this point, tlsMode must be "starttls" (tls and none already handled above)
+        const hasStarttls = capabilities.some(c => c.toUpperCase() === "STARTTLS");
+        if (!hasStarttls) {
+          // Server doesn't support STARTTLS
+          finishFailure();
+          return;
+        }
+        // Send STARTTLS command
+        starttlsSent = true;
+        socket?.write("A001 STARTTLS\r\n");
+      }
+
+      // Handle STARTTLS response
+      if (starttlsSent && dataBuffer.includes("A001 OK")) {
+        // Server accepted STARTTLS, now upgrade to TLS
+        const plainSocket = socket as net.Socket;
+        const tlsSocket = tls.connect({
+          socket: plainSocket,
+          host,
+          rejectUnauthorized: false,
+        }, () => {
+          // TLS upgrade successful
+          finishSuccess();
+        });
+        tlsSocket.on("error", finishFailure);
+        socket = tlsSocket;
+      } else if (starttlsSent && (dataBuffer.includes("A001 NO") || dataBuffer.includes("A001 BAD"))) {
+        // STARTTLS command failed
+        finishFailure();
+      }
+    };
+
+    const handleError = () => {
+      finishFailure();
+    };
+
+    try {
+      if (tlsMode === "tls") {
+        // Connect directly with TLS
+        socket = tls.connect({ host, port, rejectUnauthorized: false }, () => {
+          // TLS handshake successful, wait for IMAP greeting
+        });
+      } else {
+        // Connect via plain TCP (for both starttls and none modes)
+        socket = net.connect({ host, port }, () => {
+          // TCP connection established, wait for IMAP greeting
+        });
+      }
+
+      socket.on("data", handleData);
+      socket.on("error", handleError);
+      socket.on("close", () => {
+        if (!resolved) {
+          finishFailure();
+        }
+      });
+    } catch {
+      finishFailure();
+    }
+  });
 }
 
 function detectImapProvider(host: string): ImapProviderInfo {
@@ -397,82 +553,105 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
   });
 
   // Probe IMAP server (no auth required) - detect provider and capabilities
+  // Get IMAP presets
+  router.get("/api/imap-presets", requireAuthOrApiKeyWithDryRun("read:stats"), (c) => {
+    return c.json({
+      presets: IMAP_PRESETS.map(p => ({ name: p.name, host: p.host })),
+    });
+  });
+
   router.post("/api/probe-imap", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
     try {
-      const body = await c.req.json<{ host: string; port?: number }>();
-      const { host, port = 993 } = body;
+      const body = await c.req.json<{ host: string }>();
+      const { host } = body;
 
       if (!host) {
         return c.json({ success: false, error: "Host is required" });
       }
 
-      // Detect provider from hostname
+      // Check if this matches a preset
+      const preset = IMAP_PRESETS.find(p => p.host.toLowerCase() === host.toLowerCase());
       const providerInfo = detectImapProvider(host);
 
-      // Try TLS first (port 993), then STARTTLS (port 143)
-      const useTls = port === 993 || port === 465;
-
-      const client = new ImapFlow({
-        host,
-        port,
-        secure: useTls,
-        auth: { user: "probe@test.local", pass: "" },
-        logger: false,
-        // Don't actually authenticate - just connect to get greeting
-        disableAutoIdle: true,
-      });
-
-      const timeout = setTimeout(() => {
-        try { client.close(); } catch { /* ignore */ }
-      }, 10000);
-
-      try {
-        // Try to connect - this will fail auth but we can detect TLS support
-        await client.connect();
-        clearTimeout(timeout);
-
-        // If we got here, TLS connection worked (auth will fail separately)
-        const capabilities = Array.from(client.capabilities.keys());
-        await client.logout().catch(() => { /* ignore */ });
-
-        const authMethods: ("basic" | "oauth2")[] = ["basic"];
-        if (capabilities.some(cap => cap.toUpperCase().includes("AUTH=XOAUTH2") || cap.toUpperCase().includes("SASL-IR"))) {
-          authMethods.push("oauth2");
-        }
-
+      // If preset found, use its known configuration
+      const presetPrimaryPort = preset?.ports[0];
+      if (preset && presetPrimaryPort) {
         return c.json({
           success: true,
           provider: providerInfo,
-          suggestedTls: useTls ? "tls" : "starttls",
-          authMethods,
-          capabilities,
+          availablePorts: preset.ports,
+          suggestedPort: presetPrimaryPort.port,
+          suggestedTls: presetPrimaryPort.tls,
+          authMethods: preset.oauthSupported ? ["basic", "oauth2"] as const : ["basic"] as const,
+          isPreset: true,
+          portLocked: true,
         });
-      } catch (error) {
-        clearTimeout(timeout);
+      }
 
-        // Check if it's an auth error (connection succeeded but auth failed)
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        if (errorMsg.includes("Invalid credentials") ||
-            errorMsg.includes("AUTHENTICATIONFAILED") ||
-            errorMsg.includes("authentication failed") ||
-            errorMsg.includes("Login failed")) {
-          // Connection worked, just auth failed (expected since we sent dummy creds)
-          return c.json({
-            success: true,
-            provider: providerInfo,
-            suggestedTls: useTls ? "tls" : "starttls",
-            authMethods: providerInfo.oauthSupported ? ["basic", "oauth2"] : ["basic"],
-          });
-        }
+      // Probe multiple port/TLS combinations in parallel
+      const probeConfigs: { port: number; tls: "tls" | "starttls" | "none" }[] = [
+        { port: 993, tls: "tls" },
+        { port: 143, tls: "starttls" },
+        { port: 143, tls: "none" },
+      ];
 
-        // Real connection error
+      const results = await Promise.all(
+        probeConfigs.map(config => probeImapPort(host, config.port, config.tls))
+      );
+
+      const successfulPorts = results.filter(r => r.success);
+
+      if (successfulPorts.length === 0) {
         return c.json({
           success: false,
           provider: providerInfo,
-          suggestedTls: useTls ? "tls" : "starttls",
-          error: errorMsg,
+          availablePorts: [],
+          error: "Could not connect to IMAP server on any standard port",
+          portLocked: false,
         });
       }
+
+      // Merge auth methods from all successful probes
+      const allAuthMethods = new Set<"basic" | "oauth2">();
+      for (const result of successfulPorts) {
+        if (result.authMethods) {
+          for (const method of result.authMethods) {
+            allAuthMethods.add(method);
+          }
+        }
+      }
+
+      // Prefer TLS > STARTTLS > none
+      const sortedPorts = successfulPorts.sort((a, b) => {
+        const priority = { tls: 0, starttls: 1, none: 2 };
+        return priority[a.tls] - priority[b.tls];
+      });
+
+      const primary = sortedPorts[0];
+      const availablePorts = sortedPorts.map(r => ({ port: r.port, tls: r.tls }));
+
+      // This should never happen since we checked length > 0 above, but TypeScript needs the check
+      if (!primary) {
+        return c.json({
+          success: false,
+          provider: providerInfo,
+          availablePorts: [],
+          error: "Could not determine primary port",
+          portLocked: false,
+        });
+      }
+
+      return c.json({
+        success: true,
+        provider: providerInfo,
+        availablePorts,
+        suggestedPort: primary.port,
+        suggestedTls: primary.tls,
+        authMethods: Array.from(allAuthMethods),
+        capabilities: primary.capabilities,
+        portLocked: true,
+        isPreset: false,
+      });
     } catch (error) {
       return c.json({
         success: false,

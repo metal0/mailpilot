@@ -178,7 +178,7 @@ export const configSchema = z.object({
   add_processing_headers: z.boolean().default(false),
   backlog: backlogConfigSchema.optional(),
   state: stateConfigSchema.optional(),
-  llm_providers: z.array(llmProviderSchema).min(1),
+  llm_providers: z.array(llmProviderSchema).default([]),
   default_prompt: z.string().optional(),
   default_prompt_file: z.string().optional(),
   logging: loggingConfigSchema.optional(),
@@ -186,7 +186,7 @@ export const configSchema = z.object({
   dashboard: dashboardConfigSchema.optional(),
   antivirus: antivirusConfigSchema.optional(),
   attachments: attachmentsConfigSchema.optional(),
-  accounts: z.array(accountConfigSchema).min(1),
+  accounts: z.array(accountConfigSchema).default([]),
 });
 
 export type Config = z.infer<typeof configSchema>;
