@@ -10,7 +10,7 @@
   import Sidebar from "../lib/components/Sidebar.svelte";
   import Settings from "../lib/components/Settings.svelte";
   import Debug from "../lib/components/Debug.svelte";
-  import { connect, disconnect } from "../lib/stores/websocket";
+  import { connect, disconnect, versionMismatch, dismissVersionMismatch, refreshForNewVersion } from "../lib/stores/websocket";
   import { stats, activity, logs, deadLetters } from "../lib/stores/data";
   import { navigation, settingsHasChanges, type Tab } from "../lib/stores/navigation";
   import { t, initLocale } from "../lib/i18n";
@@ -100,6 +100,27 @@
   {/if}
 
   <Header />
+
+  {#if $versionMismatch}
+    <div class="update-banner">
+      <span class="banner-icon">&#8635;</span>
+      <span class="banner-text">
+        {#if $versionMismatch.serverRestarted}
+          <strong>Server Restarted</strong> — The backend server has been restarted. Refresh to reconnect properly.
+        {:else}
+          <strong>Update Available</strong> — Version {$versionMismatch.new} is available (current: {$versionMismatch.current}).
+        {/if}
+      </span>
+      <div class="banner-actions">
+        <button class="banner-btn banner-btn-primary" onclick={refreshForNewVersion}>
+          Refresh Now
+        </button>
+        <button class="banner-btn banner-btn-secondary" onclick={dismissVersionMismatch}>
+          Dismiss
+        </button>
+      </div>
+    </div>
+  {/if}
 
   {#if $stats?.dryRun}
     <div class="dry-run-banner">
@@ -202,6 +223,64 @@
     flex-direction: column;
   }
 
+  .update-banner {
+    background: color-mix(in srgb, var(--accent) 15%, var(--bg-secondary));
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    color: var(--text-secondary);
+    padding: var(--space-2) var(--space-6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    font-size: var(--text-sm);
+  }
+
+  .update-banner .banner-icon {
+    font-size: var(--text-lg);
+    color: var(--accent);
+  }
+
+  .update-banner .banner-text strong {
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .banner-actions {
+    display: flex;
+    gap: var(--space-2);
+    margin-left: var(--space-2);
+  }
+
+  .banner-btn {
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .banner-btn-primary {
+    background: var(--accent);
+    color: white;
+  }
+
+  .banner-btn-primary:hover {
+    background: color-mix(in srgb, var(--accent) 85%, black);
+  }
+
+  .banner-btn-secondary {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+  }
+
+  .banner-btn-secondary:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
   .dry-run-banner {
     background: var(--warning-muted);
     border-bottom: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
@@ -214,12 +293,12 @@
     font-size: var(--text-sm);
   }
 
-  .banner-icon {
+  .dry-run-banner .banner-icon {
     font-size: var(--text-base);
     color: var(--warning);
   }
 
-  .banner-text strong {
+  .dry-run-banner .banner-text strong {
     font-weight: 600;
     color: var(--warning);
   }

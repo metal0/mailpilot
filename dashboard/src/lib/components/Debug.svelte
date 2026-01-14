@@ -169,7 +169,16 @@
 </script>
 
 <div class="debug">
-  <h2>{$t("debug.title")}</h2>
+  <div class="debug-header">
+    <h2>{$t("debug.title")}</h2>
+    <button class="refresh-icon-btn" onclick={runChecks} title="Refresh checks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <polyline points="1 20 1 14 7 14"></polyline>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+      </svg>
+    </button>
+  </div>
 
   <div class="debug-grid">
     <section class="debug-section">
@@ -388,11 +397,6 @@
     </section>
   </div>
 
-  <div class="debug-actions">
-    <button class="btn btn-secondary" onclick={runChecks}>
-      Refresh Checks
-    </button>
-  </div>
 </div>
 
 <style>
@@ -400,9 +404,41 @@
     padding: 1rem;
   }
 
+  .debug-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+  }
+
   .debug h2 {
-    margin: 0 0 1.5rem;
+    margin: 0;
     font-size: 1.5rem;
+  }
+
+  .refresh-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0.375rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .refresh-icon-btn:hover {
+    background: var(--border-color);
+    color: var(--text-primary);
+  }
+
+  .refresh-icon-btn svg {
+    width: 1rem;
+    height: 1rem;
   }
 
   .debug-grid {
@@ -683,31 +719,6 @@
     background: color-mix(in srgb, var(--warning) 15%, transparent);
     color: var(--warning);
     text-transform: uppercase;
-  }
-
-  .debug-actions {
-    margin-top: 1.5rem;
-    display: flex;
-    gap: 0.75rem;
-  }
-
-  .btn {
-    padding: 0.5rem 1rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    border: none;
-    border-radius: 0.375rem;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-
-  .btn-secondary {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-  }
-
-  .btn-secondary:hover {
-    background: var(--border-color);
   }
 
   @media (max-width: 768px) {

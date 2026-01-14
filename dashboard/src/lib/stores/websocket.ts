@@ -1,10 +1,15 @@
-import { writable, get } from "svelte/store";
-import { stats, activity, logs, serviceStatus, type ServicesStatus } from "./data";
+import { writable } from "svelte/store";
+import { stats, activity, logs, serviceStatus, type ServicesStatus, type DashboardStats } from "./data";
 import { addToast } from "./toast";
 
 export type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
 
 export const connectionState = writable<ConnectionState>("disconnected");
+
+// Version and restart tracking for update detection
+let initialVersion: string | null = null;
+let lastKnownUptime: number | null = null;
+export const versionMismatch = writable<{ current: string; new: string; serverRestarted?: boolean } | null>(null);
 
 let ws: WebSocket | null = null;
 let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -22,9 +27,37 @@ function handleMessage(event: MessageEvent): void {
     const message: WebSocketMessage = JSON.parse(event.data);
 
     switch (message.type) {
-      case "stats":
-        stats.set(message.data as Parameters<typeof stats.set>[0]);
+      case "stats": {
+        const statsData = message.data as DashboardStats;
+
+        // Track version for update detection
+        if (statsData.version) {
+          if (initialVersion === null) {
+            initialVersion = statsData.version;
+          } else if (statsData.version !== initialVersion) {
+            versionMismatch.set({
+              current: initialVersion,
+              new: statsData.version,
+            });
+          }
+        }
+
+        // Track uptime to detect server restarts
+        if (statsData.uptime !== undefined) {
+          if (lastKnownUptime !== null && statsData.uptime < lastKnownUptime) {
+            // Server restarted - uptime decreased
+            versionMismatch.set({
+              current: initialVersion ?? "unknown",
+              new: statsData.version ?? "unknown",
+              serverRestarted: true,
+            });
+          }
+          lastKnownUptime = statsData.uptime;
+        }
+
+        stats.set(statsData);
         break;
+      }
 
       case "activity":
         activity.update((current) => {
@@ -124,4 +157,12 @@ export function send(message: unknown): void {
   if (ws?.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(message));
   }
+}
+
+export function dismissVersionMismatch(): void {
+  versionMismatch.set(null);
+}
+
+export function refreshForNewVersion(): void {
+  window.location.reload();
 }
