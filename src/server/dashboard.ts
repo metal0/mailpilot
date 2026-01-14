@@ -42,7 +42,7 @@ import {
   reloadConfig,
   getCurrentConfig,
 } from "../accounts/manager.js";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { stringify as yamlStringify } from "yaml";
 import { fetchAndParseEmail } from "../processor/email.js";
 import {
@@ -370,6 +370,50 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     }
 
     return c.json({ config: safeConfig, configPath });
+  });
+
+  // Raw YAML config endpoint - returns unmasked file content
+  router.get("/api/config/raw", requireAuthOrApiKeyWithDryRun("write:accounts"), (c) => {
+    if (!configPath) {
+      return c.json({ error: "Config path not set" }, 500);
+    }
+
+    try {
+      const yamlContent = readFileSync(configPath, "utf-8");
+      return c.json({ yaml: yamlContent, configPath });
+    } catch (error) {
+      return c.json({
+        error: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
+  });
+
+  // Raw YAML config save endpoint
+  router.put("/api/config/raw", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
+    if (!configPath) {
+      return c.json({ error: "Config path not set" }, 500);
+    }
+
+    try {
+      const body = await c.req.json<{ yaml: string; reload?: boolean }>();
+      const { yaml: yamlContent, reload = true } = body;
+
+      // Write raw YAML to file
+      writeFileSync(configPath, yamlContent, "utf-8");
+
+      // Optionally reload config
+      if (reload) {
+        const reloadResult = await reloadConfig();
+        return c.json({ success: true, reloadResult });
+      }
+
+      return c.json({ success: true });
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
   });
 
   // Config write endpoint

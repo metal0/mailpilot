@@ -141,10 +141,15 @@ async function processMessage(
     const foldersConfig = account.folders ?? { watch: ["INBOX"], mode: "predefined" as const };
     const stateConfig = config.state ?? { audit_subjects: false };
 
-    const existingFolders =
-      foldersConfig.mode === "auto_create"
-        ? await imapClient.listFolders()
-        : undefined;
+    // For auto_create mode, always fetch existing folders
+    // For predefined mode with no allowed folders, auto-discover existing folders
+    const shouldDiscoverFolders =
+      foldersConfig.mode === "auto_create" ||
+      (foldersConfig.mode === "predefined" && (!foldersConfig.allowed || foldersConfig.allowed.length === 0));
+
+    const existingFolders = shouldDiscoverFolders
+      ? await imapClient.listFolders()
+      : undefined;
 
     const basePrompt = loadPrompt(config, account.name);
     const truncatedBody = truncateToTokens(email.body, provider.max_body_tokens);
@@ -163,10 +168,19 @@ async function processMessage(
       folderMode: foldersConfig.mode,
     };
 
-    if (foldersConfig.allowed) {
-      promptOptions.allowedFolders = foldersConfig.allowed;
+    // For predefined mode: use allowed folders if specified, otherwise use discovered folders
+    if (foldersConfig.mode === "predefined") {
+      if (foldersConfig.allowed && foldersConfig.allowed.length > 0) {
+        promptOptions.allowedFolders = foldersConfig.allowed;
+      } else if (existingFolders) {
+        // Auto-discovered folders as allowed folders
+        promptOptions.allowedFolders = existingFolders;
+        log.debug("Auto-discovered folders for predefined mode", { count: existingFolders.length });
+      }
     }
-    if (existingFolders) {
+
+    // For auto_create mode: pass existing folders so LLM can reuse them
+    if (foldersConfig.mode === "auto_create" && existingFolders) {
       promptOptions.existingFolders = existingFolders;
     }
 

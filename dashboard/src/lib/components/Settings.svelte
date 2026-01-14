@@ -87,6 +87,11 @@
   let saveMessage = $state<{ type: "success" | "error"; text: string } | null>(null);
   let activeSection = $state<string>("global");
 
+  // YAML editor state
+  let yamlMode = $state(false);
+  let yamlContent = $state("");
+  let yamlLoading = $state(false);
+
   // Editing state
   let editingAccount = $state<Account | null>(null);
   let editingProvider = $state<LlmProvider | null>(null);
@@ -123,7 +128,7 @@
     "imap.password": "Password for basic authentication",
     "folders.watch": "Folders to monitor for new emails (comma-separated)",
     "folders.mode": "Predefined: only allow moves to specified folders. Auto-create: create folders as needed",
-    "folders.allowed": "List of folders that LLM can move emails to (for predefined mode)",
+    "folders.allowed": "Folders LLM can move emails to. Leave empty to auto-discover all existing folders via IMAP",
     prompt_override: "Custom classification prompt for this account (overrides global default)",
     "llm.provider": "Which LLM provider to use for this account",
     "llm.model": "Model to use (overrides provider default)",
@@ -247,6 +252,48 @@
     handleSave();
   }
 
+  async function toggleYamlMode() {
+    if (!yamlMode) {
+      // Switching to YAML mode - load raw config
+      yamlLoading = true;
+      try {
+        const result = await api.fetchRawConfig();
+        yamlContent = result.yaml;
+        yamlMode = true;
+      } catch (e) {
+        saveMessage = { type: "error", text: e instanceof Error ? e.message : "Failed to load raw config" };
+      } finally {
+        yamlLoading = false;
+      }
+    } else {
+      // Switching back to form mode - reload config
+      yamlMode = false;
+      await loadConfig();
+    }
+  }
+
+  async function handleYamlSave() {
+    saving = true;
+    saveMessage = null;
+
+    try {
+      const result = await api.saveRawConfig(yamlContent);
+      if (result.success) {
+        saveMessage = { type: "success", text: "YAML saved and configuration reloaded" };
+        // Refresh stats
+        const newStats = await api.fetchStats();
+        stats.set(newStats);
+        setTimeout(() => { saveMessage = null; }, 5000);
+      } else {
+        saveMessage = { type: "error", text: "Failed to save YAML" };
+      }
+    } catch (e) {
+      saveMessage = { type: "error", text: e instanceof Error ? e.message : "Failed to save YAML" };
+    } finally {
+      saving = false;
+    }
+  }
+
   function addAccount() {
     editingAccount = {
       name: "",
@@ -342,15 +389,32 @@
   <div class="settings-header">
     <h2>Configuration</h2>
     {#if configPath}
-      <span class="config-path">{configPath}</span>
+      <div class="config-path-row">
+        <span class="config-path">{configPath}</span>
+        <button
+          class="btn btn-small"
+          class:btn-active={yamlMode}
+          onclick={toggleYamlMode}
+          disabled={yamlLoading || saving}
+          title={yamlMode ? "Switch to form editor" : "Edit raw YAML"}
+        >
+          {yamlLoading ? "Loading..." : yamlMode ? "Form View" : "YAML View"}
+        </button>
+      </div>
     {/if}
     <div class="header-actions">
       {#if saveMessage}
         <span class="save-message save-{saveMessage.type}">{saveMessage.text}</span>
       {/if}
-      <button class="btn btn-primary" onclick={handleSave} disabled={saving || loading}>
-        {saving ? "Saving..." : "Save & Reload"}
-      </button>
+      {#if yamlMode}
+        <button class="btn btn-primary" onclick={handleYamlSave} disabled={saving || yamlLoading}>
+          {saving ? "Saving..." : "Save YAML"}
+        </button>
+      {:else}
+        <button class="btn btn-primary" onclick={handleSave} disabled={saving || loading}>
+          {saving ? "Saving..." : "Save & Reload"}
+        </button>
+      {/if}
     </div>
   </div>
 
@@ -358,6 +422,18 @@
     <div class="loading">Loading configuration...</div>
   {:else if error}
     <div class="error">{error}</div>
+  {:else if yamlMode}
+    <div class="yaml-editor-container">
+      <div class="yaml-warning">
+        Warning: Editing raw YAML may break your configuration if syntax is invalid. Secrets are visible.
+      </div>
+      <textarea
+        class="yaml-editor"
+        bind:value={yamlContent}
+        spellcheck="false"
+        placeholder="YAML configuration..."
+      ></textarea>
+    </div>
   {:else if config}
     <div class="settings-layout">
       <nav class="settings-nav">
@@ -609,6 +685,9 @@
                             placeholder="Archive, Work/Important"
                           />
                         </label>
+                        {#if !editingAccount.folders?.allowed || editingAccount.folders.allowed.length === 0}
+                          <div class="info-note">All existing folders will be auto-discovered via IMAP</div>
+                        {/if}
                       </div>
                     {/if}
                   </div>
@@ -923,6 +1002,12 @@
     font-size: 1.5rem;
   }
 
+  .config-path-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
   .config-path {
     font-size: 0.75rem;
     color: var(--text-secondary);
@@ -930,6 +1015,70 @@
     background: var(--bg-tertiary);
     padding: 0.25rem 0.5rem;
     border-radius: 0.25rem;
+  }
+
+  .btn-small {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.6875rem;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-small:hover:not(:disabled) {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+
+  .btn-small.btn-active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  .btn-small:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .yaml-editor-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    height: calc(100vh - 250px);
+    min-height: 400px;
+  }
+
+  .yaml-warning {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    color: var(--warning);
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
+    border-left: 3px solid var(--warning);
+    border-radius: 0.25rem;
+  }
+
+  .yaml-editor {
+    flex: 1;
+    width: 100%;
+    padding: 1rem;
+    font-family: monospace;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    resize: none;
+    tab-size: 2;
+  }
+
+  .yaml-editor:focus {
+    outline: none;
+    border-color: var(--accent);
   }
 
   .header-actions {
@@ -1116,6 +1265,16 @@
     color: var(--text-secondary);
     border-radius: 50%;
     cursor: help;
+  }
+
+  .info-note {
+    margin-top: 0.375rem;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    border-left: 2px solid var(--accent);
+    border-radius: 0.25rem;
   }
 
   .form-group input,

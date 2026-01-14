@@ -152,6 +152,18 @@ export async function saveConfig(config: unknown, reload = true): Promise<{ succ
   });
 }
 
+// Raw YAML Config Editor
+export async function fetchRawConfig(): Promise<{ yaml: string; configPath: string }> {
+  return fetchJson(`${BASE_URL}/config/raw`);
+}
+
+export async function saveRawConfig(yaml: string, reload = true): Promise<{ success: boolean; reloadResult?: ReloadResult }> {
+  return fetchJson(`${BASE_URL}/config/raw`, {
+    method: "PUT",
+    body: JSON.stringify({ yaml, reload }),
+  });
+}
+
 // Service Health
 export interface ServiceStatus {
   enabled: boolean;
