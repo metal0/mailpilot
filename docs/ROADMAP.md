@@ -187,7 +187,9 @@ Allow users to test classification prompts against sample emails before deployin
 
 ### Backend Changes
 
-**New API endpoint: `POST /api/test-classification`**
+**New API endpoints:**
+
+**`POST /api/test-classification`** - Test with structured email data
 ```typescript
 interface TestRequest {
   prompt: string;
@@ -211,6 +213,33 @@ interface TestResponse {
   latency_ms: number;
 }
 ```
+
+**`POST /api/test-classification/raw`** - Test with raw email (EML/RFC822)
+```typescript
+interface RawTestRequest {
+  prompt: string;
+  rawEmail: string;  // Raw RFC822 email content
+  provider?: string;
+  model?: string;
+}
+
+interface RawTestResponse extends TestResponse {
+  parsed: {
+    from: string;
+    to: string;
+    subject: string;
+    date: string;
+    body: string;
+    attachments: { filename: string; contentType: string; size: number }[];
+  };
+}
+```
+
+**Implementation:**
+- Use `mailparser` to parse raw email content
+- Extract headers, body, and attachment metadata
+- Pass parsed content to existing classification logic
+- Return both parsed email info and classification results
 
 ### Frontend Changes
 
@@ -242,6 +271,43 @@ Layout:
 - Email templates: "Newsletter", "Receipt", "Spam", "Personal"
 - History of recent tests (localStorage)
 - "Use this prompt" button to update account config
+
+**Raw Email Upload:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Sample Email                                               │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ [Manual Entry] [Upload Raw Email]                       ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                             │
+│  [If Upload Raw Email selected:]                            │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ Drop .eml file here or click to browse                  ││
+│  │ ─────────────────────────────────────────────────────── ││
+│  │ Or paste raw email content:                             ││
+│  │ ┌─────────────────────────────────────────────────────┐ ││
+│  │ │ <textarea placeholder="Paste RFC822 content...">   │ ││
+│  │ └─────────────────────────────────────────────────────┘ ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                             │
+│  [After parsing, show preview:]                             │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ Parsed Email Preview                                    ││
+│  │ From: sender@example.com                                ││
+│  │ To: recipient@example.com                               ││
+│  │ Subject: Your order has shipped                         ││
+│  │ Date: 2024-01-15 10:30:00                               ││
+│  │ Attachments: invoice.pdf (24 KB)                        ││
+│  │ Body: [truncated preview...]                            ││
+│  └─────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Raw email sources:**
+- Export from email client (Thunderbird, Apple Mail → "Save As")
+- Gmail: "Show Original" → "Download Original"
+- Outlook: "View Message Source"
+- Drag & drop .eml files directly into browser
 
 ---
 
