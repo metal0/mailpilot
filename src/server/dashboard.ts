@@ -7,10 +7,10 @@ import {
   createSession,
   deleteSession,
 } from "../storage/dashboard.js";
-import { getProcessedCount } from "../storage/processed.js";
 import {
   getEmailsWithActionsCount,
   getActionBreakdown,
+  getActionCount,
   getAuditEntriesPaginated,
   exportAuditLog,
   type AuditFilters,
@@ -70,7 +70,7 @@ function broadcastCurrentStats(): void {
     uptime: getUptime(),
     dryRun: currentConfig?.dry_run ?? false,
     totals: {
-      emailsProcessed: getProcessedCount(),
+      emailsProcessed: getActionCount(),
       actionsTaken: getEmailsWithActionsCount(),
       errors: allAccounts.reduce((sum, a) => sum + a.errors, 0),
     },
@@ -523,7 +523,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       uptime: getUptime(),
       dryRun: currentConfig?.dry_run ?? dryRun,
       totals: {
-        emailsProcessed: getProcessedCount(),
+        emailsProcessed: getActionCount(),
         actionsTaken: getEmailsWithActionsCount(),
         errors: accounts.reduce((sum, a) => sum + a.errors, 0),
       },
@@ -545,12 +545,17 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     const filters: AuditFilters = {};
     const accountName = c.req.query("accountName");
     const actionType = c.req.query("actionType");
+    const actionTypes = c.req.query("actionTypes");
     const startDate = c.req.query("startDate");
     const endDate = c.req.query("endDate");
     const search = c.req.query("search");
 
     if (accountName) filters.accountName = accountName;
-    if (actionType) filters.actionType = actionType;
+    if (actionTypes) {
+      filters.actionTypes = actionTypes.split(",").map((t) => t.trim()).filter(Boolean);
+    } else if (actionType) {
+      filters.actionType = actionType;
+    }
     if (startDate) filters.startDate = parseInt(startDate, 10);
     if (endDate) filters.endDate = parseInt(endDate, 10);
     if (search) filters.search = search;

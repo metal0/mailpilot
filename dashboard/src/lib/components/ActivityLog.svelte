@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { filteredActivity, searchQuery, selectedAccount, accountList, deadLetters, type AuditEntry, type DeadLetterEntry } from "../stores/data";
+  import { searchQuery, selectedAccount, accountList, deadLetters, type AuditEntry, type DeadLetterEntry } from "../stores/data";
   import { t } from "../i18n";
   import * as api from "../api";
   import EmailPreview from "./EmailPreview.svelte";
@@ -72,18 +72,15 @@
   const actionFilterTypes = ["move", "flag", "read", "delete", "spam", "noop"];
   const hasActionFilters = $derived(actionFilterTypes.some(t => selectedFilters.has(t)));
   const hasErrorFilter = $derived(selectedFilters.has("errors"));
+  const selectedActionTypes = $derived(actionFilterTypes.filter(t => selectedFilters.has(t)));
 
   const unifiedEntries = $derived.by(() => {
     const entries: UnifiedEntry[] = [];
 
     if (hasActionFilters) {
-      for (const activity of $filteredActivity) {
-        const activityActionTypes = activity.actions.map(a => a.type.toLowerCase());
-        const matchesFilter = selectedFilters.size === allFilterTypes.length ||
-          activityActionTypes.some(t => selectedFilters.has(t));
-        if (matchesFilter) {
-          entries.push({ type: "activity", data: activity });
-        }
+      // Use paginated entries from API (already filtered by backend)
+      for (const entry of paginatedEntries) {
+        entries.push({ type: "activity", data: entry });
       }
     }
 
@@ -101,25 +98,35 @@
       }
     }
 
-    const sorted = entries.sort((a, b) => {
+    // Sort by time, newest first
+    return entries.sort((a, b) => {
       const timeA = a.type === "activity" ? a.data.createdAt : a.data.createdAt;
       const timeB = b.type === "activity" ? b.data.createdAt : b.data.createdAt;
       return timeB - timeA;
     });
-    return sorted.slice(0, lineLimit);
   });
+
+  // Local state for paginated activity entries
+  let paginatedEntries = $state<AuditEntry[]>([]);
 
   async function loadActivity() {
     loading = true;
     try {
       const params: api.ActivityParams = {
         page,
-        pageSize: 20,
+        pageSize: lineLimit,
       };
       if ($selectedAccount) params.accountName = $selectedAccount;
       if ($searchQuery) params.search = $searchQuery;
 
+      // Send action type filters to backend for proper pagination
+      const actionTypes = actionFilterTypes.filter(t => selectedFilters.has(t));
+      if (actionTypes.length > 0 && actionTypes.length < actionFilterTypes.length) {
+        params.actionTypes = actionTypes;
+      }
+
       const result = await api.fetchActivity(params);
+      paginatedEntries = result.entries;
       totalPages = result.totalPages;
     } catch (e) {
       console.error("Failed to load activity:", e);
@@ -187,12 +194,16 @@
     showErrorPreview = true;
   }
 
-  // Reload when filters change
+  // Reload when filters or line limit change
   $effect(() => {
-    if ($selectedAccount !== undefined || $searchQuery !== undefined) {
-      page = 1;
-      loadActivity();
-    }
+    // Track dependencies
+    const _account = $selectedAccount;
+    const _search = $searchQuery;
+    const _limit = lineLimit;
+    const _filters = [...selectedFilters]; // Track filter changes
+
+    page = 1;
+    loadActivity();
   });
 
   onMount(() => {

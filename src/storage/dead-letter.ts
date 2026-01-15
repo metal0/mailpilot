@@ -1,4 +1,5 @@
 import { getDatabase } from "./database.js";
+import { parseDuration } from "../utils/duration.js";
 import { createLogger } from "../utils/logger.js";
 
 const logger = createLogger("dead-letter");
@@ -180,19 +181,20 @@ export function removeDeadLetter(id: number): boolean {
   return false;
 }
 
-export function cleanupResolvedDeadLetters(maxAgeDays = 30): number {
-  const db = getDatabase();
-  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+export function cleanupDeadLetters(retention: string): number {
+  const retentionMs = parseDuration(retention);
+  const cutoff = Date.now() - retentionMs;
 
+  const db = getDatabase();
   const result = db.prepare(`
     DELETE FROM dead_letter
-    WHERE resolved_at IS NOT NULL AND resolved_at < ?
+    WHERE created_at < ?
   `).run(cutoff);
 
   if (result.changes > 0) {
-    logger.info("Cleaned up old resolved dead letter entries", {
+    logger.info("Cleaned up expired dead letter entries", {
       deleted: result.changes,
-      maxAgeDays,
+      retention,
     });
   }
 

@@ -18,9 +18,10 @@
   function getActionRate(): string | null {
     if (!$stats) return null;
     const processed = $stats.totals.emailsProcessed;
-    const actions = $stats.totals.actionsTaken;
+    const emailsWithActions = $stats.totals.actionsTaken;
     if (processed === 0) return null;
-    return Math.round((actions / processed) * 100) + "%";
+    const rate = (emailsWithActions / processed) * 100;
+    return Math.round(rate) + "%";
   }
 
   function getConnectedCount(): { connected: number; total: number } {

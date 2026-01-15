@@ -33,6 +33,7 @@ export interface ActivityParams {
   pageSize?: number;
   accountName?: string;
   actionType?: string;
+  actionTypes?: string[];
   search?: string;
   startDate?: number;
   endDate?: number;
@@ -52,7 +53,11 @@ export async function fetchActivity(params: ActivityParams = {}): Promise<Pagina
   if (params.page) searchParams.set("page", String(params.page));
   if (params.pageSize) searchParams.set("pageSize", String(params.pageSize));
   if (params.accountName) searchParams.set("accountName", params.accountName);
-  if (params.actionType) searchParams.set("actionType", params.actionType);
+  if (params.actionTypes && params.actionTypes.length > 0) {
+    searchParams.set("actionTypes", params.actionTypes.join(","));
+  } else if (params.actionType) {
+    searchParams.set("actionType", params.actionType);
+  }
   if (params.search) searchParams.set("search", params.search);
   if (params.startDate) searchParams.set("startDate", String(params.startDate));
   if (params.endDate) searchParams.set("endDate", String(params.endDate));

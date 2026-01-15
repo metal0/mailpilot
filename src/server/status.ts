@@ -1,8 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Hono } from "hono";
 import type { AccountConfig, ServerConfig } from "../config/schema.js";
-import { getProcessedCount } from "../storage/processed.js";
-import { getEmailsWithActionsCount } from "../storage/audit.js";
+import { getEmailsWithActionsCount, getActionCount } from "../storage/audit.js";
 import { getProviderStats, getProviderForAccount } from "../llm/providers.js";
 
 let cachedVersion: string | null = null;
@@ -130,7 +129,7 @@ export function getAccountStatuses(): AccountStatus[] {
       connected: status.connected,
       idleSupported: status.idleSupported,
       lastScan: status.lastScan?.toISOString() ?? null,
-      emailsProcessed: getProcessedCount(name),
+      emailsProcessed: getActionCount(name),
       actionsTaken: getEmailsWithActionsCount(name),
       errors: status.errors,
       imapHost: status.imapHost,
@@ -157,7 +156,7 @@ export function createStatusRouter(serverConfig: ServerConfig): Hono {
 
     const accounts = getAccountStatuses();
     const totals = {
-      emailsProcessed: getProcessedCount(),
+      emailsProcessed: getActionCount(),
       actionsTaken: getEmailsWithActionsCount(),
       errors: accounts.reduce((sum, a) => sum + a.errors, 0),
     };

@@ -1,6 +1,7 @@
 import type { LlmProviderConfig } from "../config/schema.js";
 import { createLogger } from "../utils/logger.js";
 import { getRateLimitStats } from "./rate-limiter.js";
+import { testConnection } from "./client.js";
 
 const logger = createLogger("llm-providers");
 
@@ -189,4 +190,52 @@ export function getProviderStats(): Record<string, ProviderStats> {
 
 export function getDetailedProviderStats(): ProviderStats[] {
   return Object.values(getProviderStats());
+}
+
+async function checkStaleProviders(): Promise<void> {
+  const allProviders = getAllProviders();
+  if (allProviders.length === 0) {
+    return;
+  }
+
+  const staleProviders = allProviders.filter((p) => isProviderHealthStale(p.name));
+  if (staleProviders.length === 0) {
+    return;
+  }
+
+  logger.debug("Checking stale providers", { count: staleProviders.length });
+
+  for (const provider of staleProviders) {
+    const healthy = await testConnection(provider, provider.default_model);
+    updateProviderHealth(provider.name, healthy);
+
+    if (healthy) {
+      logger.debug("Provider health check passed", { provider: provider.name });
+    } else {
+      logger.warn("Provider health check failed", { provider: provider.name });
+    }
+  }
+}
+
+let healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+
+export async function startHealthChecks(): Promise<void> {
+  // Run initial check for all stale providers
+  await checkStaleProviders();
+
+  // Run periodic checks every 5 minutes for stale providers only
+  healthCheckInterval = setInterval(() => {
+    checkStaleProviders().catch((err: unknown) => {
+      logger.error("Health check failed", { error: err instanceof Error ? err.message : String(err) });
+    });
+  }, 5 * 60 * 1000);
+
+  logger.info("LLM health checks started");
+}
+
+export function stopHealthChecks(): void {
+  if (healthCheckInterval) {
+    clearInterval(healthCheckInterval);
+    healthCheckInterval = null;
+  }
 }

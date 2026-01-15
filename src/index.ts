@@ -3,7 +3,8 @@ import { loadConfig } from "./config/loader.js";
 import { initDatabase, closeDatabase } from "./storage/database.js";
 import { cleanupProcessedMessages } from "./storage/processed.js";
 import { cleanupAuditLog } from "./storage/audit.js";
-import { registerProviders } from "./llm/providers.js";
+import { cleanupDeadLetters } from "./storage/dead-letter.js";
+import { registerProviders, startHealthChecks, stopHealthChecks } from "./llm/providers.js";
 import { startServer, stopServer } from "./server/index.js";
 import { startAccount, setupAccountShutdown, setConfigPath, setCurrentConfig } from "./accounts/manager.js";
 import { dispatchStartup, dispatchShutdown } from "./webhooks/dispatcher.js";
@@ -59,6 +60,11 @@ async function main(): Promise<void> {
   });
 
   registerProviders(config.llm_providers);
+  await startHealthChecks();
+
+  onShutdown(() => {
+    stopHealthChecks();
+  });
 
   await startServer(serverConfig, config.accounts, dashboardConfig, config.attachments, config.antivirus, config.dry_run, configPath);
 
@@ -79,6 +85,7 @@ async function main(): Promise<void> {
     () => {
       cleanupProcessedMessages(stateConfig.processed_ttl);
       cleanupAuditLog(stateConfig.audit_retention);
+      cleanupDeadLetters(stateConfig.audit_retention);
     },
     60 * 60 * 1000
   );

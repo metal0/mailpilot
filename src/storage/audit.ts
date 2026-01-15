@@ -230,6 +230,7 @@ export interface PaginatedAuditResult {
 export interface AuditFilters {
   accountName?: string;
   actionType?: string;
+  actionTypes?: string[];
   startDate?: number;
   endDate?: number;
   search?: string;
@@ -251,7 +252,11 @@ export function getAuditEntriesPaginated(
     params.push(filters.accountName);
   }
 
-  if (filters.actionType) {
+  if (filters.actionTypes && filters.actionTypes.length > 0) {
+    const placeholders = filters.actionTypes.map(() => "?").join(", ");
+    conditions.push(`EXISTS (SELECT 1 FROM json_each(actions) WHERE json_extract(value, '$.type') IN (${placeholders}))`);
+    params.push(...filters.actionTypes);
+  } else if (filters.actionType) {
     conditions.push("EXISTS (SELECT 1 FROM json_each(actions) WHERE json_extract(value, '$.type') = ?)");
     params.push(filters.actionType);
   }
