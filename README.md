@@ -1,6 +1,13 @@
 # Mailpilot
 
+[![Test](https://github.com/metal0/mailpilot/actions/workflows/test.yml/badge.svg)](https://github.com/metal0/mailpilot/actions/workflows/test.yml)
+[![Release](https://github.com/metal0/mailpilot/actions/workflows/release.yml/badge.svg)](https://github.com/metal0/mailpilot/actions/workflows/release.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Matrix](https://img.shields.io/badge/Matrix-%23mailpilot-blue?logo=matrix)](https://matrix.to/#/#mailpilot:i0.tf)
+
 AI-powered email processing daemon that uses LLM classification to automatically organize, flag, and manage your inbox.
+
+![Mailpilot Dashboard](docs/screenshot.png)
 
 ## Features
 
@@ -14,12 +21,6 @@ AI-powered email processing daemon that uses LLM classification to automatically
 - **Multimodal Vision** - Send images to vision-capable LLMs for analysis
 - **Antivirus Scanning** - Optional ClamAV integration for malware detection
 - **Webhooks** - Configurable webhooks for events like errors and actions
-
-## Requirements
-
-- Node.js >= 22.0.0
-- pnpm (recommended) or npm
-- An OpenAI-compatible LLM API
 
 ## Quick Start
 
@@ -77,19 +78,6 @@ Full documentation is available on the **[GitHub Wiki](https://github.com/metal0
 | [Prompts Guide](https://github.com/metal0/mailpilot/wiki/Prompts-Guide) | Writing classification prompts |
 | [Troubleshooting](https://github.com/metal0/mailpilot/wiki/Troubleshooting) | Common issues and solutions |
 
-## Web Dashboard
-
-The dashboard provides real-time monitoring at `http://localhost:8080/`:
-
-- **Visual Config Editor** - Edit settings through the UI with live reload
-- **Bulk Account Operations** - Pause/resume/reconnect multiple accounts
-- **Log Search** - Search and filter system logs
-- **LLM Health Indicators** - Provider status on the overview sidebar
-- **Activity Log** - Search and filter processed emails
-- **Dead Letter Queue** - Retry failed emails
-
-On first visit, create an admin account. See [Dashboard Guide](docs/dashboard.md) for details.
-
 ## Docker Deployment
 
 ### Basic
@@ -115,15 +103,6 @@ docker compose -f docker-compose.full.yaml up -d
 
 Includes Apache Tika for attachment extraction and ClamAV for virus scanning.
 
-## API Endpoints
-
-| Endpoint | Auth | Purpose |
-|----------|------|---------|
-| `GET /health` | None | Health check for load balancers |
-| `GET /status` | Bearer token | Detailed status for monitoring |
-| `/api/*` | Session/API key | Dashboard API endpoints |
-| `/ws` | Session/API key | WebSocket for real-time updates |
-
 ## Development
 
 ```bash
@@ -133,23 +112,11 @@ pnpm lint         # Run ESLint
 pnpm typecheck    # Type check
 ```
 
-## Project Structure
+## Community
 
-```
-src/
-  config/         # Configuration loading
-  accounts/       # Account lifecycle
-  imap/           # IMAP client
-  llm/            # LLM provider abstraction
-  processor/      # Email processing pipeline
-  actions/        # Action execution
-  storage/        # SQLite database
-  server/         # HTTP/WebSocket server
-  attachments/    # Tika integration
-dashboard/        # Svelte 5 SPA
-tests/            # Vitest test suites
-docs/             # Documentation
-```
+- **[Matrix Chat](https://matrix.to/#/#mailpilot:i0.tf)** - Join the community chat room
+- **[GitHub Issues](https://github.com/metal0/mailpilot/issues)** - Report bugs or request features
+- **[GitHub Wiki](https://github.com/metal0/mailpilot/wiki)** - Full documentation
 
 ## License
 
