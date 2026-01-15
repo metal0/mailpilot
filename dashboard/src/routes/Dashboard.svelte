@@ -20,6 +20,11 @@
   let activityInitialFilter: "all" | "activity" | "errors" = $state("all");
   let showUnsavedModal = $state(false);
   let pendingTab: Tab | null = $state(null);
+  let latestRelease: api.GitHubRelease | null = $state(null);
+  let isOutdated = $derived(() => {
+    if (!latestRelease || !$stats?.version) return false;
+    return api.compareVersions(latestRelease.tag_name, $stats.version) > 0;
+  });
 
   $effect(() => {
     if ($navigation) {
@@ -52,6 +57,14 @@
 
     // Connect WebSocket for real-time updates
     connect();
+
+    // Check for updates from GitHub (non-blocking)
+    api.fetchLatestGitHubRelease().then((release) => {
+      if (release) {
+        latestRelease = release;
+        console.log("[update-check] Latest GitHub release:", release.tag_name);
+      }
+    });
   });
 
   onDestroy(() => {
@@ -200,6 +213,18 @@
   <footer class="footer">
     <div class="footer-left">
       <span class="version">Mailpilot v{$stats?.version ?? "-"}</span>
+      {#if isOutdated() && latestRelease}
+        <a
+          href={latestRelease.html_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="update-available"
+          title="Click to view release notes"
+        >
+          <span class="update-icon">&#8593;</span>
+          <span>{latestRelease.tag_name} available</span>
+        </a>
+      {/if}
       <span class="connection-url" title="Connection URL">{window.location.origin}</span>
     </div>
     <a
@@ -416,6 +441,31 @@
 
   .version {
     font-weight: 500;
+  }
+
+  .update-available {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    background: color-mix(in srgb, #22c55e 20%, var(--bg-tertiary));
+    border: 1px solid #22c55e;
+    border-radius: var(--radius-sm);
+    color: #4ade80;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-decoration: none;
+    transition: all var(--transition-fast);
+  }
+
+  .update-available:hover {
+    background: color-mix(in srgb, #22c55e 30%, var(--bg-tertiary));
+    color: #86efac;
+  }
+
+  .update-icon {
+    font-weight: bold;
+    font-size: 0.875rem;
   }
 
   .connection-url {

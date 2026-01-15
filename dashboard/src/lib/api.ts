@@ -265,6 +265,60 @@ export async function probeImap(params: ImapProbeParams): Promise<ImapProbeResul
   });
 }
 
+// GitHub Release Check
+export interface GitHubRelease {
+  tag_name: string;
+  name: string;
+  html_url: string;
+  published_at: string;
+}
+
+export async function fetchLatestGitHubRelease(): Promise<GitHubRelease | null> {
+  try {
+    const res = await fetch("https://api.github.com/repos/metal0/mailpilot/releases/latest", {
+      headers: {
+        Accept: "application/vnd.github.v3+json",
+      },
+    });
+
+    if (!res.ok) {
+      if (res.status === 404) {
+        // No releases yet
+        return null;
+      }
+      console.error("Failed to fetch GitHub release:", res.status);
+      return null;
+    }
+
+    return res.json();
+  } catch (e) {
+    console.error("Failed to fetch GitHub release:", e);
+    return null;
+  }
+}
+
+// Compare semantic versions: returns 1 if a > b, -1 if a < b, 0 if equal
+export function compareVersions(a: string, b: string): number {
+  // Strip 'v' prefix if present
+  const cleanA = a.replace(/^v/, "");
+  const cleanB = b.replace(/^v/, "");
+
+  const partsA = cleanA.split(".").map((n) => parseInt(n, 10) || 0);
+  const partsB = cleanB.split(".").map((n) => parseInt(n, 10) || 0);
+
+  const maxLen = Math.max(partsA.length, partsB.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    const numA = partsA[i] ?? 0;
+    const numB = partsB[i] ?? 0;
+
+    if (numA > numB) return 1;
+    if (numA < numB) return -1;
+  }
+
+  return 0;
+}
+
 // Export
 export function exportCsvUrl(params: ActivityParams = {}): string {
   const searchParams = new URLSearchParams();
