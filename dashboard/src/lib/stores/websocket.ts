@@ -1,6 +1,7 @@
 import { writable } from "svelte/store";
 import { stats, activity, logs, serviceStatus, type ServicesStatus, type DashboardStats } from "./data";
 import { addToast } from "./toast";
+import { fetchStats } from "../api";
 
 export type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
 
@@ -10,6 +11,42 @@ export const connectionState = writable<ConnectionState>("disconnected");
 let initialVersion: string | null = null;
 let lastKnownUptime: number | null = null;
 export const versionMismatch = writable<{ current: string; new: string; serverRestarted?: boolean } | null>(null);
+
+// Track stats changes from any source (API or WebSocket)
+function trackVersionAndUptime(statsData: DashboardStats | null): void {
+  if (!statsData) return;
+
+  // Track version for update detection
+  if (statsData.version) {
+    if (initialVersion === null) {
+      initialVersion = statsData.version;
+      console.log("[version-tracker] Initial version set:", initialVersion);
+    } else if (statsData.version !== initialVersion) {
+      console.log("[version-tracker] Version mismatch detected:", initialVersion, "->", statsData.version);
+      versionMismatch.set({
+        current: initialVersion,
+        new: statsData.version,
+      });
+    }
+  }
+
+  // Track uptime to detect server restarts
+  if (statsData.uptime !== undefined) {
+    if (lastKnownUptime !== null && statsData.uptime < lastKnownUptime) {
+      // Server restarted - uptime decreased
+      console.log("[version-tracker] Server restart detected, uptime:", lastKnownUptime, "->", statsData.uptime);
+      versionMismatch.set({
+        current: initialVersion ?? "unknown",
+        new: statsData.version ?? "unknown",
+        serverRestarted: true,
+      });
+    }
+    lastKnownUptime = statsData.uptime;
+  }
+}
+
+// Subscribe to stats store to track all changes (API and WebSocket)
+stats.subscribe(trackVersionAndUptime);
 
 let ws: WebSocket | null = null;
 let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -28,34 +65,8 @@ function handleMessage(event: MessageEvent): void {
 
     switch (message.type) {
       case "stats": {
-        const statsData = message.data as DashboardStats;
-
-        // Track version for update detection
-        if (statsData.version) {
-          if (initialVersion === null) {
-            initialVersion = statsData.version;
-          } else if (statsData.version !== initialVersion) {
-            versionMismatch.set({
-              current: initialVersion,
-              new: statsData.version,
-            });
-          }
-        }
-
-        // Track uptime to detect server restarts
-        if (statsData.uptime !== undefined) {
-          if (lastKnownUptime !== null && statsData.uptime < lastKnownUptime) {
-            // Server restarted - uptime decreased
-            versionMismatch.set({
-              current: initialVersion ?? "unknown",
-              new: statsData.version ?? "unknown",
-              serverRestarted: true,
-            });
-          }
-          lastKnownUptime = statsData.uptime;
-        }
-
-        stats.set(statsData);
+        // Version and uptime tracking is handled by stats store subscription
+        stats.set(message.data as DashboardStats);
         break;
       }
 
@@ -112,10 +123,18 @@ export function connect(): void {
 
   ws = new WebSocket(wsUrl);
 
-  ws.onopen = () => {
+  ws.onopen = async () => {
     connectionState.set("connected");
     reconnectAttempts = 0;
     console.log("WebSocket connected");
+
+    // Fetch fresh stats on connect/reconnect to detect server restarts
+    try {
+      const freshStats = await fetchStats();
+      stats.set(freshStats);
+    } catch (e) {
+      console.error("Failed to fetch stats on reconnect:", e);
+    }
   };
 
   ws.onmessage = handleMessage;
