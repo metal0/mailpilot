@@ -2,6 +2,8 @@
 
 This document describes how Mailpilot uses AI/LLM services for email classification and processing.
 
+> **Note:** User-facing documentation is available on the [GitHub Wiki](https://github.com/metal0/mailpilot/wiki). This file contains technical details for developers.
+
 ## Overview
 
 Mailpilot uses LLM APIs to classify incoming emails and determine actions (move to folder, flag, mark as read, delete, etc.). The system is provider-agnostic and supports any OpenAI-compatible API.

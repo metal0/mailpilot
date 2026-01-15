@@ -49,11 +49,14 @@ When making changes to the codebase, documentation MUST be reviewed and updated:
 1. **README.md** - Update if features, configuration, or usage changes
 2. **SPEC.md** - Update if architecture, schemas, or behavior changes
 3. **AGENTS.md** - Update if LLM integration, prompts, or AI features change
-4. **docs/** folder - Update relevant documentation articles:
-   - `docs/dashboard.md` - Dashboard features and API
-   - `docs/configuration.md` - Config options
-   - `docs/llm-providers.md` - Provider setup
-   - Other topic-specific docs
+4. **GitHub Wiki** - User-facing documentation is hosted on the [wiki](https://github.com/metal0/mailpilot/wiki). Update wiki articles when user-facing features change:
+   - Installation, configuration guides
+   - Email provider setup (Gmail, Outlook, etc.)
+   - LLM provider setup (OpenAI, Ollama, etc.)
+   - Troubleshooting guides
+5. **docs/** folder - Technical docs for developers:
+   - `docs/dashboard.md` - Dashboard API reference
+   - Other technical implementation docs
 
 ### Unit Tests (HIGH PRIORITY)
 

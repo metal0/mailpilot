@@ -64,18 +64,18 @@ export GMAIL_APP_PASSWORD="xxxx xxxx xxxx xxxx"
 
 ## Documentation
 
+Full documentation is available on the **[GitHub Wiki](https://github.com/metal0/mailpilot/wiki)**.
+
 | Guide | Description |
 |-------|-------------|
-| [Configuration](docs/configuration.md) | Full configuration reference |
-| [LLM Providers](docs/llm-providers.md) | Provider setup (OpenAI, Anthropic, Ollama, etc.) |
-| [Prompt System](docs/prompt-system.md) | Writing effective classification prompts |
-| [Dashboard](docs/dashboard.md) | Web dashboard features and API |
-| [Gmail Setup](docs/gmail-setup.md) | Gmail app password configuration |
-| [Outlook Setup](docs/outlook-setup.md) | Microsoft 365/Outlook setup |
-| [OAuth Setup](docs/oauth-setup.md) | OAuth2 authentication |
-| [Folder Modes](docs/folder-modes.md) | Predefined vs auto-create folders |
-| [Antivirus](docs/antivirus.md) | ClamAV integration |
-| [Processing Headers](docs/processing-headers.md) | X-Mailpilot-* headers |
+| [Installation](https://github.com/metal0/mailpilot/wiki/Installation) | Setup and requirements |
+| [Quick Start](https://github.com/metal0/mailpilot/wiki/Quick-Start) | Get running in 5 minutes |
+| [Configuration Reference](https://github.com/metal0/mailpilot/wiki/Configuration-Reference) | All configuration options |
+| [Gmail Setup](https://github.com/metal0/mailpilot/wiki/Gmail-Setup) | Gmail with App Passwords |
+| [Outlook Setup](https://github.com/metal0/mailpilot/wiki/Outlook-&-Microsoft-365) | Microsoft 365/Outlook |
+| [LLM Providers](https://github.com/metal0/mailpilot/wiki/OpenAI-Setup) | OpenAI, Ollama, Claude, etc. |
+| [Prompts Guide](https://github.com/metal0/mailpilot/wiki/Prompts-Guide) | Writing classification prompts |
+| [Troubleshooting](https://github.com/metal0/mailpilot/wiki/Troubleshooting) | Common issues and solutions |
 
 ## Web Dashboard
 
