@@ -178,7 +178,7 @@
   let showPortWarning = $state(false);
   let pendingPortChange = $state<number | null>(null);
 
-  const sectionIds = ["global", "accounts", "providers", "apikeys", "attachments", "antivirus"] as const;
+  const sectionIds = ["global", "accounts", "providers", "apikeys", "modules"] as const;
 
   const helpTexts: Record<string, string> = {
     polling_interval: "How often to check for new emails when IDLE is not supported (e.g., 30s, 5m)",
@@ -681,27 +681,22 @@
 <div class="settings">
   <div class="settings-header">
     <h2>{$t("settings.title")}</h2>
-    {#if configPath}
-      <div class="config-path-row">
-        <span class="config-path">{configPath}</span>
-        <button
-          class="btn btn-icon"
-          class:btn-active={yamlMode}
-          onclick={toggleYamlMode}
-          disabled={yamlLoading || saving}
-          title={yamlMode ? $t("settings.backToForm") : $t("settings.editYaml")}
-        >
-          {#if yamlLoading}
-            <span class="spinner-small"></span>
-          {:else}
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="16 18 22 12 16 6"/>
-              <polyline points="8 6 2 12 8 18"/>
-            </svg>
-          {/if}
-        </button>
-      </div>
-    {/if}
+    <button
+      class="btn btn-icon"
+      class:btn-active={yamlMode}
+      onclick={toggleYamlMode}
+      disabled={yamlLoading || saving}
+      title={yamlMode ? $t("settings.backToForm") : $t("settings.editYaml")}
+    >
+      {#if yamlLoading}
+        <span class="spinner-small"></span>
+      {:else}
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="16 18 22 12 16 6"/>
+          <polyline points="8 6 2 12 8 18"/>
+        </svg>
+      {/if}
+    </button>
     <div class="header-actions">
       {#if saveMessage}
         <span class="save-message save-{saveMessage.type}">{saveMessage.text}</span>
@@ -1556,7 +1551,7 @@
             {/if}
           </section>
 
-        {:else if activeSection === "attachments"}
+        {:else if activeSection === "modules"}
           <section class="config-section">
             <div class="section-header">
               <h3>{$t("settings.attachments.sectionTitle")}</h3>
@@ -1622,7 +1617,6 @@
             {/if}
           </section>
 
-        {:else if activeSection === "antivirus"}
           <section class="config-section">
             <div class="section-header">
               <h3>{$t("settings.antivirus.sectionTitle")}</h3>
@@ -1703,21 +1697,6 @@
   .settings-header h2 {
     margin: 0;
     font-size: 1.5rem;
-  }
-
-  .config-path-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .config-path {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    font-family: monospace;
-    background: var(--bg-tertiary);
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.25rem;
   }
 
   .btn-icon {

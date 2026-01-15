@@ -276,8 +276,7 @@ const en = {
   "settings.sections.accounts": "Email Accounts",
   "settings.sections.providers": "LLM Providers",
   "settings.sections.apikeys": "API Keys",
-  "settings.sections.attachments": "Attachments",
-  "settings.sections.antivirus": "Antivirus",
+  "settings.sections.modules": "Modules",
 
   // Settings - Global Form Fields
   "settings.global.pollingInterval": "Polling Interval",
@@ -472,6 +471,12 @@ const en = {
   "error.networkError": "Network error",
   "error.timeout": "Request timeout",
   "error.unknown": "Unknown error",
+
+  // Connection
+  "connection.lost.title": "Connection Lost",
+  "connection.lost.bothDown": "Unable to reach the Mailpilot server. Please check that the server is running and your network connection is stable.",
+  "connection.lost.wsDown": "Real-time connection lost. The server may be experiencing issues. Attempting to reconnect...",
+  "connection.lost.retrying": "Attempting to reconnect automatically...",
 } as const;
 
 export default en;

@@ -57,6 +57,32 @@ import { ImapFlow } from "imapflow";
 import * as net from "node:net";
 import * as tls from "node:tls";
 
+// Helper to build and broadcast current stats to all WebSocket clients
+function broadcastCurrentStats(): void {
+  const currentConfig = getCurrentConfig();
+  const pausedAccountsList = getPausedAccounts();
+  const allAccounts = getAccountStatuses();
+
+  broadcastStats({
+    version: getVersion(),
+    uptime: getUptime(),
+    dryRun: currentConfig?.dry_run ?? false,
+    totals: {
+      emailsProcessed: getProcessedCount(),
+      actionsTaken: getActionCount(),
+      errors: allAccounts.reduce((sum, a) => sum + a.errors, 0),
+    },
+    accounts: allAccounts.map((a) => ({
+      ...a,
+      paused: pausedAccountsList.includes(a.name),
+    })),
+    actionBreakdown: getActionBreakdown(),
+    providerStats: getDetailedProviderStats(),
+    queueStatus: getQueueStatus(),
+    deadLetterCount: getDeadLetterCount(),
+  });
+}
+
 interface ImapProviderInfo {
   name: string;
   type: "gmail" | "outlook" | "yahoo" | "icloud" | "fastmail" | "generic";
@@ -514,12 +540,20 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     const name = c.req.param("name");
     const success = pauseAccount(name);
 
+    if (success) {
+      broadcastCurrentStats();
+    }
+
     return c.json({ success, paused: success ? true : isAccountPaused(name) });
   });
 
   router.post("/api/accounts/:name/resume", requireAuthOrApiKeyWithDryRun("write:accounts"), (c) => {
     const name = c.req.param("name");
     const success = resumeAccount(name);
+
+    if (success) {
+      broadcastCurrentStats();
+    }
 
     return c.json({ success, paused: success ? false : isAccountPaused(name) });
   });
@@ -968,26 +1002,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       }
 
       // Broadcast updated stats to all WebSocket clients so Overview page updates
-      const pausedAccountsList = getPausedAccounts();
-      const allAccounts = getAccountStatuses();
-      broadcastStats({
-        version: getVersion(),
-        uptime: getUptime(),
-        dryRun: currentConfig?.dry_run ?? dryRun,
-        totals: {
-          emailsProcessed: getProcessedCount(),
-          actionsTaken: getActionCount(),
-          errors: allAccounts.reduce((sum, a) => sum + a.errors, 0),
-        },
-        accounts: allAccounts.map((a) => ({
-          ...a,
-          paused: pausedAccountsList.includes(a.name),
-        })),
-        actionBreakdown: getActionBreakdown(),
-        providerStats: getDetailedProviderStats(),
-        queueStatus: getQueueStatus(),
-        deadLetterCount: getDeadLetterCount(),
-      });
+      broadcastCurrentStats();
     }
 
     // IMAP account status (uses existing connection status)

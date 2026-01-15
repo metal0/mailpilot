@@ -6,6 +6,7 @@
   import Setup from "./routes/Setup.svelte";
   import Dashboard from "./routes/Dashboard.svelte";
   import Toast from "./lib/components/Toast.svelte";
+  import ConnectionBlocker from "./lib/components/ConnectionBlocker.svelte";
 
   let loading = $state(true);
   let needsSetup = $state(false);
@@ -99,18 +100,18 @@
 
     /* Light theme */
     [data-theme="light"] {
-      --bg-primary: #ffffff;
-      --bg-secondary: #f8fafc;
-      --bg-tertiary: #f1f5f9;
+      --bg-primary: #f8f9fa;
+      --bg-secondary: #f1f3f5;
+      --bg-tertiary: #e9ecef;
       --bg-elevated: #ffffff;
-      --text-primary: #0f172a;
-      --text-secondary: #475569;
-      --text-muted: #94a3b8;
-      --border-color: #e2e8f0;
-      --border-subtle: rgba(0, 0, 0, 0.06);
-      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-      --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.05);
-      --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.08);
+      --text-primary: #1a1a2e;
+      --text-secondary: #4a5568;
+      --text-muted: #718096;
+      --border-color: #dee2e6;
+      --border-subtle: rgba(0, 0, 0, 0.08);
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.06);
+      --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
     }
 
     /* OLED dark theme (true black) */
@@ -325,6 +326,7 @@
   <Login />
 {:else}
   <Dashboard />
+  <ConnectionBlocker />
 {/if}
 
 <Toast />
