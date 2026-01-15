@@ -10,7 +10,7 @@ import { buildPrompt, truncateToTokens, type EmailContext, type PromptOptions } 
 import { classifyEmail } from "../llm/client.js";
 import { loadPrompt } from "../config/loader.js";
 import { executeAction } from "../actions/executor.js";
-import type { LlmAction } from "../llm/parser.js";
+import { filterDisallowedActions, DEFAULT_ALLOWED_ACTIONS, type LlmAction } from "../llm/parser.js";
 import { addProcessingHeaders } from "./headers.js";
 import {
   type AttachmentProcessor,
@@ -163,9 +163,13 @@ async function processMessage(
       ...(extractedAttachments.length > 0 && { extractedAttachments }),
     };
 
+    // Determine allowed actions for this account (default excludes delete for safety)
+    const allowedActions = account.allowed_actions ?? [...DEFAULT_ALLOWED_ACTIONS];
+
     const promptOptions: PromptOptions = {
       basePrompt,
       folderMode: foldersConfig.mode,
+      allowedActions,
     };
 
     // For predefined mode: use allowed folders if specified, otherwise use discovered folders
@@ -199,16 +203,21 @@ async function processMessage(
       imageCount: useMultimodal ? extractedAttachments.filter((a) => a.imageBase64).length : 0,
     });
 
-    const actions = await classifyEmail({
+    const rawActions = await classifyEmail({
       provider,
       model,
       prompt,
       ...(multimodalContent && { multimodalContent }),
     });
 
+    // Filter out any disallowed actions (backend enforcement)
+    const actions = filterDisallowedActions(rawActions, allowedActions);
+
     log.info("Classification complete", {
       messageId,
+      rawActions: rawActions.map((a) => a.type),
       actions: actions.map((a) => a.type),
+      allowedActions,
     });
 
     if (!config.dry_run) {

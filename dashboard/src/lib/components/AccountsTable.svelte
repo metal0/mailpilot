@@ -3,6 +3,7 @@
   import { addToast } from "../stores/toast";
   import { t } from "../i18n";
   import * as api from "../api";
+  import Backdrop from "./Backdrop.svelte";
 
   let openDropdown = $state<string | null>(null);
   let dropdownPosition = $state<{ top: number; right: number } | null>(null);
@@ -239,6 +240,7 @@
                 />
               </td>
               <td class="name-cell">
+              <div class="name-cell-content">
                 <span
                   class="status-dot-inline"
                   class:connected={account.connected && !account.paused}
@@ -263,7 +265,8 @@
                   <span class="idle-badge">{$t("accounts.idle")}</span>
                 {/if}
                 <span class="llm-info">{account.llmProvider}/{account.llmModel}</span>
-              </td>
+              </div>
+            </td>
               <td class="rate-cell">
                 {#if getActionRate(account)}
                   <span class="rate-value">{getActionRate(account)}</span>
@@ -283,8 +286,7 @@
                   </svg>
                 </button>
                 {#if openDropdown === account.name && dropdownPosition}
-                  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                  <div class="dropdown-backdrop" onclick={closeDropdown}></div>
+                  <Backdrop onclose={closeDropdown} zIndex={10} />
                   <div
                     class="dropdown-menu"
                     style="position: fixed; top: {dropdownPosition.top}px; right: {dropdownPosition.right}px;"
@@ -400,7 +402,7 @@
     border-bottom: none;
   }
 
-  .name-cell {
+  .name-cell-content {
     display: flex;
     align-items: center;
     gap: var(--space-2);
@@ -557,12 +559,6 @@
 
   .btn-sm.btn-secondary:hover:not(:disabled) {
     background: var(--border-color);
-  }
-
-  .dropdown-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 10;
   }
 
   .dropdown-menu {

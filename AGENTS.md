@@ -329,7 +329,14 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/status
 
 ## Testing LLM Features
 
-**All LLM-related changes MUST include proper testing:**
+**All LLM-related changes MUST include proper testing. NO SHORTCUTS.**
+
+### Quality Standards
+
+**Never take shortcuts with implementation or testing.** Every feature must be:
+- Fully implemented (no partial functionality, no placeholders)
+- Thoroughly tested (unit tests + E2E tests)
+- Verified working in production-like conditions
 
 ### Unit Tests
 Located in `tests/unit/`. Key test files:
@@ -342,12 +349,35 @@ When modifying LLM code:
 2. Test edge cases (invalid JSON, timeouts, rate limits)
 3. Mock external API calls, don't hit real LLM APIs in tests
 
-### End-to-End Testing
-For LLM integration changes:
+### End-to-End Testing (EXHAUSTIVE)
+
+E2E testing must cover most normal use and edge case situations. For LLM integration changes:
+
+**Required Test Coverage:**
 1. Start app with `pnpm dev`
 2. Use Debug page to test LLM health checks
 3. Process test emails and verify classification in Activity tab
 4. Check provider stats update correctly on Overview page
+
+**Exhaustive Testing Checklist:**
+- [ ] Provider healthy → requests succeed, stats update
+- [ ] Provider unhealthy → proper error display, no crashes
+- [ ] Provider timeout → graceful handling, retry behavior
+- [ ] Rate limit hit → proper queueing, no dropped requests
+- [ ] Invalid API key → clear error message to user
+- [ ] Network disconnection → reconnection handling
+- [ ] Empty response → handled without crash
+- [ ] Malformed JSON → parse recovery or meaningful error
+- [ ] Very long emails → truncation works correctly
+- [ ] Emails with attachments → extraction and classification
+- [ ] Multiple providers → switching, health tracking
+- [ ] Dashboard updates → real-time WebSocket sync
+
+**Do NOT consider testing complete until:**
+- All checklist items verified
+- No console errors during testing
+- UI behaves correctly in all states
+- Error messages are user-friendly
 
 ### Testing Classification Changes
 When modifying prompt building or response parsing:
@@ -355,6 +385,7 @@ When modifying prompt building or response parsing:
 2. Test with various email types (receipts, newsletters, spam)
 3. Verify actions execute correctly (or log correctly in dry run mode)
 4. Check audit log records correct data
+5. Test edge cases: empty body, very long body, special characters, unicode
 
 ### Documentation
 Update these docs when LLM behavior changes:

@@ -68,15 +68,25 @@ export async function fetchActivity(params: ActivityParams = {}): Promise<Pagina
 
 // Logs
 export interface LogParams {
-  limit?: number;
+  page?: number;
+  pageSize?: number;
   level?: string;
   accountName?: string;
 }
 
-export async function fetchLogs(params: LogParams = {}): Promise<{ logs: LogEntry[] }> {
+export interface LogsResponse {
+  logs: LogEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export async function fetchLogs(params: LogParams = {}): Promise<LogsResponse> {
   const searchParams = new URLSearchParams();
 
-  if (params.limit) searchParams.set("limit", String(params.limit));
+  if (params.page) searchParams.set("page", String(params.page));
+  if (params.pageSize) searchParams.set("pageSize", String(params.pageSize));
   if (params.level) searchParams.set("level", params.level);
   if (params.accountName) searchParams.set("accountName", params.accountName);
 
@@ -282,6 +292,18 @@ export interface LlmPreset {
 
 export async function fetchLlmPresets(): Promise<{ presets: LlmPreset[] }> {
   return fetchJson(`${BASE_URL}/llm-presets`);
+}
+
+// Action Types
+export type ActionType = "move" | "spam" | "flag" | "read" | "delete" | "noop";
+
+export interface ActionTypesResponse {
+  actionTypes: ActionType[];
+  defaultAllowed: ActionType[];
+}
+
+export async function fetchActionTypes(): Promise<ActionTypesResponse> {
+  return fetchJson(`${BASE_URL}/action-types`);
 }
 
 // Test LLM Connection

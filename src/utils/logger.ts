@@ -105,6 +105,42 @@ export function getRecentLogs(
   return logs.slice(-limit);
 }
 
+export interface LogsPaginatedResult {
+  logs: LogEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export function getLogsPaginated(
+  page = 1,
+  pageSize = 50,
+  levelFilter?: LogLevel
+): LogsPaginatedResult {
+  let logs = logBuffer;
+
+  if (levelFilter) {
+    const minLevel = LOG_LEVELS[levelFilter];
+    logs = logs.filter((entry) => LOG_LEVELS[entry.level] >= minLevel);
+  }
+
+  // Logs are stored oldest-first, we want newest-first for display
+  const reversedLogs = [...logs].reverse();
+  const total = reversedLogs.length;
+  const totalPages = Math.ceil(total / pageSize);
+  const offset = (page - 1) * pageSize;
+  const paginatedLogs = reversedLogs.slice(offset, offset + pageSize);
+
+  return {
+    logs: paginatedLogs,
+    total,
+    page,
+    pageSize,
+    totalPages,
+  };
+}
+
 export function clearLogBuffer(): void {
   logBuffer.length = 0;
 }

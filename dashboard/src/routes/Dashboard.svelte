@@ -10,6 +10,7 @@
   import Sidebar from "../lib/components/Sidebar.svelte";
   import Settings from "../lib/components/Settings.svelte";
   import Debug from "../lib/components/Debug.svelte";
+  import Modal from "../lib/components/Modal.svelte";
   import { connect, disconnect, versionMismatch, dismissVersionMismatch, refreshForNewVersion } from "../lib/stores/websocket";
   import { stats, activity, logs, deadLetters } from "../lib/stores/data";
   import { navigation, settingsHasChanges, type Tab } from "../lib/stores/navigation";
@@ -17,13 +18,27 @@
   import * as api from "../lib/api";
 
   let currentTab: Tab = $state("overview");
-  let activityInitialFilter: "all" | "activity" | "errors" = $state("all");
+  let activityInitialFilter: "all" | "errors" = $state("all");
   let showUnsavedModal = $state(false);
   let pendingTab: Tab | null = $state(null);
   let latestRelease: api.GitHubRelease | null = $state(null);
+  let bannersEl: HTMLDivElement | null = $state(null);
+  let bannerHeight = $state(0);
   let isOutdated = $derived(() => {
     if (!latestRelease || !$stats?.version) return false;
     return api.compareVersions(latestRelease.tag_name, $stats.version) > 0;
+  });
+
+  $effect(() => {
+    if (bannersEl) {
+      const updateHeight = () => {
+        bannerHeight = bannersEl?.offsetHeight ?? 0;
+      };
+      updateHeight();
+      const observer = new ResizeObserver(updateHeight);
+      observer.observe(bannersEl);
+      return () => observer.disconnect();
+    }
   });
 
   $effect(() => {
@@ -43,7 +58,7 @@
       const [statsData, activityData, logsData, deadLetterData] = await Promise.all([
         api.fetchStats(),
         api.fetchActivity({ pageSize: 50 }),
-        api.fetchLogs({ limit: 200 }),
+        api.fetchLogs({ page: 1, pageSize: 50 }),
         api.fetchDeadLetters(),
       ]);
 
@@ -96,55 +111,58 @@
 </script>
 
 <div class="dashboard">
-  {#if showUnsavedModal}
-    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-    <div class="modal-overlay" onclick={cancelLeaveSettings}>
-      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-      <div class="modal modal-warning" onclick={(e) => e.stopPropagation()}>
-        <div class="warning-icon">&#9888;</div>
-        <h3>{$t("settings.unsavedModal.title")}</h3>
-        <p>{$t("settings.unsavedModal.message")}</p>
-        <div class="modal-actions">
-          <button class="btn btn-secondary" onclick={cancelLeaveSettings}>{$t("common.cancel")}</button>
-          <button class="btn btn-danger" onclick={confirmLeaveSettings}>{$t("settings.unsavedModal.discard")}</button>
-        </div>
-      </div>
-    </div>
-  {/if}
+  <Modal
+    open={showUnsavedModal}
+    title={$t("settings.unsavedModal.title")}
+    onclose={cancelLeaveSettings}
+    variant="warning"
+    maxWidth="400px"
+    showCloseButton={false}
+  >
+    {#snippet children()}
+      <p class="modal-message">{$t("settings.unsavedModal.message")}</p>
+    {/snippet}
+    {#snippet actions()}
+      <button class="btn btn-secondary" onclick={cancelLeaveSettings}>{$t("common.cancel")}</button>
+      <button class="btn btn-danger" onclick={confirmLeaveSettings}>{$t("settings.unsavedModal.discard")}</button>
+    {/snippet}
+  </Modal>
 
   <Header />
 
-  {#if $versionMismatch}
-    <div class="update-banner">
-      <span class="banner-icon">&#8635;</span>
-      <span class="banner-text">
-        {#if $versionMismatch.serverRestarted}
-          <strong>Server Restarted</strong> — The backend server has been restarted. Refresh to reconnect properly.
-        {:else}
-          <strong>Update Available</strong> — Version {$versionMismatch.new} is available (current: {$versionMismatch.current}).
-        {/if}
-      </span>
-      <div class="banner-actions">
-        <button class="banner-btn banner-btn-primary" onclick={refreshForNewVersion}>
-          Refresh Now
-        </button>
-        <button class="banner-btn banner-btn-secondary" onclick={dismissVersionMismatch}>
-          Dismiss
-        </button>
+  <div class="sticky-banners" bind:this={bannersEl}>
+    {#if $versionMismatch}
+      <div class="update-banner">
+        <span class="banner-icon">&#8635;</span>
+        <span class="banner-text">
+          {#if $versionMismatch.serverRestarted}
+            <strong>Server Restarted</strong> — The backend server has been restarted. Refresh to reconnect properly.
+          {:else}
+            <strong>Update Available</strong> — Version {$versionMismatch.new} is available (current: {$versionMismatch.current}).
+          {/if}
+        </span>
+        <div class="banner-actions">
+          <button class="banner-btn banner-btn-primary" onclick={refreshForNewVersion}>
+            Refresh Now
+          </button>
+          <button class="banner-btn banner-btn-secondary" onclick={dismissVersionMismatch}>
+            Dismiss
+          </button>
+        </div>
       </div>
-    </div>
-  {/if}
+    {/if}
 
-  {#if $stats?.dryRun}
-    <div class="dry-run-banner">
-      <span class="banner-icon">&#9888;</span>
-      <span class="banner-text">
-        <strong>{$t("stats.dryRunMode")}</strong> — {$t("stats.dryRunBanner")}
-      </span>
-    </div>
-  {/if}
+    {#if $stats?.dryRun}
+      <div class="dry-run-banner">
+        <span class="banner-icon">&#9888;</span>
+        <span class="banner-text">
+          <strong>{$t("stats.dryRunMode")}</strong> — {$t("stats.dryRunBanner")}
+        </span>
+      </div>
+    {/if}
+  </div>
 
-  <main class="main">
+  <main class="main" style:padding-top="{bannerHeight + 20}px">
     <div class="container">
       <div class="tabs">
         <button
@@ -198,11 +216,17 @@
             <Sidebar />
           </aside>
         </div>
-      {:else if currentTab === "activity"}
+      {/if}
+
+      <!-- Activity and Logs are always mounted, hidden via CSS for seamless tab switching -->
+      <div class="tab-content" class:hidden={currentTab !== "activity"}>
         <ActivityLog initialFilter={activityInitialFilter} />
-      {:else if currentTab === "logs"}
+      </div>
+      <div class="tab-content" class:hidden={currentTab !== "logs"}>
         <LogViewer />
-      {:else if currentTab === "settings"}
+      </div>
+
+      {#if currentTab === "settings"}
         <Settings />
       {:else if currentTab === "debug"}
         <Debug />
@@ -245,6 +269,15 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    padding-top: 60px; /* Space for fixed header */
+  }
+
+  .sticky-banners {
+    position: fixed;
+    top: 72px; /* Below header with spacing */
+    left: 0;
+    right: 0;
+    z-index: 99;
   }
 
   .update-banner {
@@ -330,6 +363,7 @@
   .main {
     flex: 1;
     padding: var(--space-5) 0;
+    padding-bottom: 60px; /* Space for fixed footer */
   }
 
   .container {
@@ -340,10 +374,10 @@
 
   .tabs {
     display: flex;
-    gap: var(--space-1);
+    gap: var(--space-2);
     margin-bottom: var(--space-5);
     background: var(--bg-secondary);
-    padding: var(--space-1);
+    padding: var(--space-2);
     border-radius: var(--radius-lg);
     width: fit-content;
   }
@@ -352,7 +386,7 @@
     background: transparent;
     border: none;
     color: var(--text-secondary);
-    padding: var(--space-2) var(--space-4);
+    padding: var(--space-2) var(--space-5);
     cursor: pointer;
     border-radius: var(--radius-md);
     font-size: var(--text-sm);
@@ -369,6 +403,14 @@
     background: var(--accent);
     color: white;
     box-shadow: var(--shadow-sm);
+  }
+
+  .tab-content {
+    display: block;
+  }
+
+  .tab-content.hidden {
+    display: none;
   }
 
   .overview-grid {
@@ -422,24 +464,30 @@
   }
 
   .footer {
-    padding: var(--space-4) var(--space-6);
+    padding: var(--space-2) var(--space-6);
     border-top: 1px solid var(--border-color);
     display: flex;
     justify-content: center;
     align-items: center;
     background: var(--bg-secondary);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 99;
   }
 
   .footer-left {
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    font-size: var(--text-xs);
+    font-size: var(--text-base);
     color: var(--text-secondary);
   }
 
   .version {
-    font-weight: 500;
+    font-weight: 600;
+    font-size: var(--text-base);
   }
 
   .update-available {
@@ -451,7 +499,7 @@
     border: 1px solid #22c55e;
     border-radius: var(--radius-sm);
     color: #4ade80;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     font-weight: 600;
     text-decoration: none;
     transition: all var(--transition-fast);
@@ -484,52 +532,11 @@
     height: 1.5rem;
   }
 
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-  }
-
-  .modal {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    padding: var(--space-6);
-    width: 100%;
-    max-width: 400px;
-  }
-
-  .modal-warning {
-    text-align: center;
-  }
-
-  .modal-warning .warning-icon {
-    font-size: 2.5rem;
-    margin-bottom: var(--space-2);
-    color: var(--warning);
-  }
-
-  .modal-warning h3 {
-    margin: 0 0 var(--space-3);
-    color: var(--warning);
-    font-size: var(--text-lg);
-  }
-
-  .modal-warning p {
-    margin: 0 0 var(--space-5);
+  .modal-message {
+    margin: 0;
     color: var(--text-secondary);
     font-size: var(--text-sm);
     line-height: 1.5;
-  }
-
-  .modal-actions {
-    display: flex;
-    justify-content: center;
-    gap: var(--space-3);
   }
 
   .btn {

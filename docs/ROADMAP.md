@@ -63,9 +63,14 @@ OAUTH_REDIRECT_URI=http://localhost:8085/api/oauth/callback
 - PKCE flow for added security
 - Minimal scopes: `https://mail.google.com/` for Gmail IMAP
 
+### Other Considerations
+- This entire flow should be disabled on the dashboard if the respective environment variables are not found (per service), and in that case only app passwords should be allowed
+
 ---
 
-## 4. Smart Retry for Dead Letters
+## 4. Smart Retry for Dead Letters ✅
+
+> **Status: Complete** - Implemented January 2026
 
 ### Overview
 Automatically retry failed emails with exponential backoff instead of requiring manual intervention.
@@ -124,7 +129,9 @@ state:
 
 ---
 
-## 7. Notification System
+## 7. Notification System ✅
+
+> **Status: Complete** - Implemented January 2026
 
 ### Overview
 Alert users about errors, processing milestones, and important events via browser notifications and optional email alerts.
@@ -311,7 +318,9 @@ Layout:
 
 ---
 
-## 13. Accessibility (A11y) Fixes
+## 13. Accessibility (A11y) Fixes ✅
+
+> **Status: Complete** - Implemented January 2026
 
 ### Overview
 Fix accessibility warnings in modal overlays - add proper ARIA roles and keyboard handlers.
@@ -369,13 +378,13 @@ Fix accessibility warnings in modal overlays - add proper ARIA roles and keyboar
 ```
 
 ### Implementation Checklist
-- [ ] Create reusable Modal component with focus trapping
-- [ ] Update Dashboard.svelte to use Modal
-- [ ] Update ActivityLog.svelte filter dropdown and error preview
-- [ ] Update AccountsTable.svelte dropdown backdrop
-- [ ] Update Settings.svelte modals (account, provider, api-key editors)
-- [ ] Update UserSettings.svelte to use Modal
-- [ ] Add aria-label to all icon-only buttons
+- [x] Create reusable Modal component with focus trapping
+- [x] Update Dashboard.svelte to use Modal
+- [x] Update ActivityLog.svelte filter dropdown and error preview
+- [x] Update AccountsTable.svelte dropdown backdrop
+- [x] Update Settings.svelte modals (account, provider, api-key editors)
+- [x] Update UserSettings.svelte to use Modal
+- [x] Add aria-label to all icon-only buttons
 
 ---
 
@@ -482,7 +491,9 @@ readinessProbe:
 
 ---
 
-## Real-time Streaming Toggle (Activity & Logs)
+## Real-time Streaming Toggle (Activity & Logs) ✅
+
+> **Status: Complete** - Implemented January 2026
 
 ### Overview
 Add pause/resume toggle button to Activity and Logs pages for real-time streaming via WebSocket.
@@ -550,13 +561,13 @@ broadcastActivity(entry);
 
 ## Implementation Priority
 
-| Feature | Complexity | Impact | Priority |
-|---------|------------|--------|----------|
-| 13. A11y Fixes | Low | Medium | P1 |
-| 16. Docker Health | Low | High | P1 |
-| Streaming Toggle | Medium | High | P1 |
-| 4. Smart Retry | Medium | High | P2 |
-| 7. Notifications | Medium | Medium | P2 |
-| 14. Config Editor | Medium | Medium | P3 |
-| 9. Rule Sandbox | High | Medium | P3 |
-| 1. OAuth UI | High | High | P4 |
+| Feature | Complexity | Impact | Priority | Status |
+|---------|------------|--------|----------|--------|
+| 13. A11y Fixes | Low | Medium | P1 | ✅ Complete |
+| 16. Docker Health | Low | High | P1 | |
+| Streaming Toggle | Medium | High | P1 | ✅ Complete |
+| 4. Smart Retry | Medium | High | P2 | ✅ Complete |
+| 7. Notifications | Medium | Medium | P2 | ✅ Complete |
+| 14. Config Editor | Medium | Medium | P3 | |
+| 9. Rule Sandbox | High | Medium | P3 | |
+| 1. OAuth UI | High | High | P4 | |

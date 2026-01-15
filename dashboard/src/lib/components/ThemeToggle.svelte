@@ -20,14 +20,6 @@
     auto: "System",
   };
 
-  const themeIcons: Record<Theme, string> = {
-    light: "sun",
-    dark: "moon",
-    oled: "moon-stars",
-    "high-contrast": "contrast",
-    auto: "monitor",
-  };
-
   const accentPresets = [
     { name: "blue", color: "#3b82f6" },
     { name: "purple", color: "#8b5cf6" },

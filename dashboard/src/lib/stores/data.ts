@@ -58,6 +58,8 @@ export interface LogEntry {
   meta?: Record<string, unknown>;
 }
 
+export type RetryStatus = "pending" | "retrying" | "exhausted" | "success";
+
 export interface DeadLetterEntry {
   id: number;
   messageId: string;
@@ -67,6 +69,9 @@ export interface DeadLetterEntry {
   error: string;
   attempts: number;
   createdAt: number;
+  retryStatus: RetryStatus;
+  nextRetryAt: number | null;
+  lastRetryAt: number | null;
 }
 
 export interface DashboardStats {
@@ -107,6 +112,14 @@ export const serviceStatus = writable<ServicesStatus | null>(null);
 export const selectedAccount = writable<string | null>(null);
 export const searchQuery = writable<string>("");
 export const logLevel = writable<string>("");
+
+// Activity-specific filter stores (persisted across tab switches)
+export const activitySearchQuery = writable<string>("");
+export const activitySelectedFilters = writable<Set<string>>(new Set(["move", "flag", "read", "delete", "spam", "noop", "errors"]));
+
+// Logs-specific filter stores (persisted across tab switches)
+export const logsSearchQuery = writable<string>("");
+export const logsSelectedLevels = writable<Set<string>>(new Set(["debug", "info", "warn", "error"]));
 
 // Derived stores for filtered data
 export const filteredActivity = derived(

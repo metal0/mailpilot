@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { toasts, removeToast, type ToastMessage } from "../stores/toast";
+  import { toasts, removeToast } from "../stores/toast";
 </script>
 
 <div class="toast-container">

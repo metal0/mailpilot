@@ -4,9 +4,9 @@
   import { t } from "../i18n";
   import { generateSystemNotifications } from "../stores/notifications";
   import { stats, deadLetters } from "../stores/data";
-  import { onMount } from "svelte";
   import ThemeToggle from "./ThemeToggle.svelte";
   import UserSettings from "./UserSettings.svelte";
+  import NotificationCenter from "./NotificationCenter.svelte";
 
   let userMenuOpen = $state(false);
   let userSettingsOpen = $state(false);
@@ -50,6 +50,7 @@
   </div>
 
   <div class="header-right">
+    <NotificationCenter />
     <ThemeToggle />
 
     <div class="user-menu">
@@ -106,6 +107,11 @@
     padding: 1rem 2rem;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
   }
 
   .header-left {

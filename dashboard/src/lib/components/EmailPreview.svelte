@@ -2,8 +2,6 @@
   import { onMount } from "svelte";
   import type { AuditEntry } from "../stores/data";
   import type { EmailPreview as EmailPreviewType } from "../api";
-  import * as api from "../api";
-  import { addToast } from "../stores/toast";
   import { t } from "../i18n";
 
   interface Props {

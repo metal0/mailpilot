@@ -1,4 +1,4 @@
-import { RESPONSE_SCHEMA } from "./parser.js";
+import { RESPONSE_SCHEMA, generateResponseSchema, type ActionType, ALL_ACTION_TYPES } from "./parser.js";
 import type { ExtractedAttachment } from "../attachments/index.js";
 import { formatAttachmentsForPrompt } from "../attachments/index.js";
 
@@ -17,6 +17,8 @@ export interface PromptOptions {
   folderMode: "predefined" | "auto_create";
   allowedFolders?: string[];
   existingFolders?: string[];
+  // Allowed action types for this account. If not specified, all actions are allowed.
+  allowedActions?: ActionType[];
 }
 
 export function buildPrompt(
@@ -45,10 +47,33 @@ export function buildPrompt(
     );
   }
 
+  // Add allowed actions restriction if specified
+  const effectiveAllowedActions = options.allowedActions ?? [...ALL_ACTION_TYPES];
+  const hasActionRestriction = options.allowedActions && options.allowedActions.length < ALL_ACTION_TYPES.length;
+
+  if (hasActionRestriction) {
+    parts.push("\n## Allowed Actions\n");
+    parts.push(
+      "You may ONLY use these action types:\n" +
+        effectiveAllowedActions.map((a) => `- ${a}`).join("\n")
+    );
+
+    // Explicitly mention disallowed actions
+    const disallowed = ALL_ACTION_TYPES.filter((a) => !effectiveAllowedActions.includes(a));
+    if (disallowed.length > 0) {
+      parts.push(`\nDO NOT use these action types: ${disallowed.join(", ")}`);
+    }
+  }
+
+  // Use dynamic schema based on allowed actions
+  const responseSchema = hasActionRestriction
+    ? generateResponseSchema(effectiveAllowedActions)
+    : RESPONSE_SCHEMA;
+
   parts.push("\n\n## Response Format\n");
   parts.push(
     "You MUST respond with valid JSON in this exact format:\n```json\n" +
-      RESPONSE_SCHEMA +
+      responseSchema +
       "\n```"
   );
 

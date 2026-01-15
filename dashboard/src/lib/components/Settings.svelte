@@ -4,6 +4,8 @@
   import { stats, serviceStatus, type ServicesStatus } from "../stores/data";
   import { settingsHasChanges } from "../stores/navigation";
   import { t } from "../i18n";
+  import Modal from "./Modal.svelte";
+  import Backdrop from "./Backdrop.svelte";
 
   interface Config {
     polling_interval?: string;
@@ -18,6 +20,7 @@
     dashboard?: DashboardConfig;
     antivirus?: AntivirusConfig;
     attachments?: AttachmentsConfig;
+    notifications?: NotificationsConfig;
   }
 
   interface LlmProvider {
@@ -87,6 +90,18 @@
     extract_images?: boolean;
   }
 
+  interface NotificationsConfig {
+    enabled?: boolean;
+    channels?: "browser"[];
+    events?: ("error" | "connection_lost" | "dead_letter" | "retry_exhausted" | "daily_summary")[];
+    daily_summary_time?: string;
+    quiet_hours?: {
+      enabled?: boolean;
+      start?: string;
+      end?: string;
+    };
+  }
+
   let config = $state<Config | null>(null);
   let originalConfig = $state<string>(""); // JSON string for deep comparison
   let configPath = $state<string>("");
@@ -126,6 +141,7 @@
       if (JSON.stringify(config.dashboard) !== JSON.stringify(original.dashboard)) count++;
       if (JSON.stringify(config.attachments) !== JSON.stringify(original.attachments)) count++;
       if (JSON.stringify(config.antivirus) !== JSON.stringify(original.antivirus)) count++;
+      if (JSON.stringify(config.notifications) !== JSON.stringify(original.notifications)) count++;
 
       // Compare arrays
       if (JSON.stringify(config.accounts) !== JSON.stringify(original.accounts)) count++;
@@ -168,6 +184,11 @@
   // Folder multi-select dropdown state
   let showWatchFolderDropdown = $state(false);
   let showAllowedFolderDropdown = $state(false);
+
+  // Action types state
+  let availableActionTypes = $state<api.ActionType[]>([]);
+  let defaultAllowedActions = $state<api.ActionType[]>([]);
+  let showAllowedActionsDropdown = $state(false);
 
   // LLM provider wizard state
   let llmPresets = $state<api.LlmPreset[]>([]);
@@ -222,6 +243,11 @@
     "dashboard.session_ttl": "How long dashboard sessions last (e.g., 24h, 7d)",
     "logging.level": "Log level: debug, info, warn, or error",
     "server.port": "HTTP server port for health checks and dashboard",
+    "notifications.enabled": "Enable notifications for important events",
+    "notifications.channels": "Where to send notifications (browser)",
+    "notifications.events": "Which events trigger notifications",
+    "notifications.daily_summary_time": "When to send daily summary (24h format, e.g., 09:00)",
+    "notifications.quiet_hours": "Suppress notifications during these hours",
   };
 
   onMount(async () => {
@@ -240,6 +266,16 @@
       llmPresets = llmPresetsResult.presets;
     } catch {
       // Presets are optional, ignore errors
+    }
+    // Load action types
+    try {
+      const actionTypesResult = await api.fetchActionTypes();
+      availableActionTypes = actionTypesResult.actionTypes;
+      defaultAllowedActions = actionTypesResult.defaultAllowed;
+    } catch {
+      // Use fallback defaults if fetch fails
+      availableActionTypes = ["move", "spam", "flag", "read", "delete", "noop"];
+      defaultAllowedActions = ["move", "spam", "flag", "read", "noop"];
     }
     // Poll service status every 30 seconds
     serviceCheckInterval = setInterval(checkServices, 30000);
@@ -273,6 +309,12 @@
       loadedConfig.dashboard = loadedConfig.dashboard ?? { enabled: true, session_ttl: "24h" };
       loadedConfig.attachments = loadedConfig.attachments ?? { enabled: false };
       loadedConfig.antivirus = loadedConfig.antivirus ?? { enabled: false };
+      loadedConfig.notifications = loadedConfig.notifications ?? {
+        enabled: true,
+        channels: ["browser"],
+        events: ["error", "connection_lost"],
+        quiet_hours: { enabled: false, start: "22:00", end: "08:00" },
+      };
 
       config = loadedConfig;
       originalConfig = JSON.stringify(loadedConfig);
@@ -750,24 +792,23 @@
   }
 </script>
 
-{#if showPortWarning}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="modal-overlay" onclick={cancelPortChange}>
-    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-    <div class="modal modal-warning" onclick={(e) => e.stopPropagation()}>
-      <div class="warning-icon">&#9888;</div>
-      <h3>{$t("settings.portWarning.title")}</h3>
-      <p>
-        {$t("settings.portWarning.message")}
-      </p>
-      <code class="new-url">{`${window.location.protocol}//${window.location.hostname}:${pendingPortChange}`}</code>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick={cancelPortChange}>{$t("common.cancel")}</button>
-        <button class="btn btn-warning" onclick={confirmPortChange}>{$t("settings.portWarning.confirm")}</button>
-      </div>
-    </div>
-  </div>
-{/if}
+<Modal
+  open={showPortWarning}
+  title={$t("settings.portWarning.title")}
+  onclose={cancelPortChange}
+  variant="warning"
+  maxWidth="400px"
+  showCloseButton={false}
+>
+  {#snippet children()}
+    <p class="modal-message">{$t("settings.portWarning.message")}</p>
+    <code class="new-url">{`${window.location.protocol}//${window.location.hostname}:${pendingPortChange}`}</code>
+  {/snippet}
+  {#snippet actions()}
+    <button class="btn btn-secondary" onclick={cancelPortChange}>{$t("common.cancel")}</button>
+    <button class="btn btn-warning" onclick={confirmPortChange}>{$t("settings.portWarning.confirm")}</button>
+  {/snippet}
+</Modal>
 
 <div class="settings">
   <div class="settings-header">
@@ -963,9 +1004,20 @@
             </div>
 
             {#if editingAccount}
-              <div class="modal-overlay" onclick={() => editingAccount = null}>
-                <div class="modal" onclick={(e) => e.stopPropagation()}>
-                  <h3>{editingAccount.name ? $t("settings.accounts.editAccountTitle", { name: editingAccount.name }) : $t("settings.accounts.newAccount")}</h3>
+              <div
+                class="modal-overlay"
+                onclick={() => editingAccount = null}
+                onkeydown={(e) => e.key === "Escape" && (editingAccount = null)}
+                role="presentation"
+              >
+                <div
+                  class="modal"
+                  onclick={(e) => e.stopPropagation()}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="account-modal-title"
+                >
+                  <h3 id="account-modal-title">{editingAccount.name ? $t("settings.accounts.editAccountTitle", { name: editingAccount.name }) : $t("settings.accounts.newAccount")}</h3>
 
                   <div class="form-group">
                     <label>
@@ -994,8 +1046,7 @@
                             }}
                           />
                           {#if showPresetDropdown && imapPresets.length > 0}
-                            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                            <div class="preset-backdrop" onmousedown={() => { showPresetDropdown = false; handleHostBlur(); }}></div>
+                            <Backdrop onclose={() => { showPresetDropdown = false; handleHostBlur(); }} zIndex={50} />
                             <div class="preset-dropdown">
                               {#each imapPresets as preset}
                                 <button
@@ -1298,6 +1349,68 @@
                       {/if}
                     </div>
 
+                    <h4>{$t("settings.accounts.allowedActions") ?? "Allowed Actions"}</h4>
+                    <div class="form-row">
+                      <div class="form-group form-group-full">
+                        <label>
+                          <span class="label-text">{$t("settings.accounts.allowedActionsLabel") ?? "Action Types"} <span class="help-icon" title={helpTexts["allowed_actions"] ?? "Select which action types the LLM can use for this account. Delete is disabled by default for safety."}>?</span></span>
+                          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                          <div class="multi-select-dropdown">
+                            <button type="button" class="dropdown-trigger" onclick={() => showAllowedActionsDropdown = !showAllowedActionsDropdown}>
+                              {#if (editingAccount.allowed_actions ?? defaultAllowedActions).length === availableActionTypes.length}
+                                All actions
+                              {:else if (editingAccount.allowed_actions ?? defaultAllowedActions).length === 0}
+                                No actions (noop only)
+                              {:else}
+                                {(editingAccount.allowed_actions ?? defaultAllowedActions).join(", ")}
+                              {/if}
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"/>
+                              </svg>
+                            </button>
+                            {#if showAllowedActionsDropdown}
+                              <div class="dropdown-menu" onclick={(e) => e.stopPropagation()}>
+                                <div class="dropdown-actions">
+                                  <button type="button" class="dropdown-action-btn" onclick={() => {
+                                    editingAccount!.allowed_actions = [...availableActionTypes];
+                                  }}>All</button>
+                                  <button type="button" class="dropdown-action-btn" onclick={() => {
+                                    editingAccount!.allowed_actions = [...defaultAllowedActions];
+                                  }}>Default</button>
+                                  <button type="button" class="dropdown-action-btn" onclick={() => {
+                                    editingAccount!.allowed_actions = ["noop"];
+                                  }}>None</button>
+                                </div>
+                                {#each availableActionTypes as actionType}
+                                  <label class="dropdown-item" class:action-delete={actionType === "delete"}>
+                                    <input
+                                      type="checkbox"
+                                      checked={(editingAccount.allowed_actions ?? defaultAllowedActions).includes(actionType)}
+                                      onchange={() => {
+                                        const current = editingAccount!.allowed_actions ?? [...defaultAllowedActions];
+                                        if (current.includes(actionType)) {
+                                          editingAccount!.allowed_actions = current.filter(a => a !== actionType);
+                                        } else {
+                                          editingAccount!.allowed_actions = [...current, actionType];
+                                        }
+                                      }}
+                                    />
+                                    <span class="action-type-label">{actionType}</span>
+                                    {#if actionType === "delete"}
+                                      <span class="action-warning">⚠️</span>
+                                    {/if}
+                                  </label>
+                                {/each}
+                              </div>
+                            {/if}
+                          </div>
+                        </label>
+                        {#if (editingAccount.allowed_actions ?? defaultAllowedActions).includes("delete")}
+                          <div class="warning-note">{$t("settings.accounts.deleteWarning") ?? "Warning: Delete action is enabled. Emails may be permanently deleted."}</div>
+                        {/if}
+                      </div>
+                    </div>
+
                     <h4>{$t("settings.accounts.llmSettings")}</h4>
                   <div class="form-row">
                     <div class="form-group">
@@ -1386,11 +1499,20 @@
             </div>
 
             {#if editingProvider}
-              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-              <div class="modal-overlay" onclick={() => editingProvider = null}>
-                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                <div class="modal" onclick={(e) => e.stopPropagation()}>
-                  <h3>{editingProvider.name ? $t("settings.providers.editProviderTitle", { name: editingProvider.name }) : $t("settings.providers.newProvider")}</h3>
+              <div
+                class="modal-overlay"
+                onclick={() => editingProvider = null}
+                onkeydown={(e) => e.key === "Escape" && (editingProvider = null)}
+                role="presentation"
+              >
+                <div
+                  class="modal"
+                  onclick={(e) => e.stopPropagation()}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="provider-modal-title"
+                >
+                  <h3 id="provider-modal-title">{editingProvider.name ? $t("settings.providers.editProviderTitle", { name: editingProvider.name }) : $t("settings.providers.newProvider")}</h3>
 
                   {#if llmPresets.length > 0}
                     <div class="form-group">
@@ -1407,8 +1529,7 @@
                           </svg>
                         </button>
                         {#if showLlmPresetDropdown}
-                          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                          <div class="preset-backdrop" onmousedown={() => showLlmPresetDropdown = false}></div>
+                          <Backdrop onclose={() => showLlmPresetDropdown = false} zIndex={50} />
                           <div class="preset-dropdown">
                             {#each llmPresets as preset}
                               <button
@@ -1562,11 +1683,20 @@
             <p class="section-note">{$t("settings.apiKeys.description")}</p>
 
             {#if editingApiKey}
-              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-              <div class="modal-overlay" onclick={() => { editingApiKey = null; editingApiKeyIndex = null; }}>
-                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                <div class="modal" onclick={(e) => e.stopPropagation()}>
-                  <h3>{editingApiKeyIndex !== null ? $t("settings.apiKeys.editApiKey") : $t("settings.apiKeys.newApiKey")}</h3>
+              <div
+                class="modal-overlay"
+                onclick={() => { editingApiKey = null; editingApiKeyIndex = null; }}
+                onkeydown={(e) => e.key === "Escape" && (editingApiKey = null, editingApiKeyIndex = null)}
+                role="presentation"
+              >
+                <div
+                  class="modal"
+                  onclick={(e) => e.stopPropagation()}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="apikey-modal-title"
+                >
+                  <h3 id="apikey-modal-title">{editingApiKeyIndex !== null ? $t("settings.apiKeys.editApiKey") : $t("settings.apiKeys.newApiKey")}</h3>
 
                   <div class="form-group">
                     <label>
@@ -1857,6 +1987,127 @@
                     <option value="flag_only">{$t("settings.antivirus.flagOnly")}</option>
                   </select>
                 </label>
+              </div>
+            {/if}
+          </section>
+
+          <section class="config-section">
+            <div class="section-header">
+              <h3>{$t("settings.notifications.sectionTitle")}</h3>
+            </div>
+
+            <div class="form-group checkbox">
+              <label>
+                <input type="checkbox" bind:checked={config.notifications.enabled} />
+                <span class="label-text">
+                  {$t("settings.notifications.enableLabel")}
+                  <span class="help-icon" title={helpTexts["notifications.enabled"]}>?</span>
+                </span>
+              </label>
+            </div>
+
+            {#if config.notifications?.enabled}
+              <div class="form-group">
+                <label>
+                  <span class="label-text">
+                    {$t("settings.notifications.channels")}
+                    <span class="help-icon" title={helpTexts["notifications.channels"]}>?</span>
+                  </span>
+                  <div class="checkbox-group">
+                    <label class="checkbox-inline">
+                      <input
+                        type="checkbox"
+                        checked={config.notifications.channels?.includes("browser")}
+                        onchange={(e) => {
+                          const checked = (e.target as HTMLInputElement).checked;
+                          if (checked) {
+                            config.notifications.channels = [...(config.notifications.channels ?? []), "browser"];
+                          } else {
+                            config.notifications.channels = (config.notifications.channels ?? []).filter(c => c !== "browser");
+                          }
+                        }}
+                      />
+                      <span>{$t("settings.notifications.channelBrowser")}</span>
+                    </label>
+                  </div>
+                </label>
+              </div>
+
+              <div class="form-group">
+                <label>
+                  <span class="label-text">
+                    {$t("settings.notifications.events")}
+                    <span class="help-icon" title={helpTexts["notifications.events"]}>?</span>
+                  </span>
+                  <div class="checkbox-group vertical">
+                    {#each [
+                      { value: "error", label: $t("settings.notifications.eventError") },
+                      { value: "connection_lost", label: $t("settings.notifications.eventConnectionLost") },
+                      { value: "dead_letter", label: $t("settings.notifications.eventDeadLetter") },
+                      { value: "retry_exhausted", label: $t("settings.notifications.eventRetryExhausted") },
+                      { value: "daily_summary", label: $t("settings.notifications.eventDailySummary") },
+                    ] as event}
+                      <label class="checkbox-inline">
+                        <input
+                          type="checkbox"
+                          checked={config.notifications.events?.includes(event.value as "error" | "connection_lost" | "dead_letter" | "retry_exhausted" | "daily_summary")}
+                          onchange={(e) => {
+                            const checked = (e.target as HTMLInputElement).checked;
+                            if (checked) {
+                              config.notifications.events = [...(config.notifications.events ?? []), event.value as "error" | "connection_lost" | "dead_letter" | "retry_exhausted" | "daily_summary"];
+                            } else {
+                              config.notifications.events = (config.notifications.events ?? []).filter(ev => ev !== event.value);
+                            }
+                          }}
+                        />
+                        <span>{event.label}</span>
+                      </label>
+                    {/each}
+                  </div>
+                </label>
+              </div>
+
+              {#if config.notifications.events?.includes("daily_summary")}
+                <div class="form-group">
+                  <label>
+                    <span class="label-text">
+                      {$t("settings.notifications.dailySummaryTime")}
+                      <span class="help-icon" title={helpTexts["notifications.daily_summary_time"]}>?</span>
+                    </span>
+                    <input type="time" bind:value={config.notifications.daily_summary_time} />
+                  </label>
+                </div>
+              {/if}
+
+              <div class="form-group">
+                <label>
+                  <span class="label-text">
+                    {$t("settings.notifications.quietHours")}
+                    <span class="help-icon" title={helpTexts["notifications.quiet_hours"]}>?</span>
+                  </span>
+                </label>
+                <div class="form-group checkbox">
+                  <label>
+                    <input type="checkbox" bind:checked={config.notifications.quiet_hours.enabled} />
+                    <span class="label-text">{$t("settings.notifications.enableQuietHours")}</span>
+                  </label>
+                </div>
+                {#if config.notifications.quiet_hours?.enabled}
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>
+                        <span class="label-text">{$t("settings.notifications.quietStart")}</span>
+                        <input type="time" bind:value={config.notifications.quiet_hours.start} />
+                      </label>
+                    </div>
+                    <div class="form-group">
+                      <label>
+                        <span class="label-text">{$t("settings.notifications.quietEnd")}</span>
+                        <input type="time" bind:value={config.notifications.quiet_hours.end} />
+                      </label>
+                    </div>
+                  </div>
+                {/if}
               </div>
             {/if}
           </section>
@@ -2254,6 +2505,56 @@
     background: color-mix(in srgb, var(--accent) 10%, transparent);
     border-left: 2px solid var(--accent);
     border-radius: 0.25rem;
+  }
+
+  .warning-note {
+    margin-top: 0.375rem;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.6875rem;
+    color: var(--warning);
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
+    border-left: 2px solid var(--warning);
+    border-radius: 0.25rem;
+  }
+
+  .dropdown-item.action-delete {
+    color: var(--error);
+  }
+
+  .action-warning {
+    margin-left: auto;
+    font-size: 0.75rem;
+  }
+
+  .action-type-label {
+    text-transform: capitalize;
+  }
+
+  .dropdown-actions {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.375rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .dropdown-action-btn {
+    flex: 1;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.6875rem;
+    background: var(--bg-tertiary);
+    border: none;
+    border-radius: 0.25rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .dropdown-action-btn:hover {
+    background: var(--border-color);
+    color: var(--text-primary);
+  }
+
+  .form-group-full {
+    grid-column: 1 / -1;
   }
 
   .form-group input,
@@ -2910,6 +3211,31 @@
   }
 
   .dropdown-item input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+  }
+
+  .checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: 0.5rem;
+  }
+
+  .checkbox-group.vertical {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .checkbox-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+  }
+
+  .checkbox-inline input[type="checkbox"] {
     width: auto;
     margin: 0;
   }

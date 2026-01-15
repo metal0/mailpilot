@@ -57,6 +57,13 @@ const foldersConfigSchema = z.object({
   allowed: z.array(z.string()).optional(),
 });
 
+// Action types that can be allowed/disallowed per account
+export const actionTypeSchema = z.enum(["move", "spam", "flag", "read", "delete", "noop"]);
+export const ALL_ACTION_TYPES = ["move", "spam", "flag", "read", "delete", "noop"] as const;
+// Default allowed actions (excludes delete for safety)
+export const DEFAULT_ALLOWED_ACTIONS = ["move", "spam", "flag", "read", "noop"] as const;
+export type ActionType = z.infer<typeof actionTypeSchema>;
+
 const llmSelectionSchema = z.object({
   provider: z.string().optional(),
   model: z.string().optional(),
@@ -70,6 +77,9 @@ const accountConfigSchema = z.object({
   folders: foldersConfigSchema.optional(),
   prompt_override: z.string().optional(),
   prompt_file: z.string().optional(),
+  // Allowed action types for this account. If not specified, all actions are allowed.
+  // Actions not in this list will be blocked even if the LLM returns them.
+  allowed_actions: z.array(actionTypeSchema).optional(),
 });
 
 const llmProviderSchema = z.object({
@@ -176,6 +186,36 @@ const attachmentsConfigSchema = z.object({
   extract_images: z.boolean().default(false),
 });
 
+const retryConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  max_attempts: z.number().int().min(1).max(10).default(5),
+  initial_delay: durationSchema.default("5m"),
+  max_delay: durationSchema.default("24h"),
+  backoff_multiplier: z.number().positive().default(2),
+});
+
+const notificationEventSchema = z.enum([
+  "error",
+  "connection_lost",
+  "dead_letter",
+  "retry_exhausted",
+  "daily_summary",
+]);
+
+const notificationChannelSchema = z.literal("browser");
+
+const notificationConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  channels: z.array(notificationChannelSchema).default(["browser"]),
+  events: z.array(notificationEventSchema).default(["error", "connection_lost"]),
+  daily_summary_time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  quiet_hours: z.object({
+    enabled: z.boolean().default(false),
+    start: z.string().regex(/^\d{2}:\d{2}$/).default("22:00"),
+    end: z.string().regex(/^\d{2}:\d{2}$/).default("08:00"),
+  }).optional(),
+});
+
 export const configSchema = z.object({
   polling_interval: durationSchema.default("30s"),
   concurrency_limit: z.number().int().positive().default(5),
@@ -191,6 +231,8 @@ export const configSchema = z.object({
   dashboard: dashboardConfigSchema.optional(),
   antivirus: antivirusConfigSchema.optional(),
   attachments: attachmentsConfigSchema.optional(),
+  retry: retryConfigSchema.optional(),
+  notifications: notificationConfigSchema.optional(),
   accounts: z.array(accountConfigSchema).default([]),
 });
 
@@ -209,6 +251,10 @@ export type ApiKeyConfig = z.infer<typeof apiKeyConfigSchema>;
 export type ApiKeyPermission = z.infer<typeof apiKeyPermissionSchema>;
 export type AntivirusConfig = z.infer<typeof antivirusConfigSchema>;
 export type AttachmentsConfig = z.infer<typeof attachmentsConfigSchema>;
+export type RetryConfig = z.infer<typeof retryConfigSchema>;
+export type NotificationConfig = z.infer<typeof notificationConfigSchema>;
+export type NotificationEvent = z.infer<typeof notificationEventSchema>;
+export type NotificationChannel = z.infer<typeof notificationChannelSchema>;
 
 export type TlsMode = z.infer<typeof tlsModeSchema>;
 export type AuthType = z.infer<typeof authTypeSchema>;

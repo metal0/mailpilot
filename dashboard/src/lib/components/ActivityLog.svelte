@@ -1,9 +1,12 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { searchQuery, selectedAccount, accountList, deadLetters, type AuditEntry, type DeadLetterEntry } from "../stores/data";
+  import { onMount, onDestroy } from "svelte";
+  import { activitySearchQuery, activitySelectedFilters, selectedAccount, accountList, deadLetters, activity, type AuditEntry, type DeadLetterEntry } from "../stores/data";
   import { t } from "../i18n";
   import * as api from "../api";
   import EmailPreview from "./EmailPreview.svelte";
+  import Modal from "./Modal.svelte";
+  import Backdrop from "./Backdrop.svelte";
+  import StreamToggle from "./StreamToggle.svelte";
 
   type Density = "compact" | "normal" | "comfortable";
   type UnifiedEntry =
@@ -12,20 +15,76 @@
 
   let { initialFilter = "all" as "all" | "errors" } = $props();
 
+  const PAGE_SIZE = 50;
+  const MAX_ENTRIES = 300;
+
   let loading = $state(false);
-  let page = $state(1);
+  let loadingMore = $state(false);
+  let currentPage = $state(1);
   let totalPages = $state(1);
-  let lineLimit = $state<number>(
-    (typeof localStorage !== "undefined" && parseInt(localStorage.getItem("activity-line-limit") || "25", 10)) || 25
-  );
+  let hasMore = $state(true);
+
+  // Streaming state (ON by default for Activity)
+  let streaming = $state(true);
+  let bufferedEntries = $state<AuditEntry[]>([]);
+  let lastSeenTimestamp = $state<number>(0);
+  let unsubscribeActivity: (() => void) | null = null;
+
+  // Scrollable container and sentinel refs
+  let scrollContainer: HTMLDivElement | null = $state(null);
+  let bottomSentinel: HTMLDivElement | null = $state(null);
+  let observer: IntersectionObserver | null = null;
+
+  // Subscribe to activity store for real-time updates
+  function setupActivitySubscription() {
+    if (unsubscribeActivity) return;
+
+    unsubscribeActivity = activity.subscribe((entries) => {
+      if (!streaming || entries.length === 0) return;
+
+      const newEntries = entries.filter(e => e.createdAt > lastSeenTimestamp);
+      if (newEntries.length > 0) {
+        lastSeenTimestamp = Math.max(...newEntries.map(e => e.createdAt));
+        // Prepend new entries at the top
+        allEntries = [...newEntries, ...allEntries];
+        trimEntries();
+      }
+    });
+  }
+
+  function handleStreamToggle(isStreaming: boolean) {
+    streaming = isStreaming;
+
+    if (isStreaming) {
+      if (bufferedEntries.length > 0) {
+        allEntries = [...bufferedEntries, ...allEntries];
+        bufferedEntries = [];
+        trimEntries();
+      }
+      setupActivitySubscription();
+    } else {
+      if (unsubscribeActivity) {
+        unsubscribeActivity();
+        unsubscribeActivity = null;
+      }
+      unsubscribeActivity = activity.subscribe((entries) => {
+        if (streaming || entries.length === 0) return;
+        const newEntries = entries.filter(e => e.createdAt > lastSeenTimestamp);
+        if (newEntries.length > 0) {
+          lastSeenTimestamp = Math.max(...newEntries.map(e => e.createdAt));
+          bufferedEntries = [...newEntries, ...bufferedEntries].slice(0, 100);
+        }
+      });
+    }
+  }
 
   const allFilterTypes = ["move", "flag", "read", "delete", "spam", "noop", "errors"];
-  let selectedFilters = $state<Set<string>>(new Set(initialFilter === "errors" ? ["errors"] : allFilterTypes));
   let showFilterDropdown = $state(false);
 
+  // Use store value, but apply initial filter on first mount if set
   $effect(() => {
     if (initialFilter === "errors") {
-      selectedFilters = new Set(["errors"]);
+      activitySelectedFilters.set(new Set(["errors"]));
     }
   });
 
@@ -44,53 +103,67 @@
     }
   }
 
-  function setLineLimit(limit: number) {
-    lineLimit = limit;
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem("activity-line-limit", limit.toString());
-    }
-  }
-
   function toggleFilter(filter: string) {
-    const newSet = new Set(selectedFilters);
-    if (newSet.has(filter)) {
-      newSet.delete(filter);
-    } else {
-      newSet.add(filter);
-    }
-    selectedFilters = newSet;
+    activitySelectedFilters.update(current => {
+      const newSet = new Set(current);
+      if (newSet.has(filter)) {
+        newSet.delete(filter);
+      } else {
+        newSet.add(filter);
+      }
+      return newSet;
+    });
   }
 
   function selectAllFilters() {
-    selectedFilters = new Set(allFilterTypes);
+    activitySelectedFilters.set(new Set(allFilterTypes));
   }
 
   function clearAllFilters() {
-    selectedFilters = new Set();
+    activitySelectedFilters.set(new Set());
   }
 
   const actionFilterTypes = ["move", "flag", "read", "delete", "spam", "noop"];
-  const hasActionFilters = $derived(actionFilterTypes.some(t => selectedFilters.has(t)));
-  const hasErrorFilter = $derived(selectedFilters.has("errors"));
-  const selectedActionTypes = $derived(actionFilterTypes.filter(t => selectedFilters.has(t)));
+  const hasActionFilters = $derived(actionFilterTypes.some(t => $activitySelectedFilters.has(t)));
+  const hasErrorFilter = $derived($activitySelectedFilters.has("errors"));
 
+  // All loaded activity entries (accumulated across pages)
+  let allEntries = $state<AuditEntry[]>([]);
+
+  // Merge activity entries with dead letters based on time range
   const unifiedEntries = $derived.by(() => {
     const entries: UnifiedEntry[] = [];
 
     if (hasActionFilters) {
-      // Use paginated entries from API (already filtered by backend)
-      for (const entry of paginatedEntries) {
+      for (const entry of allEntries) {
         entries.push({ type: "activity", data: entry });
       }
     }
 
-    if (hasErrorFilter) {
+    if (hasErrorFilter && allEntries.length > 0) {
+      const timestamps = allEntries.map(e => e.createdAt);
+      const newestTime = Math.max(...timestamps);
+      const oldestTime = Math.min(...timestamps);
+
       for (const deadLetter of $deadLetters) {
         const matchesAccount = !$selectedAccount || deadLetter.accountName === $selectedAccount;
-        const matchesSearch = !$searchQuery ||
-          deadLetter.error.toLowerCase().includes($searchQuery.toLowerCase()) ||
-          deadLetter.messageId.toLowerCase().includes($searchQuery.toLowerCase()) ||
-          deadLetter.accountName.toLowerCase().includes($searchQuery.toLowerCase());
+        const matchesSearch = !$activitySearchQuery ||
+          deadLetter.error.toLowerCase().includes($activitySearchQuery.toLowerCase()) ||
+          deadLetter.messageId.toLowerCase().includes($activitySearchQuery.toLowerCase()) ||
+          deadLetter.accountName.toLowerCase().includes($activitySearchQuery.toLowerCase());
+        const inTimeRange = deadLetter.createdAt <= newestTime && deadLetter.createdAt >= oldestTime;
+
+        if (matchesAccount && matchesSearch && inTimeRange) {
+          entries.push({ type: "error", data: deadLetter });
+        }
+      }
+    } else if (hasErrorFilter && !hasActionFilters) {
+      for (const deadLetter of $deadLetters) {
+        const matchesAccount = !$selectedAccount || deadLetter.accountName === $selectedAccount;
+        const matchesSearch = !$activitySearchQuery ||
+          deadLetter.error.toLowerCase().includes($activitySearchQuery.toLowerCase()) ||
+          deadLetter.messageId.toLowerCase().includes($activitySearchQuery.toLowerCase()) ||
+          deadLetter.accountName.toLowerCase().includes($activitySearchQuery.toLowerCase());
 
         if (matchesAccount && matchesSearch) {
           entries.push({ type: "error", data: deadLetter });
@@ -98,7 +171,6 @@
       }
     }
 
-    // Sort by time, newest first
     return entries.sort((a, b) => {
       const timeA = a.type === "activity" ? a.data.createdAt : a.data.createdAt;
       const timeB = b.type === "activity" ? b.data.createdAt : b.data.createdAt;
@@ -106,34 +178,107 @@
     });
   });
 
-  // Local state for paginated activity entries
-  let paginatedEntries = $state<AuditEntry[]>([]);
+  function trimEntries() {
+    if (allEntries.length > MAX_ENTRIES) {
+      allEntries = allEntries.slice(0, MAX_ENTRIES);
+    }
+  }
 
-  async function loadActivity() {
+  async function loadInitial() {
     loading = true;
+    currentPage = 1;
+    hasMore = true;
     try {
       const params: api.ActivityParams = {
-        page,
-        pageSize: lineLimit,
+        page: 1,
+        pageSize: PAGE_SIZE,
       };
       if ($selectedAccount) params.accountName = $selectedAccount;
-      if ($searchQuery) params.search = $searchQuery;
+      if ($activitySearchQuery) params.search = $activitySearchQuery;
 
-      // Send action type filters to backend for proper pagination
-      const actionTypes = actionFilterTypes.filter(t => selectedFilters.has(t));
+      const actionTypes = actionFilterTypes.filter(t => $activitySelectedFilters.has(t));
       if (actionTypes.length > 0 && actionTypes.length < actionFilterTypes.length) {
         params.actionTypes = actionTypes;
       }
 
       const result = await api.fetchActivity(params);
-      paginatedEntries = result.entries;
+      allEntries = result.entries;
       totalPages = result.totalPages;
+      hasMore = currentPage < totalPages;
+
+      if (allEntries.length > 0) {
+        lastSeenTimestamp = Math.max(...allEntries.map(e => e.createdAt));
+      }
     } catch (e) {
       console.error("Failed to load activity:", e);
     } finally {
       loading = false;
     }
   }
+
+  async function loadMore() {
+    if (loadingMore || !hasMore || currentPage >= totalPages) return;
+
+    loadingMore = true;
+    try {
+      const nextPage = currentPage + 1;
+      const params: api.ActivityParams = {
+        page: nextPage,
+        pageSize: PAGE_SIZE,
+      };
+      if ($selectedAccount) params.accountName = $selectedAccount;
+      if ($activitySearchQuery) params.search = $activitySearchQuery;
+
+      const actionTypes = actionFilterTypes.filter(t => $activitySelectedFilters.has(t));
+      if (actionTypes.length > 0 && actionTypes.length < actionFilterTypes.length) {
+        params.actionTypes = actionTypes;
+      }
+
+      const result = await api.fetchActivity(params);
+
+      // Append new entries (avoiding duplicates by id)
+      const existingIds = new Set(allEntries.map(e => e.id));
+      const newEntries = result.entries.filter(e => !existingIds.has(e.id));
+      allEntries = [...allEntries, ...newEntries];
+
+      currentPage = nextPage;
+      totalPages = result.totalPages;
+      hasMore = currentPage < totalPages;
+
+      trimEntries();
+    } catch (e) {
+      console.error("Failed to load more activity:", e);
+    } finally {
+      loadingMore = false;
+    }
+  }
+
+  function setupIntersectionObserver() {
+    if (observer) observer.disconnect();
+    if (!bottomSentinel) return;
+
+    observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting && hasMore && !loadingMore) {
+          loadMore();
+        }
+      },
+      {
+        root: scrollContainer,
+        rootMargin: "100px",
+        threshold: 0,
+      }
+    );
+
+    observer.observe(bottomSentinel);
+  }
+
+  $effect(() => {
+    if (bottomSentinel && scrollContainer) {
+      setupIntersectionObserver();
+    }
+  });
 
   function formatTime(timestamp: number): string {
     const now = Date.now();
@@ -194,20 +339,41 @@
     showErrorPreview = true;
   }
 
-  // Reload when filters or line limit change
-  $effect(() => {
-    // Track dependencies
-    const _account = $selectedAccount;
-    const _search = $searchQuery;
-    const _limit = lineLimit;
-    const _filters = [...selectedFilters]; // Track filter changes
+  // Track filter changes to reload
+  let prevAccount = $state<string | null>(null);
+  let prevSearch = $state<string>("");
+  let prevFilters = $state<string>("");
 
-    page = 1;
-    loadActivity();
+  $effect(() => {
+    const currentFilters = [...$activitySelectedFilters].sort().join(",");
+    const filtersChanged =
+      $selectedAccount !== prevAccount ||
+      $activitySearchQuery !== prevSearch ||
+      currentFilters !== prevFilters;
+
+    if (filtersChanged) {
+      prevAccount = $selectedAccount;
+      prevSearch = $activitySearchQuery;
+      prevFilters = currentFilters;
+      loadInitial();
+    }
   });
 
-  onMount(() => {
-    loadActivity();
+  onMount(async () => {
+    await loadInitial();
+    if (streaming) {
+      setupActivitySubscription();
+    }
+  });
+
+  onDestroy(() => {
+    if (unsubscribeActivity) {
+      unsubscribeActivity();
+      unsubscribeActivity = null;
+    }
+    if (observer) {
+      observer.disconnect();
+    }
   });
 </script>
 
@@ -215,6 +381,12 @@
   <div class="card-header">
     <h2 class="card-title">{$t("activity.title")}</h2>
     <div class="header-controls">
+      <StreamToggle
+        {streaming}
+        onchange={handleStreamToggle}
+        pendingCount={bufferedEntries.length}
+        label={$t("common.live") ?? "Live"}
+      />
       <div class="density-toggle">
         <button class="density-btn" class:active={density === "compact"} onclick={() => setDensity("compact")} title="Compact">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -234,14 +406,13 @@
       </div>
       <div class="filter-dropdown-container">
         <button class="filter-dropdown-btn" onclick={() => showFilterDropdown = !showFilterDropdown}>
-          Filter ({selectedFilters.size}/{allFilterTypes.length})
+          Filter ({$activitySelectedFilters.size}/{allFilterTypes.length})
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="6 9 12 15 18 9"/>
           </svg>
         </button>
         {#if showFilterDropdown}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-          <div class="filter-dropdown-backdrop" onclick={() => showFilterDropdown = false}></div>
+          <Backdrop onclose={() => showFilterDropdown = false} zIndex={10} />
           <div class="filter-dropdown-menu">
             <div class="filter-dropdown-actions">
               <button class="filter-action-btn" onclick={selectAllFilters}>All</button>
@@ -250,7 +421,7 @@
             <div class="filter-dropdown-options">
               {#each allFilterTypes as filter}
                 <label class="filter-option">
-                  <input type="checkbox" checked={selectedFilters.has(filter)} onchange={() => toggleFilter(filter)} />
+                  <input type="checkbox" checked={$activitySelectedFilters.has(filter)} onchange={() => toggleFilter(filter)} />
                   <span class="filter-option-label" class:is-error={filter === "errors"}>{filter}</span>
                 </label>
               {/each}
@@ -258,12 +429,6 @@
           </div>
         {/if}
       </div>
-      <select class="line-limit-select" bind:value={lineLimit} onchange={(e) => setLineLimit(parseInt(e.currentTarget.value, 10))}>
-        <option value={10}>10 rows</option>
-        <option value={25}>25 rows</option>
-        <option value={50}>50 rows</option>
-        <option value={100}>100 rows</option>
-      </select>
     </div>
   </div>
 
@@ -272,10 +437,10 @@
       type="text"
       class="search-input"
       placeholder={$t("activity.searchPlaceholder")}
-      bind:value={$searchQuery}
+      bind:value={$activitySearchQuery}
     />
-    <select class="filter-select" bind:value={$selectedAccount}>
-      <option value={null}>{$t("common.all")} {$t("common.accounts")}</option>
+    <select class="filter-select" value={$selectedAccount ?? ""} onchange={(e) => selectedAccount.set(e.currentTarget.value || null)}>
+      <option value="">{$t("common.all")} {$t("common.accounts")}</option>
       {#each $accountList as name}
         <option value={name}>{name}</option>
       {/each}
@@ -288,9 +453,10 @@
       </svg>
       {$t("activity.exportCsv")}
     </a>
+    <span class="entry-count">{unifiedEntries.length} entries loaded</span>
   </div>
 
-  <div class="table-container">
+  <div class="scroll-container" bind:this={scrollContainer}>
     {#if loading}
       <div class="loading">{$t("common.loading")}</div>
     {:else if unifiedEntries.length === 0}
@@ -339,15 +505,17 @@
               <tr class="error-row">
                 <td class="time-cell" title={formatUtcTooltip(entry.data.createdAt)}>{formatTime(entry.data.createdAt)}</td>
                 <td class="account-cell">{entry.data.accountName}</td>
-                <td class="subject-cell error-subject">
-                  <span class="error-indicator">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                      <line x1="12" y1="9" x2="12" y2="13"/>
-                      <line x1="12" y1="17" x2="12.01" y2="17"/>
-                    </svg>
+                <td class="subject-cell">
+                  <span class="error-content">
+                    <span class="error-indicator">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                      </svg>
+                    </span>
+                    <span class="error-text">{entry.data.error}</span>
                   </span>
-                  <span class="error-text">{entry.data.error}</span>
                 </td>
                 <td class="actions-cell">
                   <span class="badge badge-error">
@@ -367,20 +535,20 @@
           {/each}
         </tbody>
       </table>
+
+      <!-- Sentinel for infinite scroll -->
+      <div bind:this={bottomSentinel} class="scroll-sentinel">
+        {#if loadingMore}
+          <div class="loading-more">
+            <span class="spinner"></span>
+            Loading more...
+          </div>
+        {:else if !hasMore}
+          <div class="end-of-list">End of activity log</div>
+        {/if}
+      </div>
     {/if}
   </div>
-
-  {#if totalPages > 1}
-    <div class="pagination">
-      <button class="btn btn-sm" disabled={page <= 1} onclick={() => { page--; loadActivity(); }}>
-        &laquo;
-      </button>
-      <span class="page-info">{$t("activity.page")} {page} {$t("activity.of")} {totalPages}</span>
-      <button class="btn btn-sm" disabled={page >= totalPages} onclick={() => { page++; loadActivity(); }}>
-        &raquo;
-      </button>
-    </div>
-  {/if}
 </div>
 
 {#if showPreview && previewEntry}
@@ -388,51 +556,75 @@
 {/if}
 
 {#if showErrorPreview && errorPreviewEntry}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="error-preview-overlay" onclick={() => { showErrorPreview = false; errorPreviewEntry = null; }}>
-    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-    <div class="error-preview-modal" onclick={(e) => e.stopPropagation()}>
-      <div class="error-preview-header">
-        <h3>Dead Letter Details</h3>
-        <button class="btn-close" onclick={() => { showErrorPreview = false; errorPreviewEntry = null; }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      <div class="error-preview-content">
-        <div class="error-preview-row">
-          <span class="error-preview-label">Account</span>
-          <span class="error-preview-value">{errorPreviewEntry.accountName}</span>
+  <Modal
+    open={showErrorPreview}
+    title="Dead Letter Details"
+    onclose={() => { showErrorPreview = false; errorPreviewEntry = null; }}
+    maxWidth="500px"
+  >
+    {#snippet children()}
+      {#if errorPreviewEntry}
+        <div class="error-preview-content">
+          <div class="error-preview-row">
+            <span class="error-preview-label">Account</span>
+            <span class="error-preview-value">{errorPreviewEntry.accountName}</span>
+          </div>
+          <div class="error-preview-row">
+            <span class="error-preview-label">Folder</span>
+            <span class="error-preview-value">{errorPreviewEntry.folder}</span>
+          </div>
+          <div class="error-preview-row">
+            <span class="error-preview-label">Message ID</span>
+            <span class="error-preview-value error-preview-mono">{errorPreviewEntry.messageId}</span>
+          </div>
+          <div class="error-preview-row">
+            <span class="error-preview-label">UID</span>
+            <span class="error-preview-value">{errorPreviewEntry.uid}</span>
+          </div>
+          <div class="error-preview-row">
+            <span class="error-preview-label">Attempts</span>
+            <span class="error-preview-value">{errorPreviewEntry.attempts}</span>
+          </div>
+          <div class="error-preview-row">
+            <span class="error-preview-label">First Failed</span>
+            <span class="error-preview-value">{new Date(errorPreviewEntry.createdAt).toLocaleString()}</span>
+          </div>
+          <div class="error-preview-row">
+            <span class="error-preview-label">Retry Status</span>
+            <span class="error-preview-value">
+              {#if errorPreviewEntry.retryStatus === "pending"}
+                <span class="retry-status-badge retry-pending">Pending</span>
+              {:else if errorPreviewEntry.retryStatus === "retrying"}
+                <span class="retry-status-badge retry-active">Retrying</span>
+              {:else if errorPreviewEntry.retryStatus === "exhausted"}
+                <span class="retry-status-badge retry-exhausted">Exhausted</span>
+              {:else if errorPreviewEntry.retryStatus === "success"}
+                <span class="retry-status-badge retry-success">Success</span>
+              {:else}
+                <span class="retry-status-badge">Unknown</span>
+              {/if}
+            </span>
+          </div>
+          {#if errorPreviewEntry.nextRetryAt}
+            <div class="error-preview-row">
+              <span class="error-preview-label">Next Retry</span>
+              <span class="error-preview-value">{new Date(errorPreviewEntry.nextRetryAt).toLocaleString()}</span>
+            </div>
+          {/if}
+          {#if errorPreviewEntry.lastRetryAt}
+            <div class="error-preview-row">
+              <span class="error-preview-label">Last Retry</span>
+              <span class="error-preview-value">{new Date(errorPreviewEntry.lastRetryAt).toLocaleString()}</span>
+            </div>
+          {/if}
+          <div class="error-preview-row error-preview-row-full">
+            <span class="error-preview-label">Error Message</span>
+            <div class="error-preview-error">{errorPreviewEntry.error}</div>
+          </div>
         </div>
-        <div class="error-preview-row">
-          <span class="error-preview-label">Folder</span>
-          <span class="error-preview-value">{errorPreviewEntry.folder}</span>
-        </div>
-        <div class="error-preview-row">
-          <span class="error-preview-label">Message ID</span>
-          <span class="error-preview-value error-preview-mono">{errorPreviewEntry.messageId}</span>
-        </div>
-        <div class="error-preview-row">
-          <span class="error-preview-label">UID</span>
-          <span class="error-preview-value">{errorPreviewEntry.uid}</span>
-        </div>
-        <div class="error-preview-row">
-          <span class="error-preview-label">Attempts</span>
-          <span class="error-preview-value">{errorPreviewEntry.attempts}</span>
-        </div>
-        <div class="error-preview-row">
-          <span class="error-preview-label">First Failed</span>
-          <span class="error-preview-value">{new Date(errorPreviewEntry.createdAt).toLocaleString()}</span>
-        </div>
-        <div class="error-preview-row error-preview-row-full">
-          <span class="error-preview-label">Error Message</span>
-          <div class="error-preview-error">{errorPreviewEntry.error}</div>
-        </div>
-      </div>
-    </div>
-  </div>
+      {/if}
+    {/snippet}
+  </Modal>
 {/if}
 
 <style>
@@ -440,7 +632,11 @@
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
-    margin-bottom: var(--space-5);
+    margin-bottom: var(--space-8);
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 280px);
+    min-height: 400px;
   }
 
   .card-header {
@@ -449,6 +645,7 @@
     align-items: center;
     padding: var(--space-4) var(--space-5);
     border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
   }
 
   .card-title {
@@ -499,22 +696,6 @@
     height: 16px;
   }
 
-
-  .line-limit-select {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-md);
-    font-size: var(--text-sm);
-    cursor: pointer;
-  }
-
-  .line-limit-select:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-
   .filter-dropdown-container {
     position: relative;
   }
@@ -539,12 +720,6 @@
 
   .filter-dropdown-btn:hover {
     border-color: var(--accent);
-  }
-
-  .filter-dropdown-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 10;
   }
 
   .filter-dropdown-menu {
@@ -641,6 +816,12 @@
     color: var(--text-secondary);
   }
 
+  .entry-count {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+
   .filters-bar {
     display: flex;
     align-items: center;
@@ -649,6 +830,7 @@
     background: var(--bg-tertiary);
     border-bottom: 1px solid var(--border-color);
     flex-wrap: wrap;
+    flex-shrink: 0;
   }
 
   .search-input {
@@ -681,8 +863,11 @@
     cursor: pointer;
   }
 
-  .table-container {
+  .scroll-container {
+    flex: 1;
+    overflow-y: auto;
     overflow-x: auto;
+    min-height: 300px;
   }
 
   table {
@@ -695,9 +880,9 @@
     text-align: left;
     padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
   }
 
-  /* Density variations */
   .density-compact th,
   .density-compact td {
     padding: var(--space-2) var(--space-3);
@@ -715,6 +900,9 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     background: var(--bg-tertiary);
+    position: sticky;
+    top: 0;
+    z-index: 10;
   }
 
   tbody tr {
@@ -723,10 +911,6 @@
 
   tbody tr:hover {
     background: var(--bg-tertiary);
-  }
-
-  tbody tr:last-child td {
-    border-bottom: none;
   }
 
   .error-row {
@@ -756,10 +940,11 @@
     white-space: nowrap;
   }
 
-  .error-subject {
-    display: flex;
+  .error-content {
+    display: inline-flex;
     align-items: center;
     gap: var(--space-2);
+    max-width: 100%;
   }
 
   .error-indicator {
@@ -873,52 +1058,38 @@
     color: var(--text-muted);
   }
 
-  .pagination {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: var(--space-4);
+  .scroll-sentinel {
     padding: var(--space-4);
-    border-top: 1px solid var(--border-color);
+    text-align: center;
   }
 
-  .page-info {
-    color: var(--text-secondary);
-    font-size: var(--text-sm);
-  }
-
-  .btn {
-    display: inline-flex;
+  .loading-more {
+    display: flex;
     align-items: center;
+    justify-content: center;
     gap: var(--space-2);
-    padding: var(--space-2) var(--space-4);
+    color: var(--text-muted);
     font-size: var(--text-sm);
-    font-weight: 500;
-    border: none;
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    text-decoration: none;
   }
 
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  .spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
   }
 
-  .btn-secondary {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
-  .btn-secondary:hover:not(:disabled) {
-    background: var(--border-color);
-  }
-
-  .btn-sm {
-    padding: var(--space-2) var(--space-3);
+  .end-of-list {
+    color: var(--text-muted);
     font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
   @media (max-width: 768px) {
@@ -942,73 +1113,10 @@
     }
   }
 
-  /* Error Preview Modal */
-  .error-preview-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: var(--space-4);
-  }
-
-  .error-preview-modal {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    width: 100%;
-    max-width: 500px;
-    max-height: 80vh;
-    overflow: hidden;
+  /* Error Preview Modal Content */
+  .error-preview-content {
     display: flex;
     flex-direction: column;
-    box-shadow: var(--shadow-lg);
-  }
-
-  .error-preview-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--space-4);
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  .error-preview-header h3 {
-    margin: 0;
-    font-size: var(--text-base);
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  .btn-close {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: transparent;
-    border: none;
-    border-radius: var(--radius-md);
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-  }
-
-  .btn-close:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-  }
-
-  .btn-close svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .error-preview-content {
-    padding: var(--space-4);
-    overflow-y: auto;
   }
 
   .error-preview-row {
@@ -1056,5 +1164,35 @@
     font-family: monospace;
     word-break: break-word;
     white-space: pre-wrap;
+  }
+
+  .retry-status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px var(--space-2);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    text-transform: uppercase;
+  }
+
+  .retry-pending {
+    background: var(--info-muted);
+    color: var(--info);
+  }
+
+  .retry-active {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    color: var(--accent);
+  }
+
+  .retry-exhausted {
+    background: var(--error-muted);
+    color: var(--error);
+  }
+
+  .retry-success {
+    background: var(--success-muted);
+    color: var(--success);
   }
 </style>

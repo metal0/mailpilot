@@ -1,5 +1,5 @@
 import { Hono, type Context } from "hono";
-import type { DashboardConfig, ApiKeyPermission, Config } from "../config/schema.js";
+import { ALL_ACTION_TYPES, DEFAULT_ALLOWED_ACTIONS, type DashboardConfig, type ApiKeyPermission, type Config } from "../config/schema.js";
 import {
   getUserCount,
   createUser,
@@ -29,7 +29,7 @@ import { getAccountStatuses, getUptime, getVersion } from "./status.js";
 import { broadcastStats } from "./websocket.js";
 import { getDetailedProviderStats, getAllProviders, updateProviderHealth } from "../llm/providers.js";
 import { testConnection as testLlmConnection } from "../llm/client.js";
-import { getRecentLogs, type LogLevel, createLogger } from "../utils/logger.js";
+import { getLogsPaginated, type LogLevel, createLogger } from "../utils/logger.js";
 
 const logger = createLogger("dashboard");
 import {
@@ -564,21 +564,31 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
   });
 
   router.get("/api/logs", requireAuthOrApiKeyWithDryRun("read:logs"), (c) => {
-    const limit = parseInt(c.req.query("limit") ?? "100", 10);
+    const page = parseInt(c.req.query("page") ?? "1", 10);
+    const pageSize = parseInt(c.req.query("pageSize") ?? "50", 10);
     const levelFilter = c.req.query("level") as LogLevel | undefined;
     const accountName = c.req.query("accountName");
 
-    let logs = getRecentLogs(limit, levelFilter);
+    const result = getLogsPaginated(page, pageSize, levelFilter);
 
     // Filter by account if specified
     if (accountName) {
-      logs = logs.filter((log) => {
-        const contextStr = JSON.stringify(log.meta ?? {});
-        return contextStr.includes(accountName);
+      const accountLower = accountName.toLowerCase();
+      result.logs = result.logs.filter((log) => {
+        // Check context field (e.g., "[worker:accountName]")
+        if (log.context.toLowerCase().includes(accountLower)) {
+          return true;
+        }
+        // Check meta for account references
+        if (log.meta) {
+          const metaStr = JSON.stringify(log.meta).toLowerCase();
+          return metaStr.includes(accountLower);
+        }
+        return false;
       });
     }
 
-    return c.json({ logs });
+    return c.json(result);
   });
 
   router.get("/api/export", requireAuthOrApiKeyWithDryRun("read:export"), (c) => {
@@ -691,6 +701,14 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         api_key_placeholder: p.api_key_placeholder,
         supports_vision: p.supports_vision ?? false,
       })),
+    });
+  });
+
+  // Get available action types
+  router.get("/api/action-types", requireAuthOrApiKeyWithDryRun("read:stats"), (c) => {
+    return c.json({
+      actionTypes: ALL_ACTION_TYPES,
+      defaultAllowed: DEFAULT_ALLOWED_ACTIONS,
     });
   });
 

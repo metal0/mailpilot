@@ -33,6 +33,8 @@ const en = {
   "common.account": "Account",
   "common.accounts": "Accounts",
   "common.all": "All",
+  "common.live": "Live",
+  "common.paused": "Paused",
   "common.escToClose": "Press Escape to close",
 
   // Navigation/Tabs
@@ -192,6 +194,10 @@ const en = {
   "settings.accounts.folderModeHelp": "predefined: LLM picks from allowed list. auto_create: LLM creates folders",
   "settings.accounts.allowedFolders": "Allowed Folders",
   "settings.accounts.allowedFoldersHelp": "Folders LLM can move emails to. Leave empty to auto-discover all existing folders via IMAP",
+  "settings.accounts.allowedActions": "Allowed Actions",
+  "settings.accounts.allowedActionsLabel": "Action Types",
+  "settings.accounts.allowedActionsHelp": "Select which action types the LLM can use for this account. Delete is disabled by default for safety.",
+  "settings.accounts.deleteWarning": "Warning: Delete action is enabled. Emails may be permanently deleted.",
   "settings.accounts.promptOverride": "Prompt Override",
   "settings.accounts.promptOverrideHelp": "Custom classification prompt for this account (overrides global default)",
   "settings.accounts.oauth2": "OAuth2 Settings",
@@ -335,6 +341,23 @@ const en = {
   "settings.antivirus.quarantine": "Quarantine",
   "settings.antivirus.delete": "Delete",
   "settings.antivirus.flagOnly": "Flag Only",
+
+  // Settings - Notifications Section
+  "settings.notifications.sectionTitle": "Notifications",
+  "settings.notifications.enableLabel": "Enable Notifications",
+  "settings.notifications.channels": "Notification Channels",
+  "settings.notifications.channelBrowser": "Browser",
+  "settings.notifications.events": "Events",
+  "settings.notifications.eventError": "Processing Errors",
+  "settings.notifications.eventConnectionLost": "Connection Lost",
+  "settings.notifications.eventDeadLetter": "Failed Emails (Dead Letter)",
+  "settings.notifications.eventRetryExhausted": "Retry Exhausted",
+  "settings.notifications.eventDailySummary": "Daily Summary",
+  "settings.notifications.dailySummaryTime": "Daily Summary Time",
+  "settings.notifications.quietHours": "Quiet Hours",
+  "settings.notifications.enableQuietHours": "Enable Quiet Hours",
+  "settings.notifications.quietStart": "Start",
+  "settings.notifications.quietEnd": "End",
 
   // Settings - Dashboard Section
   "settings.dashboard.sectionTitle": "Dashboard Settings",

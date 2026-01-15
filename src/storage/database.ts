@@ -101,7 +101,33 @@ function createTables(database: Database.Database): void {
     ON dead_letter(resolved_at);
   `);
 
+  // Migration: Add retry columns to existing dead_letter table
+  migrateDeadLetterRetry(database);
+
   logger.debug("Database tables created");
+}
+
+function migrateDeadLetterRetry(database: Database.Database): void {
+  // Check if retry_status column exists
+  const tableInfo = database.prepare("PRAGMA table_info(dead_letter)").all() as Array<{ name: string }>;
+  const hasRetryStatus = tableInfo.some((col) => col.name === "retry_status");
+
+  if (!hasRetryStatus) {
+    logger.info("Migrating dead_letter table to add retry columns");
+    database.exec(`
+      ALTER TABLE dead_letter ADD COLUMN retry_status TEXT DEFAULT 'pending';
+      ALTER TABLE dead_letter ADD COLUMN next_retry_at INTEGER;
+      ALTER TABLE dead_letter ADD COLUMN last_retry_at INTEGER;
+    `);
+
+    // Create index for retry queries
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_dead_letter_retry
+      ON dead_letter(retry_status, next_retry_at);
+    `);
+
+    logger.info("Dead letter retry migration completed");
+  }
 }
 
 export function getDatabase(): Database.Database {

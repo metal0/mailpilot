@@ -24,6 +24,38 @@ Mailpilot is an AI-powered email processing daemon that uses LLM classification 
 
 This protects against accidental pushes to production branches and gives the user control over what goes to remote.
 
+## Quality Standards (NO SHORTCUTS)
+
+**Every implementation MUST meet these quality standards. There are no exceptions.**
+
+### Implementation Standards
+
+1. **No half-measures** - Every feature must be fully implemented, not partially working
+2. **No placeholder code** - Don't leave TODOs, FIXMEs, or stub implementations
+3. **No silent failures** - Every error path must be handled explicitly
+4. **No untested code paths** - If code exists, it must be tested
+5. **No assumptions** - Verify behavior, don't assume it works
+
+### Testing Standards
+
+1. **Test what you build** - Every feature requires corresponding tests
+2. **Test edge cases** - Don't just test the happy path
+3. **Test error conditions** - Verify graceful failure handling
+4. **Test integrations** - Verify components work together, not just in isolation
+5. **Test in browser** - Dashboard changes MUST be verified visually
+
+### Why This Matters
+
+Shortcuts lead to:
+- Bugs discovered by users instead of developers
+- Technical debt that slows future development
+- Regression bugs when assumptions break
+- Lost trust when features don't work as documented
+
+**Take the time to do it right the first time.**
+
+---
+
 ## Feature Completion Requirements
 
 **ALL implemented features MUST include the following before being considered complete:**
@@ -35,12 +67,46 @@ This protects against accidental pushes to production branches and gives the use
 - Run `pnpm test` and ensure all tests pass
 - Aim for meaningful coverage, not 100% line coverage
 
-### 2. End-to-End Testing (REQUIRED)
+### 2. End-to-End Testing (REQUIRED - EXHAUSTIVE)
+
+E2E testing must be thorough and cover the full spectrum of user interactions.
+
+**Testing Approach:**
 - Test complete user flows using Playwright MCP tools (see Browser Testing section)
 - For API changes: test endpoints with real HTTP requests
 - For dashboard changes: test UI interactions in actual browser
 - For backend changes: verify behavior with running app (`pnpm dev`)
 - Document test scenarios performed in commit message or PR
+
+**Coverage Requirements:**
+- **Normal use cases**: Test the primary intended functionality
+- **Edge cases**: Test boundary conditions, empty states, maximum values
+- **Error cases**: Test invalid inputs, network failures, permission errors
+- **State transitions**: Test all possible state changes (e.g., connected → disconnected → reconnected)
+- **User flows**: Test complete workflows from start to finish
+- **Responsive behavior**: Test at different viewport sizes if UI changes
+
+**What "Exhaustive" Means:**
+```
+Example: Testing a new "Add Account" feature
+✓ Add account with valid credentials → success
+✓ Add account with invalid credentials → proper error message
+✓ Add account with empty fields → validation errors shown
+✓ Add account with special characters in name → handled correctly
+✓ Cancel mid-flow → no partial state saved
+✓ Add duplicate account name → proper error message
+✓ Network timeout during test → graceful handling
+✓ Test connection button → shows loading, then result
+✓ Form validation → real-time feedback on blur
+✓ Keyboard navigation → all fields accessible via Tab
+✓ Save button state → disabled until valid, shows loading
+```
+
+**Do NOT skip E2E testing because:**
+- "It works in unit tests" - Unit tests don't catch integration issues
+- "It's a small change" - Small changes can have big UI impacts
+- "I tested it manually once" - One test isn't exhaustive
+- "The code looks correct" - Working code ≠ working feature
 
 ### 3. Documentation Updates (REQUIRED)
 - **README.md** - Update if features, configuration, or usage changes
