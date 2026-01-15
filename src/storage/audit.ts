@@ -165,6 +165,33 @@ export function getActionCount(accountName?: string): number {
   return result.count;
 }
 
+export function getEmailsWithActionsCount(accountName?: string): number {
+  const db = getDatabase();
+
+  // Count emails where at least one action is not "noop"
+  let query = `SELECT actions FROM audit_log`;
+  const params: string[] = [];
+
+  if (accountName) {
+    query += ` WHERE account_name = ?`;
+    params.push(accountName);
+  }
+
+  const stmt = db.prepare(query);
+  const rows = stmt.all(...params) as Array<{ actions: string }>;
+
+  let count = 0;
+  for (const row of rows) {
+    const actions = JSON.parse(row.actions) as Array<{ type: string }>;
+    const hasRealAction = actions.some((a) => a.type !== "noop");
+    if (hasRealAction) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
 export interface ActionBreakdown {
   type: string;
   count: number;
@@ -173,18 +200,23 @@ export interface ActionBreakdown {
 export function getActionBreakdown(): ActionBreakdown[] {
   const db = getDatabase();
 
-  // SQLite json_each to extract action types from the JSON array
-  const stmt = db.prepare(`
-    SELECT
-      json_extract(json_each.value, '$.type') as type,
-      COUNT(*) as count
-    FROM audit_log, json_each(audit_log.actions)
-    GROUP BY type
-    ORDER BY count DESC
-  `);
+  // Fetch all actions and count in JavaScript
+  // (json_each has compatibility issues with better-sqlite3)
+  const stmt = db.prepare(`SELECT actions FROM audit_log`);
+  const rows = stmt.all() as Array<{ actions: string }>;
 
-  const rows = stmt.all() as Array<{ type: string; count: number }>;
-  return rows;
+  const counts = new Map<string, number>();
+
+  for (const row of rows) {
+    const actions = JSON.parse(row.actions) as Array<{ type: string }>;
+    for (const action of actions) {
+      counts.set(action.type, (counts.get(action.type) ?? 0) + 1);
+    }
+  }
+
+  return Array.from(counts.entries())
+    .map(([type, count]) => ({ type, count }))
+    .sort((a, b) => b.count - a.count);
 }
 
 export interface PaginatedAuditResult {

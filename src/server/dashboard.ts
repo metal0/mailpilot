@@ -9,7 +9,7 @@ import {
 } from "../storage/dashboard.js";
 import { getProcessedCount } from "../storage/processed.js";
 import {
-  getActionCount,
+  getEmailsWithActionsCount,
   getActionBreakdown,
   getAuditEntriesPaginated,
   exportAuditLog,
@@ -71,7 +71,7 @@ function broadcastCurrentStats(): void {
     dryRun: currentConfig?.dry_run ?? false,
     totals: {
       emailsProcessed: getProcessedCount(),
-      actionsTaken: getActionCount(),
+      actionsTaken: getEmailsWithActionsCount(),
       errors: allAccounts.reduce((sum, a) => sum + a.errors, 0),
     },
     accounts: allAccounts.map((a) => ({
@@ -524,7 +524,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       dryRun: currentConfig?.dry_run ?? dryRun,
       totals: {
         emailsProcessed: getProcessedCount(),
-        actionsTaken: getActionCount(),
+        actionsTaken: getEmailsWithActionsCount(),
         errors: accounts.reduce((sum, a) => sum + a.errors, 0),
       },
       accounts: accounts.map((a) => ({
