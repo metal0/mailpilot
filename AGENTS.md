@@ -327,6 +327,43 @@ curl http://localhost:8080/health
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/status
 ```
 
+## Testing LLM Features
+
+**All LLM-related changes MUST include proper testing:**
+
+### Unit Tests
+Located in `tests/unit/`. Key test files:
+- `tests/unit/llm/providers.test.ts` - Provider registration, health tracking
+- `tests/unit/llm/parser.test.ts` - Response parsing, JSON validation
+- `tests/unit/llm/rate-limiter.test.ts` - Rate limiting logic
+
+When modifying LLM code:
+1. Add/update unit tests for new behavior
+2. Test edge cases (invalid JSON, timeouts, rate limits)
+3. Mock external API calls, don't hit real LLM APIs in tests
+
+### End-to-End Testing
+For LLM integration changes:
+1. Start app with `pnpm dev`
+2. Use Debug page to test LLM health checks
+3. Process test emails and verify classification in Activity tab
+4. Check provider stats update correctly on Overview page
+
+### Testing Classification Changes
+When modifying prompt building or response parsing:
+1. Use Rule Testing Sandbox (when implemented) or manual testing
+2. Test with various email types (receipts, newsletters, spam)
+3. Verify actions execute correctly (or log correctly in dry run mode)
+4. Check audit log records correct data
+
+### Documentation
+Update these docs when LLM behavior changes:
+- `AGENTS.md` - This file, for technical details
+- GitHub Wiki - User-facing LLM provider setup guides
+- `docs/dashboard.md` - If API endpoints change
+
+---
+
 ## Troubleshooting
 
 ### LLM Returns Invalid JSON

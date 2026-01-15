@@ -24,6 +24,42 @@ Mailpilot is an AI-powered email processing daemon that uses LLM classification 
 
 This protects against accidental pushes to production branches and gives the user control over what goes to remote.
 
+## Feature Completion Requirements
+
+**ALL implemented features MUST include the following before being considered complete:**
+
+### 1. Unit Tests (REQUIRED)
+- Add tests for all new functions/modules in `tests/unit/`
+- Test files mirror `src/` structure (e.g., `src/llm/client.ts` → `tests/unit/llm/client.test.ts`)
+- Cover happy path, edge cases, and error conditions
+- Run `pnpm test` and ensure all tests pass
+- Aim for meaningful coverage, not 100% line coverage
+
+### 2. End-to-End Testing (REQUIRED)
+- Test complete user flows using Playwright MCP tools (see Browser Testing section)
+- For API changes: test endpoints with real HTTP requests
+- For dashboard changes: test UI interactions in actual browser
+- For backend changes: verify behavior with running app (`pnpm dev`)
+- Document test scenarios performed in commit message or PR
+
+### 3. Documentation Updates (REQUIRED)
+- **README.md** - Update if features, configuration, or usage changes
+- **SPEC.md** - Update if architecture, schemas, or behavior changes
+- **AGENTS.md** - Update if LLM integration, prompts, or AI features change
+- **GitHub Wiki** - Update user-facing docs for installation, configuration, troubleshooting
+- **docs/** folder - Update technical docs (API reference, etc.)
+- **ROADMAP.md** - Mark completed features, update plans if scope changed
+
+### Completion Checklist
+Before marking any feature as done, verify:
+- [ ] Unit tests written and passing
+- [ ] E2E testing performed and documented
+- [ ] Relevant documentation updated
+- [ ] `pnpm lint && pnpm typecheck && pnpm build` passes
+- [ ] Changes committed with descriptive message
+
+---
+
 ## Priority Guidelines
 
 ### Git Commits (HIGH PRIORITY)
