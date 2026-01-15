@@ -11,6 +11,10 @@
 
 This plan adds an **in-app OAuth consent flow** so users can click "Connect with Google/Microsoft" instead of manually obtaining tokens from developer consoles.
 
+**Important:** Basic auth (app passwords) will remain fully supported as a fallback. Users can choose either:
+- **OAuth** - Recommended for Gmail/Outlook, handles token refresh automatically
+- **App Password** - Works with any IMAP provider, simpler setup for self-hosted mail
+
 ### Backend Changes
 
 **New files:**
@@ -32,9 +36,11 @@ This plan adds an **in-app OAuth consent flow** so users can click "Connect with
 
 **Settings.svelte - Account editor:**
 - Add auth type selector: "Password" | "OAuth (Google)" | "OAuth (Microsoft)"
-- Show "Connect with Google/Microsoft" button for OAuth
-- Display connection status (connected/expired/not connected)
-- Add "Disconnect" button to revoke OAuth
+- **Password selected:** Show username/password fields (current behavior)
+- **OAuth selected:** Show "Connect with Google/Microsoft" button
+- Display OAuth connection status (connected/expired/not connected)
+- Add "Disconnect" button to revoke OAuth and switch back to password
+- Auto-detect provider from IMAP host and suggest appropriate auth method
 
 **OAuth popup flow:**
 1. Click "Connect with Google"
