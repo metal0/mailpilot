@@ -317,6 +317,7 @@ const en = {
   "settings.providers.saveProvider": "Save Provider",
   "settings.providers.removeConfirm": "Remove provider \"{name}\"? This cannot be undone.",
   "settings.providers.rateLimit": "Rate Limit (RPM)",
+  "settings.providers.quickSetup": "Quick Setup",
 
   // Settings - Attachments Section
   "settings.attachments.sectionTitle": "Attachment Extraction",

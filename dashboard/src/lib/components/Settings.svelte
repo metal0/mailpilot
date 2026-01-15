@@ -169,6 +169,13 @@
   let showWatchFolderDropdown = $state(false);
   let showAllowedFolderDropdown = $state(false);
 
+  // LLM provider wizard state
+  let llmPresets = $state<api.LlmPreset[]>([]);
+  let showLlmPresetDropdown = $state(false);
+  let testingLlmConnection = $state(false);
+  let llmTestResult = $state<{ success: boolean; error?: string } | null>(null);
+  let llmConnectionTested = $state(false);
+
   // Service status
   let services = $state<ServicesStatus | null>(null);
   let serviceCheckInterval: ReturnType<typeof setInterval> | null = null;
@@ -224,6 +231,13 @@
     try {
       const presetsResult = await api.fetchImapPresets();
       imapPresets = presetsResult.presets;
+    } catch {
+      // Presets are optional, ignore errors
+    }
+    // Load LLM presets
+    try {
+      const llmPresetsResult = await api.fetchLlmPresets();
+      llmPresets = llmPresetsResult.presets;
     } catch {
       // Presets are optional, ignore errors
     }
@@ -531,10 +545,16 @@
       api_key: "",
       default_model: "gpt-4o",
     };
+    llmConnectionTested = false;
+    llmTestResult = null;
+    showLlmPresetDropdown = false;
   }
 
   function editProvider(provider: LlmProvider) {
     editingProvider = JSON.parse(JSON.stringify(provider));
+    llmConnectionTested = true; // Existing providers are assumed to have been tested
+    llmTestResult = null;
+    showLlmPresetDropdown = false;
   }
 
   function saveProvider() {
@@ -548,6 +568,46 @@
     }
     config = { ...config };
     editingProvider = null;
+    llmConnectionTested = false;
+    llmTestResult = null;
+  }
+
+  function selectLlmPreset(preset: api.LlmPreset) {
+    if (!editingProvider) return;
+    editingProvider.name = preset.name.toLowerCase().replace(/\s+/g, "-");
+    editingProvider.api_url = preset.api_url;
+    editingProvider.default_model = preset.default_model;
+    editingProvider = { ...editingProvider };
+    showLlmPresetDropdown = false;
+    llmConnectionTested = false;
+    llmTestResult = null;
+  }
+
+  async function testLlmProviderConnection() {
+    if (!editingProvider) return;
+
+    testingLlmConnection = true;
+    llmTestResult = null;
+
+    try {
+      const result = await api.testLlmConnection({
+        api_url: editingProvider.api_url,
+        api_key: editingProvider.api_key,
+        default_model: editingProvider.default_model || "gpt-4o",
+        name: editingProvider.name || undefined, // Pass name for masked API key lookup
+      });
+
+      llmTestResult = result;
+      llmConnectionTested = result.success;
+    } catch (err) {
+      llmTestResult = {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+      llmConnectionTested = false;
+    } finally {
+      testingLlmConnection = false;
+    }
   }
 
   function removeProvider(name: string) {
@@ -607,14 +667,44 @@
     }
   }
 
-  function toggleApiKeyPermission(permission: string) {
+  const permissionNodes = ["stats", "activity", "logs", "export", "accounts"] as const;
+  type PermissionNode = typeof permissionNodes[number];
+  type PermissionLevel = "none" | "read" | "write";
+
+  function getPermissionLevel(node: PermissionNode): PermissionLevel {
+    if (!editingApiKey) return "none";
+    if (editingApiKey.permissions.includes("*")) return "write";
+    if (editingApiKey.permissions.includes(`write:${node}`)) return "write";
+    if (editingApiKey.permissions.includes("write:*")) return "write";
+    if (editingApiKey.permissions.includes(`read:${node}`)) return "read";
+    if (editingApiKey.permissions.includes("read:*")) return "read";
+    return "none";
+  }
+
+  function setPermissionLevel(node: PermissionNode, level: PermissionLevel) {
     if (!editingApiKey) return;
 
-    const idx = editingApiKey.permissions.indexOf(permission);
-    if (idx >= 0) {
-      editingApiKey.permissions.splice(idx, 1);
+    // Remove existing permissions for this node
+    editingApiKey.permissions = editingApiKey.permissions.filter(
+      p => p !== `read:${node}` && p !== `write:${node}`
+    );
+
+    // Add the new permission level
+    if (level === "read") {
+      editingApiKey.permissions.push(`read:${node}`);
+    } else if (level === "write") {
+      editingApiKey.permissions.push(`write:${node}`);
+    }
+
+    editingApiKey = { ...editingApiKey };
+  }
+
+  function toggleFullAccess() {
+    if (!editingApiKey) return;
+    if (editingApiKey.permissions.includes("*")) {
+      editingApiKey.permissions = ["read:stats"];
     } else {
-      editingApiKey.permissions.push(permission);
+      editingApiKey.permissions = ["*"];
     }
     editingApiKey = { ...editingApiKey };
   }
@@ -640,6 +730,7 @@
         oauth_client_id: editingAccount.imap.oauth_client_id,
         oauth_client_secret: editingAccount.imap.oauth_client_secret,
         oauth_refresh_token: editingAccount.imap.oauth_refresh_token,
+        name: editingAccount.name || undefined, // Pass name for masked credential lookup
       });
       testResult = result;
 
@@ -1295,28 +1386,79 @@
             </div>
 
             {#if editingProvider}
+              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
               <div class="modal-overlay" onclick={() => editingProvider = null}>
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
                 <div class="modal" onclick={(e) => e.stopPropagation()}>
                   <h3>{editingProvider.name ? $t("settings.providers.editProviderTitle", { name: editingProvider.name }) : $t("settings.providers.newProvider")}</h3>
+
+                  {#if llmPresets.length > 0}
+                    <div class="form-group">
+                      <span class="label-text">{$t("settings.providers.quickSetup")}</span>
+                      <div class="preset-selector">
+                        <button
+                          type="button"
+                          class="preset-trigger"
+                          onclick={() => showLlmPresetDropdown = !showLlmPresetDropdown}
+                        >
+                          Select a provider preset...
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                          </svg>
+                        </button>
+                        {#if showLlmPresetDropdown}
+                          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                          <div class="preset-backdrop" onmousedown={() => showLlmPresetDropdown = false}></div>
+                          <div class="preset-dropdown">
+                            {#each llmPresets as preset}
+                              <button
+                                type="button"
+                                class="preset-option"
+                                onclick={() => selectLlmPreset(preset)}
+                              >
+                                <strong>{preset.name}</strong>
+                                <span class="preset-meta">{preset.default_model}</span>
+                              </button>
+                            {/each}
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+                  {/if}
 
                   <div class="form-group">
                     <label>
                       <span class="label-text">{$t("settings.providers.name")}</span>
-                      <input type="text" bind:value={editingProvider.name} placeholder="openai" />
+                      <input
+                        type="text"
+                        bind:value={editingProvider.name}
+                        placeholder="openai"
+                        oninput={() => { llmConnectionTested = false; llmTestResult = null; }}
+                      />
                     </label>
                   </div>
 
                   <div class="form-group">
                     <label>
                       <span class="label-text">{$t("settings.providers.apiUrl")} <span class="help-icon" title={helpTexts["provider.api_url"]}>?</span></span>
-                      <input type="text" bind:value={editingProvider.api_url} placeholder="https://api.openai.com/v1/chat/completions" />
+                      <input
+                        type="text"
+                        bind:value={editingProvider.api_url}
+                        placeholder="https://api.openai.com/v1/chat/completions"
+                        oninput={() => { llmConnectionTested = false; llmTestResult = null; }}
+                      />
                     </label>
                   </div>
 
                   <div class="form-group">
                     <label>
                       <span class="label-text">{$t("settings.providers.apiKey")} <span class="help-icon" title={helpTexts["provider.api_key"]}>?</span></span>
-                      <input type="password" bind:value={editingProvider.api_key} placeholder="sk-..." />
+                      <input
+                        type="password"
+                        bind:value={editingProvider.api_key}
+                        placeholder="sk-..."
+                        oninput={() => { llmConnectionTested = false; llmTestResult = null; }}
+                      />
                     </label>
                   </div>
 
@@ -1324,7 +1466,12 @@
                     <div class="form-group">
                       <label>
                         <span class="label-text">{$t("settings.providers.defaultModel")} <span class="help-icon" title={helpTexts["provider.default_model"]}>?</span></span>
-                        <input type="text" bind:value={editingProvider.default_model} placeholder="gpt-4o" />
+                        <input
+                          type="text"
+                          bind:value={editingProvider.default_model}
+                          placeholder="gpt-4o"
+                          oninput={() => { llmConnectionTested = false; llmTestResult = null; }}
+                        />
                       </label>
                     </div>
                     <div class="form-group">
@@ -1335,9 +1482,48 @@
                     </div>
                   </div>
 
+                  <div class="connection-test-section">
+                    <button
+                      class="btn btn-secondary"
+                      onclick={testLlmProviderConnection}
+                      disabled={testingLlmConnection || !editingProvider.api_url || !editingProvider.default_model}
+                    >
+                      {#if testingLlmConnection}
+                        <span class="spinner-inline"></span>
+                        Testing...
+                      {:else}
+                        Test Connection
+                      {/if}
+                    </button>
+                    {#if llmTestResult}
+                      <div class="test-result" class:success={llmTestResult.success} class:error={!llmTestResult.success}>
+                        {#if llmTestResult.success}
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                          </svg>
+                          Connection successful
+                        {:else}
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="15" y1="9" x2="9" y2="15"></line>
+                            <line x1="9" y1="9" x2="15" y2="15"></line>
+                          </svg>
+                          {llmTestResult.error || "Connection failed"}
+                        {/if}
+                      </div>
+                    {/if}
+                  </div>
+
                   <div class="modal-actions">
                     <button class="btn btn-secondary" onclick={() => editingProvider = null}>{$t("common.cancel")}</button>
-                    <button class="btn btn-primary" onclick={saveProvider}>{$t("settings.providers.saveProvider")}</button>
+                    <button
+                      class="btn btn-primary"
+                      onclick={saveProvider}
+                      disabled={!editingProvider.name || !llmConnectionTested}
+                      title={!llmConnectionTested ? "Test connection before saving" : ""}
+                    >
+                      {$t("settings.providers.saveProvider")}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1426,60 +1612,59 @@
 
                   <div class="form-group">
                     <span class="label-text">{$t("settings.apiKeys.permissions")}</span>
-                    <div class="permissions-simple">
-                      <label class="permission-toggle" class:disabled={editingApiKey.permissions.includes("*")}>
-                        <input
-                          type="checkbox"
-                          checked={editingApiKey.permissions.includes("read:stats") || editingApiKey.permissions.includes("read:*") || editingApiKey.permissions.includes("*")}
-                          disabled={editingApiKey.permissions.includes("*")}
-                          onchange={() => toggleApiKeyPermission("read:stats")}
-                        />
-                        <span>Read Stats</span>
-                      </label>
-                      <label class="permission-toggle" class:disabled={editingApiKey.permissions.includes("*")}>
-                        <input
-                          type="checkbox"
-                          checked={editingApiKey.permissions.includes("read:activity") || editingApiKey.permissions.includes("read:*") || editingApiKey.permissions.includes("*")}
-                          disabled={editingApiKey.permissions.includes("*")}
-                          onchange={() => toggleApiKeyPermission("read:activity")}
-                        />
-                        <span>Read Activity</span>
-                      </label>
-                      <label class="permission-toggle" class:disabled={editingApiKey.permissions.includes("*")}>
-                        <input
-                          type="checkbox"
-                          checked={editingApiKey.permissions.includes("read:logs") || editingApiKey.permissions.includes("read:*") || editingApiKey.permissions.includes("*")}
-                          disabled={editingApiKey.permissions.includes("*")}
-                          onchange={() => toggleApiKeyPermission("read:logs")}
-                        />
-                        <span>Read Logs</span>
-                      </label>
-                      <label class="permission-toggle" class:disabled={editingApiKey.permissions.includes("*")}>
-                        <input
-                          type="checkbox"
-                          checked={editingApiKey.permissions.includes("read:export") || editingApiKey.permissions.includes("read:*") || editingApiKey.permissions.includes("*")}
-                          disabled={editingApiKey.permissions.includes("*")}
-                          onchange={() => toggleApiKeyPermission("read:export")}
-                        />
-                        <span>Export Data</span>
-                      </label>
-                      <label class="permission-toggle permission-admin">
-                        <input
-                          type="checkbox"
-                          checked={editingApiKey.permissions.includes("*")}
-                          onchange={() => {
-                            if (editingApiKey!.permissions.includes("*")) {
-                              editingApiKey!.permissions = ["read:stats"];
-                            } else {
-                              editingApiKey!.permissions = ["*"];
-                            }
-                            editingApiKey = { ...editingApiKey! };
-                          }}
-                        />
-                        <span>Full Access</span>
-                        <small>(grants all permissions including account management)</small>
-                      </label>
-                    </div>
+                    <table class="permissions-table">
+                      <thead>
+                        <tr>
+                          <th>Resource</th>
+                          <th>None</th>
+                          <th>Read</th>
+                          <th>Write</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {#each permissionNodes as node}
+                          <tr class:disabled={editingApiKey.permissions.includes("*")}>
+                            <td class="resource-name">{node.charAt(0).toUpperCase() + node.slice(1)}</td>
+                            <td>
+                              <input
+                                type="radio"
+                                name={`perm-${node}`}
+                                checked={getPermissionLevel(node) === "none"}
+                                disabled={editingApiKey.permissions.includes("*")}
+                                onchange={() => setPermissionLevel(node, "none")}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="radio"
+                                name={`perm-${node}`}
+                                checked={getPermissionLevel(node) === "read"}
+                                disabled={editingApiKey.permissions.includes("*")}
+                                onchange={() => setPermissionLevel(node, "read")}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="radio"
+                                name={`perm-${node}`}
+                                checked={getPermissionLevel(node) === "write"}
+                                disabled={editingApiKey.permissions.includes("*")}
+                                onchange={() => setPermissionLevel(node, "write")}
+                              />
+                            </td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                    <label class="permission-toggle permission-admin">
+                      <input
+                        type="checkbox"
+                        checked={editingApiKey.permissions.includes("*")}
+                        onchange={toggleFullAccess}
+                      />
+                      <span>Full Access</span>
+                      <small>(grants all permissions)</small>
+                    </label>
                   </div>
 
                   <div class="modal-actions">
@@ -1937,6 +2122,16 @@
     animation: spin 0.8s linear infinite;
   }
 
+  .spinner-inline {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border-color);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
@@ -1955,6 +2150,17 @@
 
   .test-result.error {
     color: var(--error);
+  }
+
+  .connection-test-section {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
   }
 
   .section-header {
@@ -2277,6 +2483,65 @@
     font-size: 0.8125rem;
   }
 
+  .permissions-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.5rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    overflow: hidden;
+  }
+
+  .permissions-table th,
+  .permissions-table td {
+    padding: 0.625rem 0.75rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .permissions-table th {
+    background: var(--bg-tertiary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    color: var(--text-secondary);
+  }
+
+  .permissions-table th:first-child,
+  .permissions-table td.resource-name {
+    text-align: left;
+  }
+
+  .permissions-table td.resource-name {
+    font-weight: 500;
+    font-size: 0.875rem;
+  }
+
+  .permissions-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .permissions-table tbody tr:hover:not(.disabled) {
+    background: var(--bg-secondary);
+  }
+
+  .permissions-table tbody tr.disabled {
+    opacity: 0.5;
+  }
+
+  .permissions-table input[type="radio"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .permissions-table input[type="radio"]:disabled {
+    cursor: default;
+  }
+
   .permissions-simple {
     display: flex;
     flex-direction: column;
@@ -2452,6 +2717,29 @@
     position: relative;
   }
 
+  .preset-selector {
+    position: relative;
+  }
+
+  .preset-trigger {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+
+  .preset-trigger:hover {
+    border-color: var(--accent);
+  }
+
   .preset-backdrop {
     position: fixed;
     top: 0;
@@ -2467,12 +2755,46 @@
     left: 0;
     right: 0;
     background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     z-index: 100;
-    max-height: 200px;
+    max-height: 250px;
     overflow-y: auto;
+    margin-top: 0.25rem;
+  }
+
+  .preset-option {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 0.625rem 0.75rem;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    text-align: left;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .preset-option:last-child {
+    border-bottom: none;
+  }
+
+  .preset-option:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .preset-option strong {
+    font-weight: 500;
+  }
+
+  .preset-meta {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.125rem;
   }
 
   .preset-item {

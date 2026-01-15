@@ -202,6 +202,7 @@ export interface ImapTestParams {
   oauth_client_id?: string;
   oauth_client_secret?: string;
   oauth_refresh_token?: string;
+  name?: string; // Account name - used to lookup existing credentials if masked
 }
 
 export interface ImapTestResult {
@@ -260,6 +261,39 @@ export interface ImapProbeResult {
 
 export async function probeImap(params: ImapProbeParams): Promise<ImapProbeResult> {
   return fetchJson(`${BASE_URL}/probe-imap`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+// LLM Provider Presets
+export interface LlmPreset {
+  name: string;
+  api_url: string;
+  default_model: string;
+  api_key_placeholder: string;
+  supports_vision: boolean;
+}
+
+export async function fetchLlmPresets(): Promise<{ presets: LlmPreset[] }> {
+  return fetchJson(`${BASE_URL}/llm-presets`);
+}
+
+// Test LLM Connection
+export interface LlmTestParams {
+  api_url: string;
+  api_key?: string;
+  default_model: string;
+  name?: string; // Provider name - used to lookup existing API key if masked
+}
+
+export interface LlmTestResult {
+  success: boolean;
+  error?: string;
+}
+
+export async function testLlmConnection(params: LlmTestParams): Promise<LlmTestResult> {
+  return fetchJson(`${BASE_URL}/test-llm`, {
     method: "POST",
     body: JSON.stringify(params),
   });

@@ -24,10 +24,11 @@ async function executeShutdown(signal: string): Promise<void> {
   isShuttingDown = true;
   logger.info(`Received ${signal}, shutting down gracefully`);
 
+  // 5 second timeout for shutdown (helps with hot-reload during development)
   const timeout = setTimeout(() => {
     logger.error("Shutdown timeout exceeded, forcing exit");
     process.exit(1);
-  }, 30000);
+  }, 5000);
 
   for (const handler of handlers.reverse()) {
     try {

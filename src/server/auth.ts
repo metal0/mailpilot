@@ -206,6 +206,18 @@ function hasPermission(apiKey: ApiKeyConfig, required: ApiKeyPermission): boolea
     return true;
   }
 
+  // Write implies read (e.g., write:stats implies read:stats)
+  if (required.startsWith("read:")) {
+    const resource = required.slice(5); // Remove "read:" prefix
+    if (apiKey.permissions.includes(`write:${resource}` as ApiKeyPermission)) {
+      return true;
+    }
+    // write:* also implies all read permissions
+    if (apiKey.permissions.includes("write:*")) {
+      return true;
+    }
+  }
+
   return false;
 }
 

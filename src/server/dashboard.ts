@@ -29,7 +29,9 @@ import { getAccountStatuses, getUptime, getVersion } from "./status.js";
 import { broadcastStats } from "./websocket.js";
 import { getDetailedProviderStats, getAllProviders, updateProviderHealth } from "../llm/providers.js";
 import { testConnection as testLlmConnection } from "../llm/client.js";
-import { getRecentLogs, type LogLevel } from "../utils/logger.js";
+import { getRecentLogs, type LogLevel, createLogger } from "../utils/logger.js";
+
+const logger = createLogger("dashboard");
 import {
   getQueueStatus,
   pauseAccount,
@@ -106,6 +108,87 @@ const IMAP_PRESETS: ImapPreset[] = [
   { name: "Zoho Mail", host: "imap.zoho.com", ports: [{ port: 993, tls: "tls" }], oauthSupported: false },
   { name: "AOL Mail", host: "imap.aol.com", ports: [{ port: 993, tls: "tls" }], oauthSupported: false },
   { name: "ProtonMail Bridge", host: "127.0.0.1", ports: [{ port: 1143, tls: "starttls" }], oauthSupported: false },
+];
+
+interface LlmPreset {
+  name: string;
+  api_url: string;
+  default_model: string;
+  api_key_placeholder: string;
+  supports_vision?: boolean;
+}
+
+const LLM_PRESETS: LlmPreset[] = [
+  {
+    name: "OpenAI",
+    api_url: "https://api.openai.com/v1/chat/completions",
+    default_model: "gpt-4o",
+    api_key_placeholder: "sk-...",
+    supports_vision: true,
+  },
+  {
+    name: "Anthropic",
+    api_url: "https://api.anthropic.com/v1/messages",
+    default_model: "claude-sonnet-4-20250514",
+    api_key_placeholder: "sk-ant-...",
+    supports_vision: true,
+  },
+  {
+    name: "Google Gemini",
+    api_url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    default_model: "gemini-2.0-flash",
+    api_key_placeholder: "AIza...",
+    supports_vision: true,
+  },
+  {
+    name: "Mistral AI",
+    api_url: "https://api.mistral.ai/v1/chat/completions",
+    default_model: "mistral-large-latest",
+    api_key_placeholder: "...",
+    supports_vision: true,
+  },
+  {
+    name: "Groq",
+    api_url: "https://api.groq.com/openai/v1/chat/completions",
+    default_model: "llama-3.3-70b-versatile",
+    api_key_placeholder: "gsk_...",
+    supports_vision: true,
+  },
+  {
+    name: "xAI (Grok)",
+    api_url: "https://api.x.ai/v1/chat/completions",
+    default_model: "grok-3",
+    api_key_placeholder: "xai-...",
+    supports_vision: true,
+  },
+  {
+    name: "OpenRouter",
+    api_url: "https://openrouter.ai/api/v1/chat/completions",
+    default_model: "anthropic/claude-sonnet-4",
+    api_key_placeholder: "sk-or-...",
+    supports_vision: true,
+  },
+  {
+    name: "Together AI",
+    api_url: "https://api.together.xyz/v1/chat/completions",
+    default_model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    api_key_placeholder: "...",
+    supports_vision: true,
+  },
+  {
+    name: "DeepSeek",
+    api_url: "https://api.deepseek.com/chat/completions",
+    default_model: "deepseek-chat",
+    api_key_placeholder: "sk-...",
+    supports_vision: false,
+  },
+  {
+    name: "Ollama (Local)",
+    api_url: "http://localhost:11434/v1/chat/completions",
+    default_model: "llama3.2",
+    api_key_placeholder: "ollama",
+    supports_vision: true,
+  },
 ];
 
 interface PortProbeResult {
@@ -586,7 +669,6 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     }
   });
 
-  // Probe IMAP server (no auth required) - detect provider and capabilities
   // Get IMAP presets
   router.get("/api/imap-presets", requireAuthOrApiKeyWithDryRun("read:stats"), (c) => {
     return c.json({
@@ -594,6 +676,77 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     });
   });
 
+  // Get LLM presets
+  router.get("/api/llm-presets", requireAuthOrApiKeyWithDryRun("read:stats"), (c) => {
+    return c.json({
+      presets: LLM_PRESETS.map(p => ({
+        name: p.name,
+        api_url: p.api_url,
+        default_model: p.default_model,
+        api_key_placeholder: p.api_key_placeholder,
+        supports_vision: p.supports_vision ?? false,
+      })),
+    });
+  });
+
+  // Test LLM connection
+  router.post("/api/test-llm", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
+    try {
+      const body = await c.req.json<{
+        api_url: string;
+        api_key?: string;
+        default_model: string;
+        name?: string; // Optional: used to lookup existing API key if masked
+      }>();
+
+      const { api_url, default_model, name } = body;
+      let { api_key } = body;
+
+      // Debug logging
+      logger.debug("[test-llm] Request body", { api_url, api_key: api_key ? api_key.substring(0, 4) + "..." : undefined, default_model, name });
+
+      if (!api_url || !default_model) {
+        return c.json({ success: false, error: "API URL and model are required" });
+      }
+
+      // If API key is masked and we have a provider name, look up the real key
+      if (api_key === "********" && name) {
+        const currentConfig = getCurrentConfig();
+        const existingProvider = currentConfig?.llm_providers.find((p) => p.name === name);
+        if (existingProvider?.api_key) {
+          api_key = existingProvider.api_key;
+        } else {
+          return c.json({ success: false, error: "Cannot test: API key is masked and no existing provider found" });
+        }
+      }
+
+      // Build a temporary provider config for testing
+      const testProvider = {
+        name: name ?? "_test_",
+        api_url,
+        api_key,
+        default_model,
+        max_body_tokens: 4000,
+        max_thread_tokens: 2000,
+        supports_vision: false,
+        rate_limit_rpm: 60,
+      };
+
+      const success = await testLlmConnection(testProvider, default_model);
+
+      return c.json({
+        success,
+        error: success ? undefined : "Failed to connect to LLM provider. Check your API key and URL.",
+      });
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
+  });
+
+  // Probe IMAP server (no auth required) - detect provider and capabilities
   router.post("/api/probe-imap", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
     try {
       const body = await c.req.json<{ host: string }>();
@@ -707,7 +860,29 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         oauth_client_id?: string;
         oauth_client_secret?: string;
         oauth_refresh_token?: string;
+        name?: string; // Account name - used to lookup existing credentials if masked
       }>();
+
+      let password = body.password;
+      let oauthClientSecret = body.oauth_client_secret;
+      let oauthRefreshToken = body.oauth_refresh_token;
+
+      // If credentials are masked and we have an account name, look up the real values
+      if (body.name) {
+        const currentConfig = getCurrentConfig();
+        const existingAccount = currentConfig?.accounts.find((a) => a.name === body.name);
+        if (existingAccount) {
+          if (password === "********") {
+            password = existingAccount.imap.password;
+          }
+          if (oauthClientSecret === "********") {
+            oauthClientSecret = existingAccount.imap.oauth_client_secret;
+          }
+          if (oauthRefreshToken === "********") {
+            oauthRefreshToken = existingAccount.imap.oauth_refresh_token;
+          }
+        }
+      }
 
       const secure = body.tls === "tls" || body.tls === "auto";
 
@@ -717,7 +892,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         secure,
         auth: {
           user: body.username,
-          pass: body.password || "",
+          pass: password || "",
         },
         logger: false,
       });

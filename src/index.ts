@@ -54,13 +54,13 @@ async function main(): Promise<void> {
 
   onShutdown(async () => {
     await dispatchShutdown("shutdown");
-    stopServer();
+    await stopServer();
     closeDatabase();
   });
 
   registerProviders(config.llm_providers);
 
-  startServer(serverConfig, config.accounts, dashboardConfig, config.attachments, config.antivirus, config.dry_run, configPath);
+  await startServer(serverConfig, config.accounts, dashboardConfig, config.attachments, config.antivirus, config.dry_run, configPath);
 
   await dispatchStartup();
 
