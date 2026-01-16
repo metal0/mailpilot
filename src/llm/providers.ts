@@ -39,7 +39,7 @@ export function registerProviders(configs: LlmProviderConfig[]): void {
     });
   }
 
-  logger.info("LLM providers registered", { count: configs.length });
+  logger.debug("LLM providers registered", { count: configs.length });
 }
 
 function getStartOfDay(): number {
@@ -230,7 +230,7 @@ export async function startHealthChecks(): Promise<void> {
     });
   }, 5 * 60 * 1000);
 
-  logger.info("LLM health checks started");
+  logger.debug("LLM health checks started");
 }
 
 export function stopHealthChecks(): void {

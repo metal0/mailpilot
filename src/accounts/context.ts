@@ -44,7 +44,7 @@ export function createAccountContext(
   if (avConfig?.enabled) {
     if (!sharedAvScanner) {
       sharedAvScanner = createAntivirusScanner(avConfig);
-      logger.info("Antivirus scanner initialized", {
+      logger.debug("Antivirus scanner initialized", {
         host: avConfig.host,
         port: avConfig.port,
       });
@@ -58,7 +58,7 @@ export function createAccountContext(
   if (attConfig?.enabled) {
     if (!sharedAttachmentProcessor) {
       sharedAttachmentProcessor = createAttachmentProcessor(attConfig);
-      logger.info("Attachment processor initialized", {
+      logger.debug("Attachment processor initialized", {
         tikaUrl: attConfig.tika_url ?? "http://localhost:9998",
         maxSizeMb: attConfig.max_size_mb,
         extractImages: attConfig.extract_images,

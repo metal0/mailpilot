@@ -38,7 +38,7 @@ export function startRetryManager(options: RetryManagerOptions): void {
   }
 
   if (!options.config.enabled) {
-    logger.info("Retry manager disabled by configuration");
+    logger.debug("Retry manager disabled by configuration");
     return;
   }
 
@@ -46,7 +46,7 @@ export function startRetryManager(options: RetryManagerOptions): void {
 
   const checkIntervalMs = 60000;
 
-  logger.info("Starting retry manager", {
+  logger.debug("Starting retry manager", {
     maxAttempts: options.config.max_attempts,
     initialDelay: options.config.initial_delay,
     maxDelay: options.config.max_delay,
@@ -69,7 +69,7 @@ export function stopRetryManager(): void {
     clearInterval(retryInterval);
     retryInterval = null;
     retryOptions = null;
-    logger.info("Retry manager stopped");
+    logger.debug("Retry manager stopped");
   }
 }
 
