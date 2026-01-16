@@ -5,7 +5,6 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY dashboard/package.json ./dashboard/
 RUN pnpm install --frozen-lockfile
-RUN cd dashboard && pnpm install
 COPY . .
 RUN pnpm build
 

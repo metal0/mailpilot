@@ -36,10 +36,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install dashboard dependencies
-        working-directory: dashboard
-        run: pnpm install
-
       - name: Lint
         run: pnpm lint
 
