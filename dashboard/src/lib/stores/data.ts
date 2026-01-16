@@ -13,6 +13,7 @@ export interface AccountStatus {
   errors: number;
   imapHost: string;
   imapPort: number;
+  imapUsername: string;
 }
 
 export interface ActionBreakdown {

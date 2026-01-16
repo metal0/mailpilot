@@ -24,6 +24,49 @@ Mailpilot is an AI-powered email processing daemon that uses LLM classification 
 
 This protects against accidental pushes to production branches and gives the user control over what goes to remote.
 
+### Feature Branch Workflow (REQUIRED)
+
+**All new feature implementations MUST follow this workflow:**
+
+1. **Create a feature branch** - Never commit new features directly to master
+   ```bash
+   git checkout -b feat/feature-name
+   # or: git checkout -b fix/bug-name
+   ```
+
+2. **Implement with full requirements:**
+   - Working code with no placeholders
+   - Unit tests covering the new functionality
+   - Documentation updates (README, SPEC, AGENTS.md, Wiki as applicable)
+
+3. **Verify before PR:**
+   - `pnpm lint && pnpm typecheck && pnpm build` passes
+   - `pnpm test` passes
+   - E2E testing performed (see Browser Testing section)
+
+4. **Create a GitHub Pull Request:**
+   ```bash
+   git push -u origin feat/feature-name
+   gh pr create --title "feat: description" --body "..."
+   ```
+
+5. **PR must include:**
+   - Clear description of what changed
+   - Test plan or testing performed
+   - Documentation changes included in the PR
+
+**Branch naming conventions:**
+- `feat/description` - New features
+- `fix/description` - Bug fixes
+- `refactor/description` - Code refactoring
+- `docs/description` - Documentation only changes
+
+**Never commit directly to master for:**
+- New features
+- Significant refactoring
+- Changes affecting multiple files
+- Changes requiring review
+
 ## Quality Standards (NO SHORTCUTS)
 
 **Every implementation MUST meet these quality standards. There are no exceptions.**

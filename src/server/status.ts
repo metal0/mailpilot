@@ -30,6 +30,7 @@ export interface AccountStatus {
   errors: number;
   imapHost: string;
   imapPort: number;
+  imapUsername: string;
   paused: boolean;
 }
 
@@ -44,6 +45,7 @@ const accountStatuses = new Map<
     llmModel: string;
     imapHost: string;
     imapPort: number;
+    imapUsername: string;
     paused: boolean;
   }
 >();
@@ -68,6 +70,7 @@ export function updateAccountStatus(
     llmModel: string;
     imapHost: string;
     imapPort: number;
+    imapUsername: string;
     paused: boolean;
   }>
 ): void {
@@ -80,6 +83,7 @@ export function updateAccountStatus(
     llmModel: "unknown",
     imapHost: "unknown",
     imapPort: 993,
+    imapUsername: "unknown",
     paused: false,
   };
 
@@ -98,6 +102,7 @@ export function updateAccountStatus(
       llmModel: updated.llmModel,
       imapHost: updated.imapHost,
       imapPort: updated.imapPort,
+      imapUsername: updated.imapUsername,
       paused: updated.paused,
     });
   }
@@ -134,6 +139,7 @@ export function getAccountStatuses(): AccountStatus[] {
       errors: status.errors,
       imapHost: status.imapHost,
       imapPort: status.imapPort,
+      imapUsername: status.imapUsername,
       paused: status.paused,
     });
   }
@@ -187,6 +193,7 @@ export function initializeAccountStatuses(accounts: AccountConfig[]): void {
       llmModel: llmInfo?.model ?? "none",
       imapHost: account.imap.host,
       imapPort: account.imap.port,
+      imapUsername: account.imap.username,
       paused: false,
     });
   }

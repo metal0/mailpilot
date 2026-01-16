@@ -1,6 +1,28 @@
 <script lang="ts">
-  import { stats, serviceStatus } from "../stores/data";
+  import { stats, serviceStatus, type ProviderStats } from "../stores/data";
   import { t } from "../i18n";
+
+  // Sort providers: healthy first, stale second, unhealthy last; alphabetically within each group
+  function sortedProviders(providers: ProviderStats[]): ProviderStats[] {
+    return [...providers].sort((a, b) => {
+      // Health priority: healthy = 0, stale = 1, unhealthy = 2
+      const getHealthPriority = (p: ProviderStats): number => {
+        if (p.healthy && !p.healthStale) return 0;
+        if (p.healthStale) return 1;
+        return 2;
+      };
+
+      const priorityA = getHealthPriority(a);
+      const priorityB = getHealthPriority(b);
+
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      // Alphabetically within same health group
+      return a.name.localeCompare(b.name);
+    });
+  }
 </script>
 
 <div class="sidebar">
@@ -46,7 +68,7 @@
       <p class="muted">{$t("accounts.noAccounts")}</p>
     {:else}
       <div class="provider-list">
-        {#each $stats.providerStats as provider}
+        {#each sortedProviders($stats.providerStats) as provider}
           <div class="provider-card">
             <div class="provider-header">
               <span class="provider-name">

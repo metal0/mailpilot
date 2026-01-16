@@ -340,6 +340,50 @@ curl http://localhost:8080/health
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/status
 ```
 
+## Development Workflow
+
+### Feature Branch Workflow (REQUIRED)
+
+**All new feature implementations MUST use feature branches and pull requests:**
+
+1. **Create a feature branch** from master:
+   ```bash
+   git checkout master && git pull
+   git checkout -b feat/feature-name
+   ```
+
+2. **Implement the feature** with full requirements:
+   - Complete, working implementation (no placeholders)
+   - Unit tests for new functionality
+   - Documentation updates (AGENTS.md, README, Wiki as applicable)
+
+3. **Before creating PR**, verify:
+   - `pnpm lint && pnpm typecheck && pnpm build` passes
+   - `pnpm test` passes
+   - E2E testing performed
+
+4. **Create GitHub Pull Request**:
+   ```bash
+   git push -u origin feat/feature-name
+   gh pr create --title "feat: description" --body "Summary of changes..."
+   ```
+
+5. **PR requirements:**
+   - Descriptive title following conventional commits (`feat:`, `fix:`, `docs:`)
+   - Summary of what changed and why
+   - Test plan or testing performed
+   - All documentation updates included
+
+**Branch naming:**
+- `feat/description` - New features
+- `fix/description` - Bug fixes
+- `refactor/description` - Refactoring
+- `docs/description` - Documentation only
+
+**Never commit directly to master** for new features, refactoring, or multi-file changes.
+
+---
+
 ## Testing LLM Features
 
 **All LLM-related changes MUST include proper testing. NO SHORTCUTS.**
