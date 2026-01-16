@@ -756,6 +756,74 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     }
   });
 
+  // Test Webhook connectivity
+  router.post("/api/test-webhook", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
+    try {
+      const body = await c.req.json<{
+        url: string;
+        headers?: Record<string, string>;
+      }>();
+
+      const { url, headers } = body;
+
+      if (!url) {
+        return c.json({ success: false, error: "URL is required" });
+      }
+
+      // Validate URL format
+      try {
+        new URL(url);
+      } catch {
+        return c.json({ success: false, error: "Invalid URL format" });
+      }
+
+      // Send a test POST request to the webhook URL
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": "Mailpilot/webhook-test",
+            ...headers,
+          },
+          body: JSON.stringify({
+            event: "test",
+            timestamp: new Date().toISOString(),
+            message: "This is a test webhook from Mailpilot",
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        // Accept 2xx and 3xx status codes as success
+        if (response.status >= 200 && response.status < 400) {
+          return c.json({ success: true, statusCode: response.status });
+        } else {
+          return c.json({
+            success: false,
+            error: `Server returned status ${response.status}`,
+            statusCode: response.status,
+          });
+        }
+      } catch (fetchError) {
+        clearTimeout(timeout);
+        if (fetchError instanceof Error && fetchError.name === "AbortError") {
+          return c.json({ success: false, error: "Request timed out (10s)" });
+        }
+        throw fetchError;
+      }
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
+  });
+
   // Probe IMAP server (no auth required) - detect provider and capabilities
   router.post("/api/probe-imap", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
     try {

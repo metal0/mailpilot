@@ -30,6 +30,9 @@
     default_model?: string;
     headers?: Record<string, string>;
     rate_limit?: number;
+    max_body_tokens?: number;
+    max_thread_tokens?: number;
+    supports_vision?: boolean;
   }
 
   interface Account {
@@ -40,6 +43,7 @@
     webhooks?: Webhook[];
     prompt_override?: string;
     prompt_file?: string;
+    allowed_actions?: string[];
   }
 
   interface ImapConfig {
@@ -189,6 +193,17 @@
   let defaultAllowedActions = $state<api.ActionType[]>([]);
   let showAllowedActionsDropdown = $state(false);
 
+  // Advanced section state
+  let showAdvancedSection = $state(false);
+
+  // Webhook state
+  let editingWebhookIndex = $state<number | null>(null);
+  let editingWebhook = $state<Webhook | null>(null);
+  let testingWebhook = $state(false);
+  let webhookTestResult = $state<{ success: boolean; error?: string } | null>(null);
+  let webhookTested = $state(false);
+  const webhookEventOptions = ["startup", "shutdown", "error", "action_taken", "connection_lost", "connection_restored"] as const;
+
   // LLM provider wizard state
   let llmPresets = $state<api.LlmPreset[]>([]);
   let showLlmPresetDropdown = $state(false);
@@ -229,6 +244,13 @@
     "provider.api_key": "API key for authentication",
     "provider.default_model": "Default model to use (e.g., gpt-4o, claude-3-5-sonnet)",
     "provider.rate_limit": "Maximum requests per minute",
+    "provider.max_body_tokens": "Maximum tokens for email body content (default: 4000)",
+    "provider.max_thread_tokens": "Maximum tokens for email thread context (default: 2000)",
+    "provider.supports_vision": "Enable if this provider supports vision/image analysis (e.g., GPT-4o, Claude 3)",
+    "webhook.url": "URL to send webhook notifications to",
+    "webhook.events": "Events that trigger this webhook",
+    "webhook.headers": "Custom HTTP headers to include in webhook requests",
+    process_existing: "Process existing emails in watched folders when adding this account",
     "attachments.enabled": "Enable attachment text extraction via Apache Tika",
     "attachments.tika_url": "URL of the Tika server (e.g., http://tika:9998)",
     "attachments.max_size_mb": "Maximum attachment size to process (MB)",
@@ -437,6 +459,12 @@
     showPresetDropdown = false;
     portLocked = false;
     connectionFieldsLocked = true;
+    showAdvancedSection = false;
+    editingWebhookIndex = null;
+    editingWebhook = null;
+    testingWebhook = false;
+    webhookTestResult = null;
+    webhookTested = false;
   }
 
   function addAccount() {
@@ -471,6 +499,83 @@
     config = { ...config };
     editingAccount = null;
     resetWizardState();
+  }
+
+  // Webhook management functions
+  function addWebhook() {
+    editingWebhook = {
+      url: "",
+      events: ["action_taken"],
+      headers: {},
+    };
+    editingWebhookIndex = null;
+    webhookTested = false;
+    webhookTestResult = null;
+  }
+
+  function editWebhook(webhook: Webhook, index: number) {
+    editingWebhook = JSON.parse(JSON.stringify(webhook));
+    editingWebhookIndex = index;
+    webhookTested = true; // Existing webhooks are assumed tested
+    webhookTestResult = null;
+  }
+
+  function saveWebhook() {
+    if (!editingAccount || !editingWebhook) return;
+
+    editingAccount.webhooks = editingAccount.webhooks ?? [];
+    if (editingWebhookIndex !== null) {
+      editingAccount.webhooks[editingWebhookIndex] = editingWebhook;
+    } else {
+      editingAccount.webhooks.push(editingWebhook);
+    }
+    editingWebhook = null;
+    editingWebhookIndex = null;
+    webhookTested = false;
+    webhookTestResult = null;
+  }
+
+  function removeWebhook(index: number) {
+    if (!editingAccount?.webhooks) return;
+    editingAccount.webhooks.splice(index, 1);
+    editingAccount = { ...editingAccount };
+  }
+
+  async function testWebhookConnection() {
+    if (!editingWebhook?.url) return;
+
+    testingWebhook = true;
+    webhookTestResult = null;
+
+    try {
+      const result = await api.testWebhook({
+        url: editingWebhook.url,
+        headers: editingWebhook.headers,
+      });
+
+      webhookTestResult = result;
+      webhookTested = result.success;
+    } catch (err) {
+      webhookTestResult = {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+      webhookTested = false;
+    } finally {
+      testingWebhook = false;
+    }
+  }
+
+  function toggleWebhookEvent(event: string) {
+    if (!editingWebhook) return;
+    const idx = editingWebhook.events.indexOf(event);
+    if (idx >= 0) {
+      editingWebhook.events = editingWebhook.events.filter(e => e !== event);
+    } else {
+      editingWebhook.events = [...editingWebhook.events, event];
+    }
+    webhookTested = false;
+    webhookTestResult = null;
   }
 
   async function probeImapServer() {
@@ -1213,17 +1318,34 @@
                     {/if}
                   </div>
 
-                  <div class="wizard-section" class:section-locked={!connectionTested}>
-                    {#if !connectionTested}
-                      <div class="section-lock-overlay">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                          <path d="M7 11V7a5 5 0 0110 0v4"/>
-                        </svg>
-                        <span>Test connection to unlock</span>
-                      </div>
-                    {/if}
-                    <h4>{$t("settings.accounts.foldersSection")}</h4>
+                  <div class="collapsible-section" class:section-locked={!connectionTested}>
+                    <button
+                      type="button"
+                      class="collapsible-header"
+                      disabled={!connectionTested}
+                      onclick={() => connectionTested && (showAdvancedSection = !showAdvancedSection)}
+                    >
+                      <span class="collapsible-title">
+                        {#if !connectionTested}
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                            <path d="M7 11V7a5 5 0 0110 0v4"/>
+                          </svg>
+                        {:else}
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" class:rotated={showAdvancedSection}>
+                            <polyline points="9 18 15 12 9 6"/>
+                          </svg>
+                        {/if}
+                        {$t("settings.accounts.advancedSection")}
+                      </span>
+                      {#if !connectionTested}
+                        <span class="locked-hint">{$t("settings.accounts.testToUnlock")}</span>
+                      {/if}
+                    </button>
+
+                    {#if showAdvancedSection && connectionTested}
+                      <div class="collapsible-content">
+                        <h4>{$t("settings.accounts.foldersSection")}</h4>
                     <div class="form-group">
                       <label>
                         <span class="label-text">{$t("settings.accounts.watchFolders")} <span class="help-icon" title={helpTexts["folders.watch"]}>?</span></span>
@@ -1455,7 +1577,121 @@
                     </label>
                     <p class="help-text">{$t("settings.accounts.promptOverrideHelp")}</p>
                   </div>
-                  </div><!-- end wizard-section -->
+
+                  <!-- Webhooks Section -->
+                  <div class="section-header webhooks-header">
+                    <h4>{$t("settings.accounts.webhooksSection")}</h4>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick={addWebhook}>
+                      + {$t("settings.accounts.addWebhook")}
+                    </button>
+                  </div>
+
+                  {#if editingWebhook}
+                    <div class="webhook-editor">
+                      <div class="form-group">
+                        <label>
+                          <span class="label-text">{$t("settings.accounts.webhookUrl")} <span class="help-icon" title={helpTexts["webhook.url"]}>?</span></span>
+                          <input
+                            type="url"
+                            bind:value={editingWebhook.url}
+                            placeholder="https://example.com/webhook"
+                            oninput={() => { webhookTested = false; webhookTestResult = null; }}
+                          />
+                        </label>
+                      </div>
+
+                      <div class="form-group">
+                        <span class="label-text">{$t("settings.accounts.webhookEvents")} <span class="help-icon" title={helpTexts["webhook.events"]}>?</span></span>
+                        <div class="checkbox-group vertical">
+                          {#each webhookEventOptions as event}
+                            <label class="checkbox-inline">
+                              <input
+                                type="checkbox"
+                                checked={editingWebhook.events.includes(event)}
+                                onchange={() => toggleWebhookEvent(event)}
+                              />
+                              <span>{$t(`settings.accounts.webhookEvent.${event}`)}</span>
+                            </label>
+                          {/each}
+                        </div>
+                      </div>
+
+                      <div class="connection-test-section">
+                        <button
+                          type="button"
+                          class="btn btn-secondary btn-sm"
+                          onclick={testWebhookConnection}
+                          disabled={testingWebhook || !editingWebhook.url || editingWebhook.events.length === 0}
+                        >
+                          {#if testingWebhook}
+                            <span class="spinner-inline"></span>
+                            {$t("settings.accounts.testingWebhook")}
+                          {:else}
+                            {$t("settings.accounts.testWebhook")}
+                          {/if}
+                        </button>
+                        {#if webhookTestResult}
+                          <span class="test-result" class:success={webhookTestResult.success} class:error={!webhookTestResult.success}>
+                            {#if webhookTestResult.success}
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="20 6 9 17 4 12"/>
+                              </svg>
+                              {$t("settings.accounts.webhookTestSuccess")}
+                            {:else}
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="15" y1="9" x2="9" y2="15"/>
+                                <line x1="9" y1="9" x2="15" y2="15"/>
+                              </svg>
+                              {webhookTestResult.error ?? $t("settings.accounts.webhookTestFailed")}
+                            {/if}
+                          </span>
+                        {/if}
+                      </div>
+
+                      <div class="webhook-actions">
+                        <button type="button" class="btn btn-secondary btn-sm" onclick={() => { editingWebhook = null; editingWebhookIndex = null; }}>
+                          {$t("common.cancel")}
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-primary btn-sm"
+                          onclick={saveWebhook}
+                          disabled={!webhookTested || !editingWebhook.url || editingWebhook.events.length === 0}
+                          title={!webhookTested ? $t("settings.accounts.testWebhookFirst") : ""}
+                        >
+                          {$t("settings.accounts.saveWebhook")}
+                        </button>
+                      </div>
+                    </div>
+                  {/if}
+
+                  {#if (editingAccount.webhooks?.length ?? 0) > 0}
+                    <div class="webhooks-list">
+                      {#each editingAccount.webhooks ?? [] as webhook, idx}
+                        <div class="webhook-item">
+                          <div class="webhook-info">
+                            <span class="webhook-url">{webhook.url}</span>
+                            <span class="webhook-events">{webhook.events.join(", ")}</span>
+                          </div>
+                          <div class="webhook-item-actions">
+                            <button type="button" class="btn btn-sm" onclick={() => editWebhook(webhook, idx)}>
+                              {$t("common.edit")}
+                            </button>
+                            <button type="button" class="btn btn-sm btn-danger" onclick={() => removeWebhook(idx)}>
+                              {$t("common.remove")}
+                            </button>
+                          </div>
+                        </div>
+                      {/each}
+                    </div>
+                  {:else if !editingWebhook}
+                    <p class="empty-note">{$t("settings.accounts.noWebhooks")}</p>
+                  {/if}
+
+                      </div><!-- end collapsible-content -->
+                    {/if}
+                  </div><!-- end collapsible-section -->
 
                   <div class="modal-actions">
                     <button class="btn btn-secondary" onclick={() => editingAccount = null}>{$t("common.cancel")}</button>
@@ -1598,6 +1834,31 @@
                         <input type="number" bind:value={editingProvider.rate_limit} placeholder="60" />
                       </label>
                     </div>
+                  </div>
+
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>
+                        <span class="label-text">{$t("settings.providers.maxBodyTokens")} <span class="help-icon" title={helpTexts["provider.max_body_tokens"]}>?</span></span>
+                        <input type="number" bind:value={editingProvider.max_body_tokens} placeholder="4000" />
+                      </label>
+                    </div>
+                    <div class="form-group">
+                      <label>
+                        <span class="label-text">{$t("settings.providers.maxThreadTokens")} <span class="help-icon" title={helpTexts["provider.max_thread_tokens"]}>?</span></span>
+                        <input type="number" bind:value={editingProvider.max_thread_tokens} placeholder="2000" />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="form-group checkbox">
+                    <label>
+                      <input type="checkbox" bind:checked={editingProvider.supports_vision} />
+                      <span class="label-text">
+                        {$t("settings.providers.supportsVision")}
+                        <span class="help-icon" title={helpTexts["provider.supports_vision"]}>?</span>
+                      </span>
+                    </label>
                   </div>
 
                   <div class="connection-test-section">
@@ -2946,7 +3207,147 @@
     font-size: 0.875rem;
   }
 
-  /* Wizard section locking */
+  /* Collapsible Advanced Section */
+  .collapsible-section {
+    margin-top: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    overflow: hidden;
+  }
+
+  .collapsible-section.section-locked {
+    opacity: 0.7;
+  }
+
+  .collapsible-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: var(--bg-tertiary);
+    border: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .collapsible-header:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--bg-tertiary) 80%, var(--accent) 20%);
+  }
+
+  .collapsible-header:disabled {
+    cursor: not-allowed;
+    color: var(--text-secondary);
+  }
+
+  .collapsible-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .collapsible-title svg {
+    transition: transform 0.2s;
+  }
+
+  .collapsible-title svg.rotated {
+    transform: rotate(90deg);
+  }
+
+  .locked-hint {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 400;
+  }
+
+  .collapsible-content {
+    padding: 1rem;
+    background: var(--bg-secondary);
+  }
+
+  /* Webhook styles */
+  .webhooks-header {
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .webhooks-header h4 {
+    margin: 0;
+  }
+
+  .webhook-editor {
+    padding: 1rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    margin-bottom: 1rem;
+  }
+
+  .webhook-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .webhooks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .webhook-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+  }
+
+  .webhook-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .webhook-url {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .webhook-events {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  .webhook-item-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: 1rem;
+  }
+
+  .empty-note {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    text-align: center;
+    padding: 1rem;
+    margin: 0;
+  }
+
+  /* Legacy wizard section locking - keep for backwards compat */
   .wizard-section {
     position: relative;
     padding: 0.75rem;

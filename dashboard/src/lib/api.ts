@@ -330,6 +330,25 @@ export async function testLlmConnection(params: LlmTestParams): Promise<LlmTestR
   });
 }
 
+// Webhook Test
+export interface WebhookTestParams {
+  url: string;
+  headers?: Record<string, string>;
+}
+
+export interface WebhookTestResult {
+  success: boolean;
+  error?: string;
+  statusCode?: number;
+}
+
+export async function testWebhook(params: WebhookTestParams): Promise<WebhookTestResult> {
+  return fetchJson(`${BASE_URL}/test-webhook`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
 // GitHub Release Check
 export interface GitHubRelease {
   tag_name: string;
