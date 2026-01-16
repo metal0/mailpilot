@@ -17,6 +17,10 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:report": "playwright show-report tests/e2e/reports/html",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },
@@ -52,6 +56,7 @@
     "zod": "^4.3.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@eslint/js": "^9.39.2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/cookie": "^1.0.0",

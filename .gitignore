@@ -27,6 +27,11 @@ Thumbs.db
 # Test coverage
 coverage/
 
+# Playwright
+tests/e2e/reports/
+playwright-report/
+test-results/
+
 # Config with secrets (use config.example.yaml as template)
 config.yaml
 
