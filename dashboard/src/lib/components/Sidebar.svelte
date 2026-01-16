@@ -26,8 +26,8 @@
 </script>
 
 <div class="sidebar">
-  <!-- Services Status Panel -->
-  {#if $serviceStatus}
+  <!-- Services Status Panel (only show if at least one service is enabled) -->
+  {#if $serviceStatus && ($serviceStatus.tika.enabled || $serviceStatus.clamav.enabled)}
     <div class="panel">
       <h3 class="panel-title">{$t("sidebar.services") ?? "Services"}</h3>
       <div class="services-list">
