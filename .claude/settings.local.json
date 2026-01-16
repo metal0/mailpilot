@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm test:unit:*)",
+      "Bash(pnpm vitest run:*)",
+      "Bash(npx vitest:*)",
+      "Bash(pnpm test:*)",
+      "Bash(echo:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat\\(dead-letter\\): complete retry system with skip functionality\n\n- Fix: Failed emails now correctly added to dead letter queue during processing\n- Start retry manager on application boot with exponential backoff\n- Add skip endpoint to permanently stop retrying a dead letter entry\n- Add Skip button in dashboard Activity modal for pending/retrying entries\n- Add \"skipped\" retry status to distinguish from exhausted/dismissed\n\nBackend changes:\n- src/processor/worker.ts: Add failed emails to dead letter queue on error\n- src/index.ts: Initialize retry manager with configurable options\n- src/storage/dead-letter.ts: Add skipDeadLetter\\(\\) and \"skipped\" status\n- src/server/dashboard.ts: Add POST /api/dead-letter/:id/skip endpoint\n- src/accounts/manager.ts: Export getAccountContext for retry processing\n\nDashboard changes:\n- Add skipDeadLetter\\(\\) API function\n- Add \"skipped\" status badge styling\n- Add Skip Retries button in dead letter modal for active entries\n- Show button only for pending/retrying status\n\nTests:\n- Add unit tests for skip logic and retry status transitions\n- Add tests for exponential backoff calculation\n- Add tests for retry eligibility filtering\n\nDocumentation:\n- Update docs/dashboard.md with new skip endpoint\n- Update docs/database.md with retry status columns and values\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(gh pr create --title \"feat\\(dead-letter\\): complete retry system with skip functionality\" --body \"$\\(cat <<''EOF''\n## Summary\n\n- **Fix**: Failed emails now correctly added to dead letter queue during processing\n- Start retry manager on application boot with exponential backoff\n- Add skip endpoint to permanently stop retrying a dead letter entry\n- Add \"Skip Retries\" button in dashboard Activity modal for pending/retrying entries\n\n## Changes\n\n### Backend\n- `src/processor/worker.ts`: Add failed emails to dead letter queue on error\n- `src/index.ts`: Initialize retry manager with configurable options\n- `src/storage/dead-letter.ts`: Add `skipDeadLetter\\(\\)` and \"skipped\" status\n- `src/server/dashboard.ts`: Add `POST /api/dead-letter/:id/skip` endpoint\n- `src/accounts/manager.ts`: Export `getAccountContext\\(\\)` for retry processing\n\n### Dashboard\n- Add `skipDeadLetter\\(\\)` API function\n- Add \"skipped\" status badge styling\n- Add \"Skip Retries\" button in dead letter modal \\(only for pending/retrying status\\)\n\n### Tests\n- Add unit tests for skip logic and retry status transitions\n- Add tests for exponential backoff calculation\n- Add tests for retry eligibility filtering\n\n### Documentation\n- Update `docs/dashboard.md` with new skip endpoint\n- Update `docs/database.md` with retry status columns and values\n\n## Test plan\n\n- [x] Unit tests pass \\(`pnpm test`\\)\n- [x] TypeScript compilation \\(`pnpm typecheck`\\)\n- [x] ESLint passes \\(`pnpm lint`\\)\n- [x] Build succeeds \\(`pnpm build`\\)\n- [ ] Manual E2E: Start app, trigger a processing failure, verify dead letter entry created\n- [ ] Manual E2E: Open Activity tab, filter by errors, click on dead letter entry\n- [ ] Manual E2E: Verify \"Skip Retries\" button appears for pending entries\n- [ ] Manual E2E: Click Skip Retries, verify entry removed from list\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\nEOF\n\\)\")",
+      "Bash(gh pr checks:*)",
+      "Bash(gh run view:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}

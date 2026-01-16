@@ -302,6 +302,11 @@ export function getAccountClient(accountName: string): ImapClient | undefined {
   return activeClients.get(accountName);
 }
 
+// Get AccountContext for retries
+export function getAccountContext(accountName: string): AccountContext | undefined {
+  return accountContexts.get(accountName);
+}
+
 // Manual processing trigger
 export async function triggerProcessing(accountName: string, folder = "INBOX"): Promise<boolean> {
   const ctx = accountContexts.get(accountName);

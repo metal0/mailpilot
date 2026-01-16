@@ -316,6 +316,7 @@ When the dashboard is enabled but no account exists:
 | `/api/dead-letter` | GET | Session/Key | `read:activity` | Get dead letters |
 | `/api/dead-letter/:id/retry` | POST | Session/Key | `write:accounts` | Retry failed email |
 | `/api/dead-letter/:id/dismiss` | POST | Session/Key | `write:accounts` | Dismiss entry |
+| `/api/dead-letter/:id/skip` | POST | Session/Key | `write:accounts` | Skip retries permanently |
 | `/api/emails/:account/:folder/:uid` | GET | Session/Key | `read:activity` | Email preview |
 | `/api/accounts/:name/pause` | POST | Session/Key | `write:accounts` | Pause account |
 | `/api/accounts/:name/resume` | POST | Session/Key | `write:accounts` | Resume account |

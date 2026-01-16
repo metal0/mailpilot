@@ -52,6 +52,7 @@ import {
   getDeadLetterCount,
   resolveDeadLetter,
   removeDeadLetter,
+  skipDeadLetter,
 } from "../storage/dead-letter.js";
 import { createTikaClient } from "../attachments/tika.js";
 import { createAntivirusScanner } from "../processor/antivirus.js";
@@ -1234,6 +1235,16 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     }
 
     const success = removeDeadLetter(id);
+    return c.json({ success });
+  });
+
+  router.post("/api/dead-letter/:id/skip", requireAuthOrApiKeyWithDryRun("write:accounts"), (c) => {
+    const id = parseInt(c.req.param("id"), 10);
+    if (isNaN(id)) {
+      return c.json({ error: "Invalid ID" }, 400);
+    }
+
+    const success = skipDeadLetter(id);
     return c.json({ success });
   });
 

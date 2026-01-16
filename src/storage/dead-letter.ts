@@ -4,7 +4,7 @@ import { createLogger } from "../utils/logger.js";
 
 const logger = createLogger("dead-letter");
 
-export type RetryStatus = "pending" | "retrying" | "exhausted" | "success";
+export type RetryStatus = "pending" | "retrying" | "exhausted" | "success" | "skipped";
 
 export interface DeadLetterEntry {
   id: number;
@@ -305,6 +305,24 @@ export function markRetrySuccess(id: number): boolean {
 
   if (result.changes > 0) {
     logger.info("Dead letter retry succeeded", { id });
+    return true;
+  }
+
+  return false;
+}
+
+export function skipDeadLetter(id: number): boolean {
+  const db = getDatabase();
+  const now = Date.now();
+
+  const result = db.prepare(`
+    UPDATE dead_letter
+    SET retry_status = 'skipped', resolved_at = ?, last_retry_at = ?
+    WHERE id = ? AND resolved_at IS NULL
+  `).run(now, now, id);
+
+  if (result.changes > 0) {
+    logger.info("Dead letter skipped", { id });
     return true;
   }
 

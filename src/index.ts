@@ -3,7 +3,10 @@ import { loadConfig } from "./config/loader.js";
 import { initDatabase, closeDatabase } from "./storage/database.js";
 import { cleanupProcessedMessages } from "./storage/processed.js";
 import { cleanupAuditLog } from "./storage/audit.js";
-import { cleanupDeadLetters } from "./storage/dead-letter.js";
+import { cleanupDeadLetters, type DeadLetterEntry } from "./storage/dead-letter.js";
+import { startRetryManager, stopRetryManager } from "./storage/retry-manager.js";
+import { getAccountContext } from "./accounts/manager.js";
+import { processMessage } from "./processor/worker.js";
 import { registerProviders, startHealthChecks, stopHealthChecks } from "./llm/providers.js";
 import { startServer, stopServer } from "./server/index.js";
 import { startAccount, setupAccountShutdown, setConfigPath, setCurrentConfig } from "./accounts/manager.js";
@@ -80,6 +83,45 @@ async function main(): Promise<void> {
   );
 
   await Promise.allSettled(startPromises);
+
+  // Start retry manager for dead letter entries
+  const retryConfig = config.retry ?? {
+    enabled: true,
+    max_attempts: 5,
+    initial_delay: "5m",
+    max_delay: "24h",
+    backoff_multiplier: 2,
+  };
+
+  startRetryManager({
+    config: retryConfig,
+    onRetry: async (entry: DeadLetterEntry): Promise<boolean> => {
+      const ctx = getAccountContext(entry.accountName);
+      if (!ctx) {
+        logger.warn("Cannot retry: account context not found", {
+          accountName: entry.accountName,
+          messageId: entry.messageId,
+        });
+        return false;
+      }
+
+      try {
+        const success = await processMessage(ctx, entry.folder, entry.uid, entry.messageId);
+        return success;
+      } catch (error) {
+        logger.error("Retry processing failed", {
+          id: entry.id,
+          messageId: entry.messageId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+      }
+    },
+  });
+
+  onShutdown(() => {
+    stopRetryManager();
+  });
 
   const cleanupInterval = setInterval(
     () => {
