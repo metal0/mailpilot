@@ -42,17 +42,17 @@ const MINIMAL_CONFIG = {
 
 export function loadConfig(configPath = "./config.yaml"): Config {
   if (!existsSync(configPath)) {
-    logger.info("Config file not found, creating minimal config", { path: configPath });
+    logger.debug("Config file not found, creating minimal config", { path: configPath });
     const dir = dirname(configPath);
     if (dir && dir !== "." && !existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
     const yaml = stringify(MINIMAL_CONFIG);
     writeFileSync(configPath, yaml, "utf-8");
-    logger.info("Minimal config created - configure via dashboard", { path: configPath });
+    logger.debug("Minimal config created - configure via dashboard", { path: configPath });
   }
 
-  logger.info("Loading configuration", { path: configPath });
+  logger.debug("Loading configuration", { path: configPath });
 
   const rawYaml = readFileSync(configPath, "utf-8");
   const parsed: unknown = parse(rawYaml);

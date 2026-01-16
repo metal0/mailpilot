@@ -42,7 +42,7 @@ export function cleanupProcessedMessages(ttl: string): number {
   const result = stmt.run(cutoff);
 
   if (result.changes > 0) {
-    logger.info("Cleaned up expired processed messages", {
+    logger.debug("Cleaned up expired processed messages", {
       deleted: result.changes,
       ttl,
     });

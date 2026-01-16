@@ -84,7 +84,7 @@ export function cleanupAuditLog(retention: string): number {
   const result = stmt.run(cutoff);
 
   if (result.changes > 0) {
-    logger.info("Cleaned up expired audit entries", {
+    logger.debug("Cleaned up expired audit entries", {
       deleted: result.changes,
       retention,
     });

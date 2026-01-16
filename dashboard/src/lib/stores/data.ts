@@ -119,7 +119,7 @@ export const activitySelectedFilters = writable<Set<string>>(new Set(["move", "f
 
 // Logs-specific filter stores (persisted across tab switches)
 export const logsSearchQuery = writable<string>("");
-export const logsSelectedLevels = writable<Set<string>>(new Set(["debug", "info", "warn", "error"]));
+export const logsSelectedLevels = writable<Set<string>>(new Set(["info", "warn", "error"]));
 
 // Derived stores for filtered data
 export const filteredActivity = derived(

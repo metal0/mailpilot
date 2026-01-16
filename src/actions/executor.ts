@@ -67,7 +67,7 @@ export async function executeAction(ctx: ActionContext): Promise<void> {
 
     case "delete":
       await imapClient.deleteMessage(uid, folder);
-      logger.info("Deleted message", { uid });
+      logger.debug("Deleted message", { uid });
       break;
 
     case "noop":

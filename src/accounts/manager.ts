@@ -41,7 +41,7 @@ export async function startAccount(
 ): Promise<void> {
   const log = logger.child(account.name);
 
-  log.info("Starting account");
+  log.debug("Starting account");
 
   registerWebhooks(account.name, account.webhooks);
 
@@ -152,7 +152,7 @@ function startWatching(ctx: AccountContext): void {
 }
 
 export async function stopAllAccounts(): Promise<void> {
-  logger.info("Stopping all accounts", { count: activeClients.size });
+  logger.debug("Stopping all accounts", { count: activeClients.size });
 
   const disconnectPromises: Promise<void>[] = [];
 
@@ -238,7 +238,7 @@ export async function reconnectAccount(accountName: string): Promise<boolean> {
     return false;
   }
 
-  logger.info("Reconnecting account", { accountName });
+  logger.debug("Reconnecting account", { accountName });
 
   try {
     // Stop IDLE loops for all watched folders
@@ -316,7 +316,7 @@ export async function triggerProcessing(accountName: string, folder = "INBOX"): 
     return false;
   }
 
-  logger.info("Manually triggering processing", { accountName, folder });
+  logger.debug("Manually triggering processing", { accountName, folder });
 
   try {
     await processMailbox(ctx, folder);
@@ -354,7 +354,7 @@ async function stopAccount(accountName: string): Promise<void> {
     return;
   }
 
-  logger.info("Stopping account", { accountName });
+  logger.debug("Stopping account", { accountName });
 
   // Stop IDLE loops
   const watchFolders = ctx.account.folders?.watch ?? ["INBOX"];
@@ -393,7 +393,7 @@ async function stopAccount(accountName: string): Promise<void> {
   unregisterWebhooks(accountName);
   removeAccountStatus(accountName);
 
-  logger.info("Account stopped", { accountName });
+  logger.debug("Account stopped", { accountName });
 }
 
 // Compare account configs to detect changes
@@ -451,7 +451,7 @@ export async function reloadConfig(): Promise<ReloadResult> {
     errors: [],
   };
 
-  logger.info("Reloading configuration", { path: currentConfigPath });
+  logger.debug("Reloading configuration", { path: currentConfigPath });
 
   let newConfig: Config;
   try {

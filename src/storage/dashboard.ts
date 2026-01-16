@@ -91,7 +91,7 @@ export async function createUser(
   const now = Date.now();
   const result = stmt.run(username, passwordHash, now);
 
-  logger.info("Dashboard user created", { username });
+  logger.debug("Dashboard user created", { username });
 
   return {
     id: Number(result.lastInsertRowid),

@@ -179,7 +179,7 @@ export function resolveDeadLetter(id: number): boolean {
   `).run(Date.now(), id);
 
   if (result.changes > 0) {
-    logger.info("Resolved dead letter entry", { id });
+    logger.debug("Resolved dead letter entry", { id });
     return true;
   }
 
@@ -193,7 +193,7 @@ export function removeDeadLetter(id: number): boolean {
   `).run(id);
 
   if (result.changes > 0) {
-    logger.info("Removed dead letter entry", { id });
+    logger.debug("Removed dead letter entry", { id });
     return true;
   }
 
@@ -211,7 +211,7 @@ export function cleanupDeadLetters(retention: string): number {
   `).run(cutoff);
 
   if (result.changes > 0) {
-    logger.info("Cleaned up expired dead letter entries", {
+    logger.debug("Cleaned up expired dead letter entries", {
       deleted: result.changes,
       retention,
     });

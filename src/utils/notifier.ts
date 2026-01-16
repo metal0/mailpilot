@@ -25,11 +25,11 @@ export function initNotifier(options: NotifierOptions): void {
   notifierOptions = options;
 
   if (!options.config.enabled) {
-    logger.info("Notifications disabled by configuration");
+    logger.debug("Notifications disabled by configuration");
     return;
   }
 
-  logger.info("Notifier initialized", {
+  logger.debug("Notifier initialized", {
     channels: options.config.channels,
     events: options.config.events,
   });
@@ -37,7 +37,7 @@ export function initNotifier(options: NotifierOptions): void {
 
 export function stopNotifier(): void {
   notifierOptions = null;
-  logger.info("Notifier stopped");
+  logger.debug("Notifier stopped");
 }
 
 function generateNotificationId(): string {

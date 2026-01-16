@@ -9,5 +9,5 @@ export async function markRead(
   uid: number
 ): Promise<void> {
   await imapClient.markAsRead(uid, folder);
-  logger.info("Marked message as read", { uid });
+  logger.debug("Marked message as read", { uid });
 }

@@ -37,7 +37,7 @@ export function initWebSocketServer(config: DashboardConfig, dryRun = false): We
     const authInfo = client.apiKeyName
       ? `API key: ${client.apiKeyName}`
       : `User ID: ${client.userId}`;
-    logger.info("WebSocket client connected", { authInfo, clients: clients.size });
+    logger.debug("WebSocket client connected", { authInfo, clients: clients.size });
 
     ws.on("close", () => {
       clients.delete(client);
@@ -188,5 +188,5 @@ export function closeAllConnections(): void {
     wss = null;
   }
 
-  logger.info("WebSocket server closed");
+  logger.debug("WebSocket server closed");
 }
