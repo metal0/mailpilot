@@ -78,13 +78,17 @@ export function getDeadLetterEntries(accountName?: string): DeadLetterEntry[] {
     SELECT id, message_id, account_name, folder, uid, error, attempts, created_at, resolved_at,
            retry_status, next_retry_at, last_retry_at
     FROM dead_letter
-    WHERE resolved_at IS NULL
   `;
   const params: string[] = [];
+  const conditions: string[] = [];
 
   if (accountName) {
-    query += ` AND account_name = ?`;
+    conditions.push(`account_name = ?`);
     params.push(accountName);
+  }
+
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(" AND ")}`;
   }
 
   query += ` ORDER BY created_at DESC`;
