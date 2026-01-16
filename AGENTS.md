@@ -245,15 +245,28 @@ Fields: message_id, account_name, actions (JSON), provider, model, subject (if e
 
 ## Writing Effective Prompts
 
+### Auto-Injected Content (DO NOT include in prompts)
+
+The system **automatically appends** to every prompt:
+1. **Folder lists** - Based on `folders.mode` (predefined/auto_create)
+2. **Allowed actions** - If `allowed_actions` is configured
+3. **JSON response schema** - Always included
+4. **Email content** - From, Subject, Date, Body, Attachments
+
+**Users only write classification rules.** The system handles everything else.
+
 ### Do
 - Be specific about folder purposes
 - Include examples of email types
 - Define clear rules for edge cases
 - Use consistent terminology
+- Focus on classification logic only
 
 ### Don't
 - Include folder lists (injected automatically)
 - Include JSON schema (injected automatically)
+- Include "Available actions" lists (injected automatically)
+- Include response format instructions (injected automatically)
 - Over-complicate with too many rules
 - Use ambiguous language
 
@@ -392,6 +405,26 @@ Update these docs when LLM behavior changes:
 - `AGENTS.md` - This file, for technical details
 - GitHub Wiki - User-facing LLM provider setup guides
 - `docs/dashboard.md` - If API endpoints change
+
+### Documentation Accuracy (CRITICAL)
+
+**All documentation must be verified against actual code:**
+
+1. **Prompt structure** - Check `src/llm/prompt.ts` for what's auto-injected
+2. **Response schema** - Check `src/llm/parser.ts` for expected format
+3. **Config fields** - Check `src/config/schema.ts` for exact names:
+   - `folders.watch` (not `watch_folders`)
+   - `backlog.mode` (not `process_existing`)
+   - `polling_interval` (not `check_interval`)
+4. **API endpoints** - Check `src/server/dashboard.ts`:
+   - `/api/dead-letter` (singular)
+   - `/api/logs` supports `accountName` filter
+5. **Model names** - Keep current with provider offerings
+
+**Key clarification for prompt docs:**
+- Users write classification rules ONLY
+- System auto-injects: folders, actions, JSON schema, email content
+- Do NOT document that users need to include JSON format or action lists
 
 ---
 

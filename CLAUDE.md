@@ -160,6 +160,26 @@ When making changes to the codebase, documentation MUST be reviewed and updated:
    - `docs/dashboard.md` - Dashboard API reference
    - Other technical implementation docs
 
+### Documentation Accuracy (CRITICAL)
+
+**Documentation MUST be accurate.** Before writing or updating docs:
+
+1. **Verify against code** - Check actual schema, endpoints, and behavior
+2. **Use correct config names** - Check `src/config/schema.ts` for exact field names:
+   - `folders.watch` (not `watch_folders`)
+   - `backlog.mode` (not `process_existing`)
+   - `polling_interval` (not `check_interval`)
+   - `server.port` (no `server.host`)
+3. **Check API endpoints** - Verify against `src/server/dashboard.ts`:
+   - `/api/dead-letter` (singular, not `dead-letters`)
+   - `/api/logs` supports `accountName` filter
+4. **Prompt documentation** - Be clear about what's auto-injected vs user-written:
+   - **Auto-injected:** folder lists, allowed actions, JSON schema, email content
+   - **User writes:** classification rules only
+5. **Version numbers** - Keep examples current with `package.json`
+
+**Wrong documentation is worse than no documentation.**
+
 ### Unit Tests (HIGH PRIORITY)
 
 When modifying code, unit tests MUST be checked and updated:
