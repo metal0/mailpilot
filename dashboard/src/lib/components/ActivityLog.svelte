@@ -348,9 +348,11 @@
     try {
       const result = await api.skipDeadLetter(errorPreviewEntry.id);
       if (result.success) {
-        deadLetters.update(entries => entries.filter(e => e.id !== errorPreviewEntry!.id));
-        showErrorPreview = false;
-        errorPreviewEntry = null;
+        const skippedId = errorPreviewEntry.id;
+        deadLetters.update(entries => entries.map(e =>
+          e.id === skippedId ? { ...e, retryStatus: "skipped" as const } : e
+        ));
+        errorPreviewEntry = { ...errorPreviewEntry, retryStatus: "skipped" };
       }
     } catch (e) {
       console.error("Failed to skip dead letter:", e);
