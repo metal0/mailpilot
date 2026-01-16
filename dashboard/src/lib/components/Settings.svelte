@@ -92,7 +92,6 @@
 
   interface NotificationsConfig {
     enabled?: boolean;
-    channels?: "browser"[];
     events?: ("error" | "connection_lost" | "dead_letter" | "retry_exhausted" | "daily_summary")[];
     daily_summary_time?: string;
     quiet_hours?: {
@@ -244,7 +243,6 @@
     "logging.level": "Log level: debug, info, warn, or error",
     "server.port": "HTTP server port for health checks and dashboard",
     "notifications.enabled": "Enable notifications for important events",
-    "notifications.channels": "Where to send notifications (browser)",
     "notifications.events": "Which events trigger notifications",
     "notifications.daily_summary_time": "When to send daily summary (24h format, e.g., 09:00)",
     "notifications.quiet_hours": "Suppress notifications during these hours",
@@ -311,7 +309,6 @@
       loadedConfig.antivirus = loadedConfig.antivirus ?? { enabled: false };
       loadedConfig.notifications = loadedConfig.notifications ?? {
         enabled: true,
-        channels: ["browser"],
         events: ["error", "connection_lost"],
         quiet_hours: { enabled: false, start: "22:00", end: "08:00" },
       };
@@ -2010,32 +2007,6 @@
               <div class="form-group">
                 <label>
                   <span class="label-text">
-                    {$t("settings.notifications.channels")}
-                    <span class="help-icon" title={helpTexts["notifications.channels"]}>?</span>
-                  </span>
-                  <div class="checkbox-group">
-                    <label class="checkbox-inline">
-                      <input
-                        type="checkbox"
-                        checked={config.notifications.channels?.includes("browser")}
-                        onchange={(e) => {
-                          const checked = (e.target as HTMLInputElement).checked;
-                          if (checked) {
-                            config.notifications.channels = [...(config.notifications.channels ?? []), "browser"];
-                          } else {
-                            config.notifications.channels = (config.notifications.channels ?? []).filter(c => c !== "browser");
-                          }
-                        }}
-                      />
-                      <span>{$t("settings.notifications.channelBrowser")}</span>
-                    </label>
-                  </div>
-                </label>
-              </div>
-
-              <div class="form-group">
-                <label>
-                  <span class="label-text">
                     {$t("settings.notifications.events")}
                     <span class="help-icon" title={helpTexts["notifications.events"]}>?</span>
                   </span>
@@ -2985,9 +2956,13 @@
   }
 
   .wizard-section.section-locked {
-    opacity: 0.5;
     pointer-events: none;
     background: var(--bg-tertiary);
+  }
+
+  .wizard-section.section-locked > *:not(.section-lock-overlay) {
+    filter: blur(4px);
+    opacity: 0.6;
   }
 
   .section-lock-overlay {

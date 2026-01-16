@@ -345,8 +345,6 @@ const en = {
   // Settings - Notifications Section
   "settings.notifications.sectionTitle": "Notifications",
   "settings.notifications.enableLabel": "Enable Notifications",
-  "settings.notifications.channels": "Notification Channels",
-  "settings.notifications.channelBrowser": "Browser",
   "settings.notifications.events": "Events",
   "settings.notifications.eventError": "Processing Errors",
   "settings.notifications.eventConnectionLost": "Connection Lost",

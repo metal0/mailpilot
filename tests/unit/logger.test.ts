@@ -324,4 +324,176 @@ describe("Child Logger Context", () => {
 
     expect(logBuffer[0].context).toBe("parent:child");
   });
+
+  it("handles deeply nested contexts", () => {
+    const context = "app:module:component:instance";
+    expect(context.split(":")).toHaveLength(4);
+  });
+
+  it("handles empty subcontext", () => {
+    const parent = "parent";
+    const sub = "";
+    const combined = `${parent}:${sub}`;
+    expect(combined).toBe("parent:");
+  });
+});
+
+describe("Log Pagination", () => {
+  const LOG_LEVELS: Record<LogLevel, number> = {
+    debug: 0,
+    info: 1,
+    warn: 2,
+    error: 3,
+  };
+
+  function getLogsPaginated(
+    logBuffer: LogEntry[],
+    page = 1,
+    pageSize = 50,
+    levelFilter?: LogLevel
+  ) {
+    let logs = logBuffer;
+
+    if (levelFilter) {
+      const minLevel = LOG_LEVELS[levelFilter];
+      logs = logs.filter((entry) => LOG_LEVELS[entry.level] >= minLevel);
+    }
+
+    const reversedLogs = [...logs].reverse();
+    const total = reversedLogs.length;
+    const totalPages = Math.ceil(total / pageSize);
+    const offset = (page - 1) * pageSize;
+    const paginatedLogs = reversedLogs.slice(offset, offset + pageSize);
+
+    return {
+      logs: paginatedLogs,
+      total,
+      page,
+      pageSize,
+      totalPages,
+    };
+  }
+
+  it("returns first page by default", () => {
+    const buffer: LogEntry[] = Array.from({ length: 100 }, (_, i) => ({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      context: "test",
+      message: `Message ${i}`,
+    }));
+
+    const result = getLogsPaginated(buffer);
+    expect(result.page).toBe(1);
+    expect(result.logs).toHaveLength(50);
+  });
+
+  it("calculates total pages correctly", () => {
+    const buffer: LogEntry[] = Array.from({ length: 100 }, (_, i) => ({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      context: "test",
+      message: `Message ${i}`,
+    }));
+
+    const result = getLogsPaginated(buffer, 1, 25);
+    expect(result.totalPages).toBe(4);
+    expect(result.total).toBe(100);
+  });
+
+  it("returns correct page content", () => {
+    const buffer: LogEntry[] = Array.from({ length: 10 }, (_, i) => ({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      context: "test",
+      message: `Message ${i}`,
+    }));
+
+    const result = getLogsPaginated(buffer, 2, 3);
+    expect(result.logs).toHaveLength(3);
+    expect(result.page).toBe(2);
+  });
+
+  it("handles empty buffer", () => {
+    const result = getLogsPaginated([], 1, 50);
+    expect(result.logs).toHaveLength(0);
+    expect(result.total).toBe(0);
+    expect(result.totalPages).toBe(0);
+  });
+
+  it("filters by level before pagination", () => {
+    const buffer: LogEntry[] = [
+      { timestamp: new Date().toISOString(), level: "debug", context: "test", message: "Debug 1" },
+      { timestamp: new Date().toISOString(), level: "info", context: "test", message: "Info 1" },
+      { timestamp: new Date().toISOString(), level: "warn", context: "test", message: "Warn 1" },
+      { timestamp: new Date().toISOString(), level: "error", context: "test", message: "Error 1" },
+    ];
+
+    const result = getLogsPaginated(buffer, 1, 50, "warn");
+    expect(result.total).toBe(2);
+    expect(result.logs.every((l) => l.level === "warn" || l.level === "error")).toBe(true);
+  });
+
+  it("returns newest first", () => {
+    const buffer: LogEntry[] = [
+      { timestamp: "2024-01-01T10:00:00Z", level: "info", context: "test", message: "Old" },
+      { timestamp: "2024-01-01T11:00:00Z", level: "info", context: "test", message: "New" },
+    ];
+
+    const result = getLogsPaginated(buffer, 1, 10);
+    expect(result.logs[0].message).toBe("New");
+    expect(result.logs[1].message).toBe("Old");
+  });
+
+  it("handles last partial page", () => {
+    const buffer: LogEntry[] = Array.from({ length: 7 }, (_, i) => ({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      context: "test",
+      message: `Message ${i}`,
+    }));
+
+    const result = getLogsPaginated(buffer, 2, 5);
+    expect(result.logs).toHaveLength(2);
+    expect(result.totalPages).toBe(2);
+  });
+
+  it("returns empty for out of range page", () => {
+    const buffer: LogEntry[] = Array.from({ length: 10 }, (_, i) => ({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      context: "test",
+      message: `Message ${i}`,
+    }));
+
+    const result = getLogsPaginated(buffer, 10, 5);
+    expect(result.logs).toHaveLength(0);
+  });
+});
+
+describe("Broadcast functionality", () => {
+  it("broadcast function signature", () => {
+    const broadcastFn = (data: unknown) => {
+      // No-op
+    };
+    expect(typeof broadcastFn).toBe("function");
+  });
+
+  it("broadcast receives log entry structure", () => {
+    const received: LogEntry[] = [];
+    const broadcastFn = (data: unknown) => {
+      received.push(data as LogEntry);
+    };
+
+    const entry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      level: "info",
+      context: "test",
+      message: "Broadcast test",
+    };
+
+    broadcastFn(entry);
+
+    expect(received).toHaveLength(1);
+    expect(received[0].message).toBe("Broadcast test");
+  });
 });

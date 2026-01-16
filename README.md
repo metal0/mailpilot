@@ -8,7 +8,7 @@
 AI-powered email processing daemon that uses LLM classification to automatically organize, flag, and manage your inbox.
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="Mailpilot Dashboard" width="700">
+  <img src="docs/images/dashboard-overview.png" alt="Mailpilot Dashboard" width="800">
 </p>
 
 ## Features
