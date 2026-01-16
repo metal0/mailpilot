@@ -16,7 +16,8 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "email",
@@ -53,6 +54,7 @@
     "@types/mailparser": "^3.4.6",
     "@types/node": "^25.0.8",
     "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^4.0.17",
     "eslint": "^9.39.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",

@@ -338,6 +338,11 @@ describe("Child Logger Context", () => {
   });
 });
 
+interface LogsFilter {
+  level?: LogLevel;
+  accountName?: string;
+}
+
 describe("Log Pagination", () => {
   const LOG_LEVELS: Record<LogLevel, number> = {
     debug: 0,
@@ -350,13 +355,31 @@ describe("Log Pagination", () => {
     logBuffer: LogEntry[],
     page = 1,
     pageSize = 50,
-    levelFilter?: LogLevel
+    filter?: LogsFilter
   ) {
     let logs = logBuffer;
 
-    if (levelFilter) {
-      const minLevel = LOG_LEVELS[levelFilter];
+    // Apply level filter
+    if (filter?.level) {
+      const minLevel = LOG_LEVELS[filter.level];
       logs = logs.filter((entry) => LOG_LEVELS[entry.level] >= minLevel);
+    }
+
+    // Apply account filter - must be done BEFORE pagination
+    if (filter?.accountName) {
+      const accountLower = filter.accountName.toLowerCase();
+      logs = logs.filter((log) => {
+        // Check context field (e.g., "worker:accountName", "imap-client:accountName")
+        if (log.context.toLowerCase().includes(accountLower)) {
+          return true;
+        }
+        // Check meta for account references
+        if (log.meta) {
+          const metaStr = JSON.stringify(log.meta).toLowerCase();
+          return metaStr.includes(accountLower);
+        }
+        return false;
+      });
     }
 
     const reversedLogs = [...logs].reverse();
@@ -428,7 +451,7 @@ describe("Log Pagination", () => {
       { timestamp: new Date().toISOString(), level: "error", context: "test", message: "Error 1" },
     ];
 
-    const result = getLogsPaginated(buffer, 1, 50, "warn");
+    const result = getLogsPaginated(buffer, 1, 50, { level: "warn" });
     expect(result.total).toBe(2);
     expect(result.logs.every((l) => l.level === "warn" || l.level === "error")).toBe(true);
   });
@@ -467,6 +490,96 @@ describe("Log Pagination", () => {
 
     const result = getLogsPaginated(buffer, 10, 5);
     expect(result.logs).toHaveLength(0);
+  });
+
+  describe("account filtering", () => {
+    it("filters by account name in context", () => {
+      const buffer: LogEntry[] = [
+        { timestamp: new Date().toISOString(), level: "info", context: "worker:personal-gmail", message: "Processing" },
+        { timestamp: new Date().toISOString(), level: "info", context: "worker:work-email", message: "Processing" },
+        { timestamp: new Date().toISOString(), level: "info", context: "imap-client:personal-gmail", message: "Connected" },
+        { timestamp: new Date().toISOString(), level: "info", context: "main", message: "Started" },
+      ];
+
+      const result = getLogsPaginated(buffer, 1, 50, { accountName: "personal-gmail" });
+      expect(result.total).toBe(2);
+      expect(result.logs.every((l) => l.context.includes("personal-gmail"))).toBe(true);
+    });
+
+    it("filters by account name in meta", () => {
+      const buffer: LogEntry[] = [
+        { timestamp: new Date().toISOString(), level: "info", context: "llm", message: "Classifying", meta: { account: "personal-gmail" } },
+        { timestamp: new Date().toISOString(), level: "info", context: "llm", message: "Classifying", meta: { account: "work-email" } },
+        { timestamp: new Date().toISOString(), level: "info", context: "main", message: "Started" },
+      ];
+
+      const result = getLogsPaginated(buffer, 1, 50, { accountName: "personal-gmail" });
+      expect(result.total).toBe(1);
+      expect(result.logs[0].meta?.account).toBe("personal-gmail");
+    });
+
+    it("account filter is case-insensitive", () => {
+      const buffer: LogEntry[] = [
+        { timestamp: new Date().toISOString(), level: "info", context: "worker:Personal-Gmail", message: "Processing" },
+        { timestamp: new Date().toISOString(), level: "info", context: "worker:WORK-EMAIL", message: "Processing" },
+      ];
+
+      const result = getLogsPaginated(buffer, 1, 50, { accountName: "personal-gmail" });
+      expect(result.total).toBe(1);
+    });
+
+    it("account filter applies before pagination for correct total", () => {
+      // Create 100 logs: 50 for account1, 50 for account2
+      const buffer: LogEntry[] = [];
+      for (let i = 0; i < 50; i++) {
+        buffer.push({ timestamp: new Date().toISOString(), level: "info", context: "worker:account1", message: `Msg ${i}` });
+        buffer.push({ timestamp: new Date().toISOString(), level: "info", context: "worker:account2", message: `Msg ${i}` });
+      }
+
+      // Request page 1 with pageSize 50, filtered by account1
+      const result = getLogsPaginated(buffer, 1, 50, { accountName: "account1" });
+
+      // Should have exactly 50 logs total (all from account1)
+      expect(result.total).toBe(50);
+      expect(result.logs).toHaveLength(50);
+      expect(result.logs.every((l) => l.context.includes("account1"))).toBe(true);
+    });
+
+    it("combines level and account filters", () => {
+      const buffer: LogEntry[] = [
+        { timestamp: new Date().toISOString(), level: "debug", context: "worker:personal", message: "Debug" },
+        { timestamp: new Date().toISOString(), level: "info", context: "worker:personal", message: "Info" },
+        { timestamp: new Date().toISOString(), level: "warn", context: "worker:personal", message: "Warn" },
+        { timestamp: new Date().toISOString(), level: "error", context: "worker:work", message: "Error" },
+        { timestamp: new Date().toISOString(), level: "info", context: "worker:work", message: "Info" },
+      ];
+
+      const result = getLogsPaginated(buffer, 1, 50, { level: "warn", accountName: "personal" });
+      expect(result.total).toBe(1);
+      expect(result.logs[0].level).toBe("warn");
+      expect(result.logs[0].context).toContain("personal");
+    });
+
+    it("returns empty when no logs match account filter", () => {
+      const buffer: LogEntry[] = [
+        { timestamp: new Date().toISOString(), level: "info", context: "worker:account1", message: "Msg" },
+        { timestamp: new Date().toISOString(), level: "info", context: "worker:account2", message: "Msg" },
+      ];
+
+      const result = getLogsPaginated(buffer, 1, 50, { accountName: "nonexistent" });
+      expect(result.total).toBe(0);
+      expect(result.logs).toHaveLength(0);
+    });
+
+    it("handles partial account name matches", () => {
+      const buffer: LogEntry[] = [
+        { timestamp: new Date().toISOString(), level: "info", context: "worker:my-personal-email", message: "Msg" },
+        { timestamp: new Date().toISOString(), level: "info", context: "worker:work", message: "Msg" },
+      ];
+
+      const result = getLogsPaginated(buffer, 1, 50, { accountName: "personal" });
+      expect(result.total).toBe(1);
+    });
   });
 });
 

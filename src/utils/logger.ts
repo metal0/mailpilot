@@ -113,16 +113,39 @@ export interface LogsPaginatedResult {
   totalPages: number;
 }
 
+export interface LogsFilter {
+  level?: LogLevel;
+  accountName?: string;
+}
+
 export function getLogsPaginated(
   page = 1,
   pageSize = 50,
-  levelFilter?: LogLevel
+  filter?: LogsFilter
 ): LogsPaginatedResult {
   let logs = logBuffer;
 
-  if (levelFilter) {
-    const minLevel = LOG_LEVELS[levelFilter];
+  // Apply level filter
+  if (filter?.level) {
+    const minLevel = LOG_LEVELS[filter.level];
     logs = logs.filter((entry) => LOG_LEVELS[entry.level] >= minLevel);
+  }
+
+  // Apply account filter - must be done BEFORE pagination
+  if (filter?.accountName) {
+    const accountLower = filter.accountName.toLowerCase();
+    logs = logs.filter((log) => {
+      // Check context field (e.g., "worker:accountName", "imap-client:accountName")
+      if (log.context.toLowerCase().includes(accountLower)) {
+        return true;
+      }
+      // Check meta for account references
+      if (log.meta) {
+        const metaStr = JSON.stringify(log.meta).toLowerCase();
+        return metaStr.includes(accountLower);
+      }
+      return false;
+    });
   }
 
   // Logs are stored oldest-first, we want newest-first for display

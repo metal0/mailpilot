@@ -29,7 +29,7 @@ import { getAccountStatuses, getUptime, getVersion } from "./status.js";
 import { broadcastStats } from "./websocket.js";
 import { getDetailedProviderStats, getAllProviders, updateProviderHealth } from "../llm/providers.js";
 import { testConnection as testLlmConnection } from "../llm/client.js";
-import { getLogsPaginated, type LogLevel, createLogger } from "../utils/logger.js";
+import { getLogsPaginated, type LogLevel, type LogsFilter, createLogger } from "../utils/logger.js";
 
 const logger = createLogger("dashboard");
 import {
@@ -569,25 +569,11 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     const levelFilter = c.req.query("level") as LogLevel | undefined;
     const accountName = c.req.query("accountName");
 
-    const result = getLogsPaginated(page, pageSize, levelFilter);
+    const filter: LogsFilter = {};
+    if (levelFilter) filter.level = levelFilter;
+    if (accountName) filter.accountName = accountName;
 
-    // Filter by account if specified
-    if (accountName) {
-      const accountLower = accountName.toLowerCase();
-      result.logs = result.logs.filter((log) => {
-        // Check context field (e.g., "[worker:accountName]")
-        if (log.context.toLowerCase().includes(accountLower)) {
-          return true;
-        }
-        // Check meta for account references
-        if (log.meta) {
-          const metaStr = JSON.stringify(log.meta).toLowerCase();
-          return metaStr.includes(accountLower);
-        }
-        return false;
-      });
-    }
-
+    const result = getLogsPaginated(page, pageSize, filter);
     return c.json(result);
   });
 
