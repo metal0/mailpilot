@@ -8,6 +8,29 @@ Mailpilot is an AI-powered email processing daemon that uses LLM classification 
 
 ## Critical Rules
 
+### Testing is MANDATORY (NON-NEGOTIABLE)
+
+**Every code change MUST include tests. This is not optional.**
+
+When implementing or modifying any feature:
+
+1. **Unit Tests** - Create or update tests in `tests/unit/`
+   - Run: `pnpm test` or `pnpm test:unit`
+   - Tests must pass before committing
+
+2. **E2E Tests** - Create or update Playwright tests in `tests/e2e/`
+   - Run: `pnpm test:e2e`
+   - For API changes: add tests in `api.spec.ts`
+   - For dashboard changes: add tests in relevant spec files
+
+3. **Execute Tests** - You MUST run tests to verify implementation
+   - Don't assume code works - prove it with passing tests
+   - Fix any failing tests before marking work complete
+
+**This requirement CANNOT be skipped.** Untested code is incomplete code.
+
+See `docs/e2e-testing.md` for full testing documentation.
+
 ### Git Operations (NEVER AUTOMATIC)
 
 **NEVER push to any branch without explicit user approval.** This includes:
@@ -294,9 +317,27 @@ src/
   utils/        # Shared utilities
 
 dashboard/      # Svelte 5 SPA (separate build)
-tests/          # Vitest test suites
+tests/          # Test suites
+  unit/         # Vitest unit tests
+  e2e/          # Playwright E2E tests
 docs/           # Documentation articles
 ```
+
+### Documentation Reference
+
+| Document | Purpose |
+|----------|---------|
+| `CLAUDE.md` | AI development guidelines (this file) |
+| `AGENTS.md` | LLM integration technical details |
+| `docs/ai-e2e-testing.md` | AI agent browser testing protocol |
+| `docs/e2e-testing.md` | Complete E2E testing reference |
+| `docs/dashboard.md` | Dashboard API reference |
+| `docs/database.md` | Database schema documentation |
+| `docs/folder-modes.md` | Folder configuration modes |
+| `docs/oauth-setup.md` | OAuth configuration guide |
+| `docs/antivirus.md` | ClamAV integration |
+| `docs/processing-headers.md` | Email header processing |
+| `docs/ROADMAP.md` | Feature roadmap |
 
 ### Data Flow
 
@@ -352,27 +393,99 @@ Located in `dashboard/` with separate `package.json`.
 3. Build with `pnpm dashboard:build`
 4. Update `docs/dashboard.md` if UI features change
 
-### Browser Testing with Playwright MCP
+## E2E Testing
 
-For end-to-end testing of dashboard features, use Playwright MCP tools:
+Mailpilot has two E2E testing approaches:
 
-1. **Start the app**: `pnpm dev` (runs backend with hot reload + serves dashboard)
-2. **Navigate**: Use `mcp__plugin_playwright_playwright__browser_navigate` to open `http://localhost:8085`
-3. **Capture state**: Use `mcp__plugin_playwright_playwright__browser_snapshot` to get accessibility tree
-4. **Interact**: Use `mcp__plugin_playwright_playwright__browser_click`, `browser_type`, `browser_select_option`
-5. **Verify API responses**: Use `mcp__plugin_playwright_playwright__browser_evaluate` for fetch calls
+1. **Automated Playwright Tests** - Repeatable regression tests via `pnpm test:e2e`
+2. **AI Agent Browser Testing** - Interactive testing using Chrome MCP tools
 
-Example workflow:
-```
-1. Start app: pnpm dev
-2. Navigate to dashboard
-3. Click Settings > Email Accounts > Add Account
-4. Fill IMAP host, press Enter to probe
-5. Verify port locking, TLS mode options, OAuth detection
-6. Test TLS mode switching updates port correctly
+### Automated Playwright Tests
+
+Located in `tests/e2e/`. Run with:
+
+```bash
+pnpm test:e2e              # Run all E2E tests (starts dev server automatically)
+pnpm test:e2e:headed       # Run with visible browser
+pnpm test:e2e:debug        # Debug mode with inspector
 ```
 
-This is useful for testing complex UI flows like the account wizard, configuration changes, etc.
+**Writing new tests:**
+- Add tests in `tests/e2e/*.spec.ts`
+- Use the `TestReporter` utility for audit trails
+- Tests auto-generate reports in `tests/e2e/reports/`:
+  - `json/` - Machine-readable test results
+  - `markdown/` - Human-readable test reports
+  - `screenshots/` - Visual evidence
+  - `html/` - Playwright HTML report
+
+**Example test structure:**
+```typescript
+import { test } from '@playwright/test';
+import { createTestReporter, navigateTo } from './utils/index.js';
+
+test('feature works correctly', async ({ page }, testInfo) => {
+  const reporter = createTestReporter(testInfo);
+  reporter.setPage(page);
+
+  try {
+    await navigateTo(page, '/', reporter);
+    // ... test steps with reporter.step() calls
+    reporter.complete('pass');
+  } catch (error) {
+    await reporter.stepFailed(error.message);
+    reporter.complete('fail', error.message);
+    throw error;
+  } finally {
+    reporter.saveJsonReport();
+    reporter.saveMarkdownReport();
+  }
+});
+```
+
+### AI Agent Browser Testing Protocol
+
+For interactive E2E testing during development, AI agents follow this protocol:
+
+**Full documentation**: See `docs/ai-e2e-testing.md`
+
+**Quick reference:**
+
+1. **Start test environment:**
+   ```bash
+   pnpm dev   # Wait for "Dashboard server started on port 8085"
+   ```
+
+2. **Initialize browser context:**
+   ```
+   mcp__Claude_in_Chrome__tabs_context_mcp
+   mcp__Claude_in_Chrome__tabs_create_mcp
+   ```
+
+3. **Navigate to dashboard:**
+   ```
+   mcp__Claude_in_Chrome__navigate with url: "http://localhost:8085"
+   ```
+
+4. **Essential MCP tools:**
+   - `read_page` - Get DOM structure before interacting
+   - `find` - Locate elements by natural language
+   - `computer` with `action: "click"` - Click elements
+   - `form_input` - Fill form fields
+   - `computer` with `action: "screenshot"` - Capture evidence
+
+5. **Document results** using the test report template in `docs/ai-e2e-testing.md`
+
+**When to use each approach:**
+
+| Scenario | Use Automated Tests | Use AI Agent Testing |
+|----------|---------------------|----------------------|
+| Regression testing | ✅ | |
+| CI/CD pipeline | ✅ | |
+| Exploratory testing | | ✅ |
+| Feature development | | ✅ |
+| Bug reproduction | | ✅ |
+| Visual verification | | ✅ |
 
 ## Build & Test Commands
 

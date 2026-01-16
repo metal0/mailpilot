@@ -4,6 +4,41 @@ This document describes how Mailpilot uses AI/LLM services for email classificat
 
 > **Note:** User-facing documentation is available on the [GitHub Wiki](https://github.com/metal0/mailpilot/wiki). This file contains technical details for developers.
 
+## CRITICAL: Testing Requirements
+
+**All AI agents implementing or modifying code MUST:**
+
+1. **Create/Update Unit Tests** (`tests/unit/`)
+   - Add tests for new functions and modules
+   - Update tests when modifying existing behavior
+   - Run: `pnpm test` or `pnpm test:unit`
+
+2. **Create/Update E2E Tests** (`tests/e2e/`)
+   - Add Playwright tests for new features
+   - Update existing tests when UI/API changes
+   - Run: `pnpm test:e2e`
+
+3. **Execute Tests to Verify**
+   - Run all relevant tests before marking work complete
+   - Fix any failing tests
+   - Document test scenarios in commit messages
+
+4. **Seed Test Data When Needed**
+   - Run: `pnpm seed:test` to populate test database
+   - See `docs/e2e-testing.md` for seeding options
+
+**This is MANDATORY and cannot be skipped.** See `docs/e2e-testing.md` for full details.
+
+### Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| `CLAUDE.md` | AI development guidelines |
+| `docs/ai-e2e-testing.md` | AI agent browser testing protocol |
+| `docs/e2e-testing.md` | Complete E2E testing reference |
+| `docs/dashboard.md` | Dashboard API reference |
+| `docs/database.md` | Database schema documentation |
+
 ## Overview
 
 Mailpilot uses LLM APIs to classify incoming emails and determine actions (move to folder, flag, mark as read, delete, etc.). The system is provider-agnostic and supports any OpenAI-compatible API.
@@ -409,6 +444,10 @@ When modifying LLM code:
 ### End-to-End Testing (EXHAUSTIVE)
 
 E2E testing must cover most normal use and edge case situations. For LLM integration changes:
+
+**Testing Approaches:**
+- **Automated tests**: `pnpm test:e2e` - Playwright-based regression tests
+- **AI agent testing**: Follow `docs/ai-e2e-testing.md` for interactive browser testing
 
 **Required Test Coverage:**
 1. Start app with `pnpm dev`

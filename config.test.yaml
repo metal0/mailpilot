@@ -1,0 +1,24 @@
+# E2E Test configuration
+# Only starts the dashboard server without connecting to IMAP
+
+dry_run: true
+polling_interval: 1h
+
+server:
+  port: 8085
+  session_secret: e2e-test-secret-key
+
+dashboard:
+  enabled: true
+  session_ttl: 24h
+
+state:
+  database_path: ./data/test-mailpilot.db
+
+llm_providers:
+  - name: test-provider
+    api_url: https://api.openai.com/v1/chat/completions
+    api_key: sk-test-fake-key
+    default_model: gpt-4o-mini
+
+accounts: []
