@@ -33,3 +33,5 @@ config.yaml
 # Spec file (local only)
 tmp/
 SPEC*.md
+
+settings.local.json
