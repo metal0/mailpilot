@@ -85,10 +85,22 @@ function handleMessage(event: MessageEvent): void {
         });
         break;
 
-      case "account_update":
-        // Trigger stats refresh for account changes
-        stats.update((s) => s);
+      case "account_update": {
+        // Merge updated account data into stats store
+        const accountUpdate = message.data as Partial<DashboardStats["accounts"][0]> & { name: string };
+        stats.update((s) => {
+          if (!s) return s;
+          const idx = s.accounts.findIndex((a) => a.name === accountUpdate.name);
+          if (idx === -1) return s;
+          return {
+            ...s,
+            accounts: s.accounts.map((a, i) =>
+              i === idx ? { ...a, ...accountUpdate } : a
+            ),
+          };
+        });
         break;
+      }
 
       case "toast":
         const toast = message.data as { message: string; type?: "info" | "success" | "error" };
