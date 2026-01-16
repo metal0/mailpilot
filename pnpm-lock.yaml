@@ -48,6 +48,9 @@ importers:
       '@eslint/js':
         specifier: ^9.39.2
         version: 9.39.2
+      '@playwright/test':
+        specifier: ^1.57.0
+        version: 1.57.0
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
