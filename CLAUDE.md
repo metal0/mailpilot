@@ -8,6 +8,29 @@ Mailpilot is an AI-powered email processing daemon that uses LLM classification 
 
 ## Critical Rules
 
+### Testing is MANDATORY (NON-NEGOTIABLE)
+
+**Every code change MUST include tests. This is not optional.**
+
+When implementing or modifying any feature:
+
+1. **Unit Tests** - Create or update tests in `tests/unit/`
+   - Run: `pnpm test` or `pnpm test:unit`
+   - Tests must pass before committing
+
+2. **E2E Tests** - Create or update Playwright tests in `tests/e2e/`
+   - Run: `pnpm test:e2e`
+   - For API changes: add tests in `api.spec.ts`
+   - For dashboard changes: add tests in relevant spec files
+
+3. **Execute Tests** - You MUST run tests to verify implementation
+   - Don't assume code works - prove it with passing tests
+   - Fix any failing tests before marking work complete
+
+**This requirement CANNOT be skipped.** Untested code is incomplete code.
+
+See `docs/e2e-testing.md` for full testing documentation.
+
 ### Git Operations (NEVER AUTOMATIC)
 
 **NEVER push to any branch without explicit user approval.** This includes:

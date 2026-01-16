@@ -4,6 +4,31 @@ This document describes how Mailpilot uses AI/LLM services for email classificat
 
 > **Note:** User-facing documentation is available on the [GitHub Wiki](https://github.com/metal0/mailpilot/wiki). This file contains technical details for developers.
 
+## CRITICAL: Testing Requirements
+
+**All AI agents implementing or modifying code MUST:**
+
+1. **Create/Update Unit Tests** (`tests/unit/`)
+   - Add tests for new functions and modules
+   - Update tests when modifying existing behavior
+   - Run: `pnpm test` or `pnpm test:unit`
+
+2. **Create/Update E2E Tests** (`tests/e2e/`)
+   - Add Playwright tests for new features
+   - Update existing tests when UI/API changes
+   - Run: `pnpm test:e2e`
+
+3. **Execute Tests to Verify**
+   - Run all relevant tests before marking work complete
+   - Fix any failing tests
+   - Document test scenarios in commit messages
+
+4. **Seed Test Data When Needed**
+   - Run: `pnpm seed:test` to populate test database
+   - See `docs/e2e-testing.md` for seeding options
+
+**This is MANDATORY and cannot be skipped.** See `docs/e2e-testing.md` for full details.
+
 ### Related Documentation
 
 | Document | Purpose |
