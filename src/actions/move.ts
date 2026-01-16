@@ -10,5 +10,5 @@ export async function moveToFolder(
   targetFolder: string
 ): Promise<void> {
   await imapClient.moveMessage(uid, sourceFolder, targetFolder);
-  logger.info("Moved message", { uid, from: sourceFolder, to: targetFolder });
+  logger.debug("Moved message", { uid, from: sourceFolder, to: targetFolder });
 }

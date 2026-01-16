@@ -10,5 +10,5 @@ export async function applyFlags(
   flags: string[]
 ): Promise<void> {
   await imapClient.flagMessage(uid, folder, flags);
-  logger.info("Applied flags", { uid, flags });
+  logger.debug("Applied flags", { uid, flags });
 }

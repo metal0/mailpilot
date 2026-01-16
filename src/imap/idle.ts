@@ -45,7 +45,7 @@ export function stopIdleLoop(loopKey: string): boolean {
   const control = activeLoops.get(loopKey);
   if (control) {
     control.stop = true;
-    logger.info("Stopping IDLE loop", { loopKey });
+    logger.debug("Stopping IDLE loop", { loopKey });
     return true;
   }
   return false;
@@ -66,7 +66,7 @@ async function idleLoop(
   onNewMail: NewMailCallback,
   control: { stop: boolean }
 ): Promise<void> {
-  logger.info("Starting IDLE loop", { mailbox });
+  logger.debug("Starting IDLE loop", { mailbox });
 
   while (!isShutdownInProgress() && !control.stop) {
     try {
@@ -105,7 +105,7 @@ async function pollingLoop(
   onNewMail: NewMailCallback,
   control: { stop: boolean }
 ): Promise<void> {
-  logger.info("Starting polling loop", { mailbox, intervalMs });
+  logger.debug("Starting polling loop", { mailbox, intervalMs });
 
   while (!isShutdownInProgress() && !control.stop) {
     try {

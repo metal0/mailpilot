@@ -119,7 +119,7 @@ export async function startServer(
 
     // Initialize WebSocket server
     initWebSocketServer(dashboardConfig, dryRun);
-    logger.info("WebSocket server initialized", { dryRun });
+    logger.debug("WebSocket server initialized", { dryRun });
 
     // Set up broadcast functions
     setActivityBroadcast(broadcastActivity);
@@ -142,7 +142,7 @@ export async function startServer(
     app.get("/login", serveStatic({ path: "./dist/dashboard/index.html" }));
     app.get("/setup", serveStatic({ path: "./dist/dashboard/index.html" }));
 
-    logger.info("Dashboard enabled", { path: "/" });
+    logger.debug("Dashboard enabled", { path: "/" });
 
     checkDashboardWarning();
 
@@ -159,7 +159,7 @@ export async function startServer(
       port: serverConfig.port,
     },
     (info) => {
-      logger.info("HTTP server started", { port: info.port });
+      logger.debug("HTTP server started", { port: info.port });
     }
   );
 
@@ -179,7 +179,7 @@ export async function startServer(
         handleUpgrade(req, socket as import("node:stream").Duplex, head as Buffer);
       }
     });
-    logger.info("WebSocket upgrade handler registered", { path: "/ws" });
+    logger.debug("WebSocket upgrade handler registered", { path: "/ws" });
   }
 }
 
@@ -217,7 +217,7 @@ export async function stopServer(): Promise<void> {
       });
     });
     server = null;
-    logger.info("HTTP server stopped");
+    logger.debug("HTTP server stopped");
   }
 }
 

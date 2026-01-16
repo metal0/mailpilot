@@ -24,7 +24,7 @@ export function initDatabase(dbPath: string): Database.Database {
 
   createTables(db);
 
-  logger.info("Database initialized", { path: dbPath });
+  logger.debug("Database initialized", { path: dbPath });
 
   return db;
 }
@@ -141,6 +141,6 @@ export function closeDatabase(): void {
   if (db) {
     db.close();
     db = null;
-    logger.info("Database closed");
+    logger.debug("Database closed");
   }
 }
