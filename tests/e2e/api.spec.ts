@@ -307,6 +307,190 @@ test.describe('API - Authentication Endpoints', () => {
   });
 });
 
+test.describe('API - Webhook Test Endpoint', () => {
+  test('POST /api/test-webhook with valid URL returns success', async ({ request }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+
+    try {
+      await reporter.step('Login');
+      const cookie = await getAuthCookie(request);
+      await reporter.stepComplete();
+
+      await reporter.step('POST /api/test-webhook');
+      // Use httpbin.org as a reliable test endpoint that accepts POST
+      const response = await request.post('/api/test-webhook', {
+        headers: { Cookie: cookie },
+        data: {
+          url: 'https://httpbin.org/post',
+          headers: {},
+        },
+      });
+      await reporter.stepComplete();
+
+      await reporter.step('Verify response status 200');
+      expect(response.status()).toBe(200);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify response body indicates success');
+      const body = await response.json();
+      expect(body).toHaveProperty('success', true);
+      expect(body).toHaveProperty('statusCode');
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('POST /api/test-webhook with invalid URL returns error', async ({ request }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+
+    try {
+      await reporter.step('Login');
+      const cookie = await getAuthCookie(request);
+      await reporter.stepComplete();
+
+      await reporter.step('POST /api/test-webhook with invalid URL');
+      const response = await request.post('/api/test-webhook', {
+        headers: { Cookie: cookie },
+        data: {
+          url: 'not-a-valid-url',
+        },
+      });
+      await reporter.stepComplete();
+
+      await reporter.step('Verify response indicates failure');
+      const body = await response.json();
+      expect(body).toHaveProperty('success', false);
+      expect(body).toHaveProperty('error');
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('POST /api/test-webhook without URL returns error', async ({ request }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+
+    try {
+      await reporter.step('Login');
+      const cookie = await getAuthCookie(request);
+      await reporter.stepComplete();
+
+      await reporter.step('POST /api/test-webhook without URL');
+      const response = await request.post('/api/test-webhook', {
+        headers: { Cookie: cookie },
+        data: {},
+      });
+      await reporter.stepComplete();
+
+      await reporter.step('Verify response indicates failure');
+      const body = await response.json();
+      expect(body).toHaveProperty('success', false);
+      expect(body).toHaveProperty('error', 'URL is required');
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('POST /api/test-webhook with custom headers sends them', async ({ request }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+
+    try {
+      await reporter.step('Login');
+      const cookie = await getAuthCookie(request);
+      await reporter.stepComplete();
+
+      await reporter.step('POST /api/test-webhook with custom headers');
+      const response = await request.post('/api/test-webhook', {
+        headers: { Cookie: cookie },
+        data: {
+          url: 'https://httpbin.org/post',
+          headers: {
+            'X-Custom-Header': 'test-value',
+            'Authorization': 'Bearer test-token',
+          },
+        },
+      });
+      await reporter.stepComplete();
+
+      await reporter.step('Verify response status 200');
+      expect(response.status()).toBe(200);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify response body');
+      const body = await response.json();
+      expect(body).toHaveProperty('success', true);
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('POST /api/test-webhook requires authentication', async ({ baseURL }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+
+    try {
+      const freshRequest = await playwrightRequest.newContext({ baseURL });
+
+      await reporter.step('POST /api/test-webhook without auth');
+      const response = await freshRequest.post('/api/test-webhook', {
+        data: {
+          url: 'https://httpbin.org/post',
+        },
+      });
+      await reporter.stepComplete();
+
+      await reporter.step('Verify response status 401');
+      expect(response.status()).toBe(401);
+      await reporter.stepComplete();
+
+      await freshRequest.dispose();
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+});
+
 test.describe('API - Protected Endpoints', () => {
   test('GET /api/stats returns stats', async ({ request }, testInfo) => {
     const reporter = createTestReporter(testInfo);
