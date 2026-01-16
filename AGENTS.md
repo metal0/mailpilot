@@ -426,6 +426,24 @@ Update these docs when LLM behavior changes:
 - System auto-injects: folders, actions, JSON schema, email content
 - Do NOT document that users need to include JSON format or action lists
 
+### Learning from Mistakes (IMPORTANT)
+
+When you fix an inaccuracy or the user corrects you:
+
+1. **Fix the immediate issue** - Correct the code/docs
+2. **Update permanent instructions** - Add to `CLAUDE.md` or `AGENTS.md` so it doesn't recur:
+   - What was wrong
+   - What is correct
+   - Why (if not obvious)
+
+Examples worth documenting:
+- Prompt structure (what's auto-injected vs user-written)
+- Response parsing edge cases
+- Provider-specific quirks
+- Config field names and their actual purposes
+
+**Don't repeat mistakes. Document what you learn.**
+
 ---
 
 ## Troubleshooting

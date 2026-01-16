@@ -180,6 +180,25 @@ When making changes to the codebase, documentation MUST be reviewed and updated:
 
 **Wrong documentation is worse than no documentation.**
 
+### Learning from Mistakes (IMPORTANT)
+
+When you fix an inaccuracy or the user corrects you about something being wrong:
+
+1. **Fix the immediate issue** - Correct the documentation/code
+2. **Consider adding to permanent instructions** - If the mistake could recur:
+   - Add the correct information to `CLAUDE.md` or `AGENTS.md`
+   - Document the "gotcha" so future sessions don't repeat the error
+   - Include both what's wrong AND what's correct
+
+Examples of things to document:
+- Config field names that are commonly confused
+- API endpoints with non-obvious paths
+- Auto-injected content that shouldn't be manually added
+- Default values that differ from intuition
+- Architectural decisions that affect multiple areas
+
+**Don't repeat the same mistake twice. If you learned something, write it down.**
+
 ### Unit Tests (HIGH PRIORITY)
 
 When modifying code, unit tests MUST be checked and updated:
