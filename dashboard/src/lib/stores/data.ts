@@ -59,7 +59,7 @@ export interface LogEntry {
   meta?: Record<string, unknown>;
 }
 
-export type RetryStatus = "pending" | "retrying" | "exhausted" | "success";
+export type RetryStatus = "pending" | "retrying" | "exhausted" | "success" | "skipped";
 
 export interface DeadLetterEntry {
   id: number;

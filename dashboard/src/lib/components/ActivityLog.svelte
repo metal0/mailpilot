@@ -140,7 +140,9 @@
       }
     }
 
-    if (hasErrorFilter && allEntries.length > 0) {
+    if (hasErrorFilter && hasActionFilters && allEntries.length > 0) {
+      // When both action filters and error filter are active, show dead letters
+      // that fall within the time range of the loaded activity entries
       const timestamps = allEntries.map(e => e.createdAt);
       const newestTime = Math.max(...timestamps);
       const oldestTime = Math.min(...timestamps);
@@ -157,7 +159,8 @@
           entries.push({ type: "error", data: deadLetter });
         }
       }
-    } else if (hasErrorFilter && !hasActionFilters) {
+    } else if (hasErrorFilter) {
+      // When only error filter is active, show all dead letters
       for (const deadLetter of $deadLetters) {
         const matchesAccount = !$selectedAccount || deadLetter.accountName === $selectedAccount;
         const matchesSearch = !$activitySearchQuery ||
@@ -337,6 +340,33 @@
   function openErrorPreview(entry: DeadLetterEntry) {
     errorPreviewEntry = entry;
     showErrorPreview = true;
+  }
+
+  let skipping = $state(false);
+
+  async function handleSkipDeadLetter() {
+    if (!errorPreviewEntry || skipping) return;
+
+    skipping = true;
+    try {
+      const result = await api.skipDeadLetter(errorPreviewEntry.id);
+      if (result.success) {
+        const skippedId = errorPreviewEntry.id;
+        deadLetters.update(entries => entries.map(e =>
+          e.id === skippedId ? { ...e, retryStatus: "skipped" as const } : e
+        ));
+        errorPreviewEntry = { ...errorPreviewEntry, retryStatus: "skipped" };
+      }
+    } catch (e) {
+      console.error("Failed to skip dead letter:", e);
+    } finally {
+      skipping = false;
+    }
+  }
+
+  function closeErrorPreview() {
+    showErrorPreview = false;
+    errorPreviewEntry = null;
   }
 
   // Track filter changes to reload
@@ -559,7 +589,7 @@
   <Modal
     open={showErrorPreview}
     title="Dead Letter Details"
-    onclose={() => { showErrorPreview = false; errorPreviewEntry = null; }}
+    onclose={closeErrorPreview}
     maxWidth="500px"
   >
     {#snippet children()}
@@ -600,6 +630,8 @@
                 <span class="retry-status-badge retry-exhausted">Exhausted</span>
               {:else if errorPreviewEntry.retryStatus === "success"}
                 <span class="retry-status-badge retry-success">Success</span>
+              {:else if errorPreviewEntry.retryStatus === "skipped"}
+                <span class="retry-status-badge retry-skipped">Skipped</span>
               {:else}
                 <span class="retry-status-badge">Unknown</span>
               {/if}
@@ -622,6 +654,20 @@
             <div class="error-preview-error">{errorPreviewEntry.error}</div>
           </div>
         </div>
+      {/if}
+    {/snippet}
+    {#snippet actions()}
+      {#if errorPreviewEntry && (errorPreviewEntry.retryStatus === "pending" || errorPreviewEntry.retryStatus === "retrying")}
+        <button class="btn btn-secondary" onclick={closeErrorPreview}>Close</button>
+        <button class="btn btn-warning" onclick={handleSkipDeadLetter} disabled={skipping}>
+          {#if skipping}
+            Skipping...
+          {:else}
+            Skip Retries
+          {/if}
+        </button>
+      {:else}
+        <button class="btn btn-secondary" onclick={closeErrorPreview}>Close</button>
       {/if}
     {/snippet}
   </Modal>
@@ -1194,5 +1240,47 @@
   .retry-success {
     background: var(--success-muted);
     color: var(--success);
+  }
+
+  .retry-skipped {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    border-radius: var(--radius-md);
+    border: none;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--border-color);
+  }
+
+  .btn-warning {
+    background: var(--warning);
+    color: white;
+  }
+
+  .btn-warning:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--warning) 80%, black);
   }
 </style>

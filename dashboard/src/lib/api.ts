@@ -107,6 +107,10 @@ export async function dismissDeadLetter(id: number): Promise<{ success: boolean 
   return fetchJson(`${BASE_URL}/dead-letter/${id}/dismiss`, { method: "POST" });
 }
 
+export async function skipDeadLetter(id: number): Promise<{ success: boolean }> {
+  return fetchJson(`${BASE_URL}/dead-letter/${id}/skip`, { method: "POST" });
+}
+
 // Account Actions
 export async function pauseAccount(name: string): Promise<{ success: boolean; paused: boolean }> {
   return fetchJson(`${BASE_URL}/accounts/${encodeURIComponent(name)}/pause`, { method: "POST" });

@@ -4,7 +4,7 @@ import { createLogger } from "../utils/logger.js";
 
 const logger = createLogger("dead-letter");
 
-export type RetryStatus = "pending" | "retrying" | "exhausted" | "success";
+export type RetryStatus = "pending" | "retrying" | "exhausted" | "success" | "skipped";
 
 export interface DeadLetterEntry {
   id: number;
@@ -78,13 +78,17 @@ export function getDeadLetterEntries(accountName?: string): DeadLetterEntry[] {
     SELECT id, message_id, account_name, folder, uid, error, attempts, created_at, resolved_at,
            retry_status, next_retry_at, last_retry_at
     FROM dead_letter
-    WHERE resolved_at IS NULL
   `;
   const params: string[] = [];
+  const conditions: string[] = [];
 
   if (accountName) {
-    query += ` AND account_name = ?`;
+    conditions.push(`account_name = ?`);
     params.push(accountName);
+  }
+
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(" AND ")}`;
   }
 
   query += ` ORDER BY created_at DESC`;
@@ -305,6 +309,24 @@ export function markRetrySuccess(id: number): boolean {
 
   if (result.changes > 0) {
     logger.info("Dead letter retry succeeded", { id });
+    return true;
+  }
+
+  return false;
+}
+
+export function skipDeadLetter(id: number): boolean {
+  const db = getDatabase();
+  const now = Date.now();
+
+  const result = db.prepare(`
+    UPDATE dead_letter
+    SET retry_status = 'skipped', resolved_at = ?, last_retry_at = ?
+    WHERE id = ? AND resolved_at IS NULL
+  `).run(now, now, id);
+
+  if (result.changes > 0) {
+    logger.info("Dead letter skipped", { id });
     return true;
   }
 

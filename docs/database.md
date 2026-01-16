@@ -101,12 +101,23 @@ Stores emails that failed processing for later retry.
 | `attempts` | INTEGER | Number of processing attempts (default: 1) |
 | `created_at` | INTEGER | Unix timestamp when first failed |
 | `resolved_at` | INTEGER | Unix timestamp when resolved (nullable) |
+| `retry_status` | TEXT | Status: pending, retrying, exhausted, success, skipped |
+| `next_retry_at` | INTEGER | Unix timestamp for next retry attempt (nullable) |
+| `last_retry_at` | INTEGER | Unix timestamp of last retry attempt (nullable) |
 
 **Indexes:**
 - `idx_dead_letter_account` - For filtering by account
 - `idx_dead_letter_resolved` - For finding unresolved entries
+- `idx_dead_letter_retry` - For finding entries due for retry
 
-**Resolution:** Entries are marked resolved (not deleted) when successfully retried or manually dismissed.
+**Retry Status Values:**
+- `pending` - Waiting for next retry attempt
+- `retrying` - Currently being retried
+- `exhausted` - Max retry attempts reached
+- `success` - Successfully processed after retry
+- `skipped` - User manually skipped retries
+
+**Resolution:** Entries are marked resolved (not deleted) when successfully retried, exhausted, or manually skipped.
 
 ---
 

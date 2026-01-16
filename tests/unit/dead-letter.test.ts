@@ -339,3 +339,134 @@ describe("Dead Letter Entry Structure", () => {
     expect(entry.attempts).toBe(3);
   });
 });
+
+describe("Dead Letter Retry Status", () => {
+  type RetryStatus = "pending" | "retrying" | "exhausted" | "success" | "skipped";
+
+  interface DeadLetterEntryWithRetry extends DeadLetterEntry {
+    retryStatus: RetryStatus;
+    nextRetryAt: number | null;
+    lastRetryAt: number | null;
+  }
+
+  it("supports all retry statuses", () => {
+    const statuses: RetryStatus[] = ["pending", "retrying", "exhausted", "success", "skipped"];
+
+    for (const status of statuses) {
+      const entry: DeadLetterEntryWithRetry = {
+        id: 1,
+        messageId: "msg-1",
+        accountName: "test",
+        folder: "INBOX",
+        uid: 100,
+        error: "Error",
+        attempts: 1,
+        createdAt: Date.now(),
+        resolvedAt: null,
+        retryStatus: status,
+        nextRetryAt: null,
+        lastRetryAt: null,
+      };
+      expect(entry.retryStatus).toBe(status);
+    }
+  });
+
+  describe("skip logic", () => {
+    it("marks entry as skipped with resolved timestamp", () => {
+      const entry: DeadLetterEntryWithRetry = {
+        id: 1,
+        messageId: "msg-1",
+        accountName: "test",
+        folder: "INBOX",
+        uid: 100,
+        error: "LLM timeout",
+        attempts: 2,
+        createdAt: Date.now() - 10000,
+        resolvedAt: null,
+        retryStatus: "pending",
+        nextRetryAt: Date.now() + 60000,
+        lastRetryAt: Date.now() - 5000,
+      };
+
+      const now = Date.now();
+      entry.retryStatus = "skipped";
+      entry.resolvedAt = now;
+      entry.lastRetryAt = now;
+
+      expect(entry.retryStatus).toBe("skipped");
+      expect(entry.resolvedAt).toBe(now);
+    });
+
+    it("skipped entries are not picked for retry", () => {
+      const entries: DeadLetterEntryWithRetry[] = [
+        {
+          id: 1, messageId: "msg-1", accountName: "test", folder: "INBOX", uid: 100,
+          error: "E1", attempts: 1, createdAt: Date.now(), resolvedAt: null,
+          retryStatus: "pending", nextRetryAt: Date.now() - 1000, lastRetryAt: null,
+        },
+        {
+          id: 2, messageId: "msg-2", accountName: "test", folder: "INBOX", uid: 101,
+          error: "E2", attempts: 2, createdAt: Date.now(), resolvedAt: Date.now(),
+          retryStatus: "skipped", nextRetryAt: null, lastRetryAt: Date.now(),
+        },
+        {
+          id: 3, messageId: "msg-3", accountName: "test", folder: "INBOX", uid: 102,
+          error: "E3", attempts: 5, createdAt: Date.now(), resolvedAt: Date.now(),
+          retryStatus: "exhausted", nextRetryAt: null, lastRetryAt: Date.now(),
+        },
+      ];
+
+      const dueForRetry = entries.filter(
+        e => e.resolvedAt === null && e.retryStatus === "pending" && e.nextRetryAt !== null && e.nextRetryAt <= Date.now()
+      );
+
+      expect(dueForRetry.length).toBe(1);
+      expect(dueForRetry[0].id).toBe(1);
+    });
+
+    it("only pending or retrying entries can be skipped", () => {
+      const canSkip = (status: RetryStatus): boolean => {
+        return status === "pending" || status === "retrying";
+      };
+
+      expect(canSkip("pending")).toBe(true);
+      expect(canSkip("retrying")).toBe(true);
+      expect(canSkip("exhausted")).toBe(false);
+      expect(canSkip("success")).toBe(false);
+      expect(canSkip("skipped")).toBe(false);
+    });
+  });
+});
+
+describe("Retry Manager Logic", () => {
+  it("calculates exponential backoff delay", () => {
+    const initialDelay = 5 * 60 * 1000; // 5 minutes
+    const maxDelay = 24 * 60 * 60 * 1000; // 24 hours
+    const backoffMultiplier = 2;
+
+    function calculateDelay(attempts: number): number {
+      const delay = initialDelay * Math.pow(backoffMultiplier, attempts - 1);
+      return Math.min(delay, maxDelay);
+    }
+
+    expect(calculateDelay(1)).toBe(5 * 60 * 1000); // 5 min
+    expect(calculateDelay(2)).toBe(10 * 60 * 1000); // 10 min
+    expect(calculateDelay(3)).toBe(20 * 60 * 1000); // 20 min
+    expect(calculateDelay(4)).toBe(40 * 60 * 1000); // 40 min
+    expect(calculateDelay(5)).toBe(80 * 60 * 1000); // 80 min
+    expect(calculateDelay(10)).toBeLessThanOrEqual(maxDelay); // capped at max
+  });
+
+  it("marks entries as exhausted after max attempts", () => {
+    const maxAttempts = 5;
+    const entries = [
+      { id: 1, attempts: 4, retryStatus: "pending" as const },
+      { id: 2, attempts: 5, retryStatus: "pending" as const },
+      { id: 3, attempts: 6, retryStatus: "pending" as const },
+    ];
+
+    const exhausted = entries.filter(e => e.attempts >= maxAttempts);
+    expect(exhausted.length).toBe(2);
+    expect(exhausted.map(e => e.id)).toEqual([2, 3]);
+  });
+});

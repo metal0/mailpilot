@@ -18,6 +18,8 @@ import {
   buildMultimodalContent,
   hasImages,
 } from "../attachments/index.js";
+import { addToDeadLetter } from "../storage/dead-letter.js";
+import { notifyDeadLetter } from "../utils/notifier.js";
 
 const logger = createLogger("worker");
 
@@ -68,7 +70,7 @@ export async function processMailbox(
   return processed;
 }
 
-async function processMessage(
+export async function processMessage(
   ctx: WorkerContext,
   folder: string,
   uid: number,
@@ -250,10 +252,15 @@ async function processMessage(
 
     return true;
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     log.error("Failed to process message", {
       messageId,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage,
     });
+
+    addToDeadLetter(messageId, account.name, folder, uid, errorMessage);
+    notifyDeadLetter(account.name, messageId, errorMessage);
+
     return false;
   }
 }
