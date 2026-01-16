@@ -125,6 +125,59 @@
     settingsHasChanges.set(hasChanges());
   });
 
+  // Real-time sync: editing modal changes immediately persist to config
+  // This prevents data loss if user accidentally closes the modal
+  $effect(() => {
+    if (!config || !editingAccount) return;
+    const account = editingAccount;
+    const index = editingAccountIndex;
+
+    if (index !== null && index >= 0 && index < config.accounts.length) {
+      config.accounts[index] = JSON.parse(JSON.stringify(account));
+    } else if (index === null && account.name) {
+      const existingIdx = config.accounts.findIndex(a => a.name === account.name);
+      if (existingIdx === -1) {
+        config.accounts = [...config.accounts, JSON.parse(JSON.stringify(account))];
+        editingAccountIndex = config.accounts.length - 1;
+      }
+    }
+  });
+
+  $effect(() => {
+    if (!config || !editingProvider) return;
+    const provider = editingProvider;
+    const index = editingProviderIndex;
+
+    if (index !== null && index >= 0 && index < config.llm_providers.length) {
+      config.llm_providers[index] = JSON.parse(JSON.stringify(provider));
+    } else if (index === null && provider.name) {
+      const existingIdx = config.llm_providers.findIndex(p => p.name === provider.name);
+      if (existingIdx === -1) {
+        config.llm_providers = [...config.llm_providers, JSON.parse(JSON.stringify(provider))];
+        editingProviderIndex = config.llm_providers.length - 1;
+      }
+    }
+  });
+
+  $effect(() => {
+    if (!config || !editingApiKey) return;
+    const apiKey = editingApiKey;
+    const index = editingApiKeyIndex;
+
+    config.dashboard = config.dashboard ?? { api_keys: [] };
+    config.dashboard.api_keys = config.dashboard.api_keys ?? [];
+
+    if (index !== null && index >= 0 && index < config.dashboard.api_keys.length) {
+      config.dashboard.api_keys[index] = JSON.parse(JSON.stringify(apiKey));
+    } else if (index === null && apiKey.name) {
+      const existingIdx = config.dashboard.api_keys.findIndex(k => k.name === apiKey.name);
+      if (existingIdx === -1) {
+        config.dashboard.api_keys = [...config.dashboard.api_keys, JSON.parse(JSON.stringify(apiKey))];
+        editingApiKeyIndex = config.dashboard.api_keys.length - 1;
+      }
+    }
+  });
+
   const changeCount = $derived(() => {
     if (!config || !originalConfig) return 0;
     try {
@@ -161,9 +214,11 @@
   let yamlContent = $state("");
   let yamlLoading = $state(false);
 
-  // Editing state
+  // Editing state - track both the item and its index for real-time syncing
   let editingAccount = $state<Account | null>(null);
+  let editingAccountIndex = $state<number | null>(null);
   let editingProvider = $state<LlmProvider | null>(null);
+  let editingProviderIndex = $state<number | null>(null);
   let editingApiKey = $state<ApiKey | null>(null);
   let editingApiKeyIndex = $state<number | null>(null);
   let showApiKey = $state<string | null>(null);
@@ -197,6 +252,7 @@
   let showAdvancedSection = $state(false);
 
   // Webhook state
+  let showWebhooksModal = $state(false);
   let editingWebhookIndex = $state<number | null>(null);
   let editingWebhook = $state<Webhook | null>(null);
   let testingWebhook = $state(false);
@@ -469,6 +525,7 @@
 
   function addAccount() {
     resetWizardState();
+    editingAccountIndex = null;
     editingAccount = {
       name: "",
       imap: { host: "", port: 993, tls: "tls", auth: "basic", username: "", password: "" },
@@ -476,29 +533,36 @@
     };
   }
 
-  function editAccount(account: Account) {
+  async function editAccount(account: Account) {
+    if (!config) return;
     resetWizardState();
+    const index = config.accounts.findIndex(a => a.name === account.name);
+    editingAccountIndex = index >= 0 ? index : null;
     editingAccount = JSON.parse(JSON.stringify(account));
-    // If editing existing account, assume it's already been tested
+    // Auto-test connection for existing accounts
     if (account.name) {
-      connectionTested = true;
-      wizardState = "connected";
-      connectionFieldsLocked = false; // Unlock for existing accounts
+      await testImapConnection();
+      // If test fails, apply same locks as new account with failed test
+      if (!connectionTested) {
+        connectionFieldsLocked = false;
+        wizardState = "idle";
+      }
     }
   }
 
-  function saveAccount() {
-    if (!config || !editingAccount) return;
-
-    const existingIndex = config.accounts.findIndex(a => a.name === editingAccount!.name);
-    if (existingIndex >= 0) {
-      config.accounts[existingIndex] = editingAccount;
-    } else {
-      config.accounts.push(editingAccount);
-    }
-    config = { ...config };
+  function closeAccountModal() {
     editingAccount = null;
+    editingAccountIndex = null;
+    showWebhooksModal = false;
+    editingWebhook = null;
+    editingWebhookIndex = null;
     resetWizardState();
+  }
+
+  function saveAccount() {
+    // With real-time syncing, changes are already in config
+    // This function now just closes the modal
+    closeAccountModal();
   }
 
   // Webhook management functions
@@ -683,6 +747,7 @@
   }
 
   function addProvider() {
+    editingProviderIndex = null;
     editingProvider = {
       name: "",
       api_url: "https://api.openai.com/v1/chat/completions",
@@ -694,26 +759,28 @@
     showLlmPresetDropdown = false;
   }
 
-  function editProvider(provider: LlmProvider) {
+  async function editProvider(provider: LlmProvider) {
+    if (!config) return;
+    const index = config.llm_providers.findIndex(p => p.name === provider.name);
+    editingProviderIndex = index >= 0 ? index : null;
     editingProvider = JSON.parse(JSON.stringify(provider));
-    llmConnectionTested = true; // Existing providers are assumed to have been tested
     llmTestResult = null;
     showLlmPresetDropdown = false;
+    // Auto-test connection for existing providers
+    await testLlmProviderConnection();
+  }
+
+  function closeProviderModal() {
+    editingProvider = null;
+    editingProviderIndex = null;
+    llmConnectionTested = false;
+    llmTestResult = null;
   }
 
   function saveProvider() {
-    if (!config || !editingProvider) return;
-
-    const existingIndex = config.llm_providers.findIndex(p => p.name === editingProvider!.name);
-    if (existingIndex >= 0) {
-      config.llm_providers[existingIndex] = editingProvider;
-    } else {
-      config.llm_providers.push(editingProvider);
-    }
-    config = { ...config };
-    editingProvider = null;
-    llmConnectionTested = false;
-    llmTestResult = null;
+    // With real-time syncing, changes are already in config
+    // This function now just closes the modal
+    closeProviderModal();
   }
 
   function selectLlmPreset(preset: api.LlmPreset) {
@@ -773,33 +840,28 @@
   }
 
   function addApiKey() {
+    editingApiKeyIndex = null;
     editingApiKey = {
       name: "",
       key: generateApiKey(),
       permissions: ["read:stats"],
     };
-    editingApiKeyIndex = null;
   }
 
   function editApiKey(apiKey: ApiKey, index: number) {
-    editingApiKey = JSON.parse(JSON.stringify(apiKey));
     editingApiKeyIndex = index;
+    editingApiKey = JSON.parse(JSON.stringify(apiKey));
+  }
+
+  function closeApiKeyModal() {
+    editingApiKey = null;
+    editingApiKeyIndex = null;
   }
 
   function saveApiKey() {
-    if (!config || !editingApiKey) return;
-
-    config.dashboard = config.dashboard ?? { api_keys: [] };
-    config.dashboard.api_keys = config.dashboard.api_keys ?? [];
-
-    if (editingApiKeyIndex !== null) {
-      config.dashboard.api_keys[editingApiKeyIndex] = editingApiKey;
-    } else {
-      config.dashboard.api_keys.push(editingApiKey);
-    }
-    config = { ...config };
-    editingApiKey = null;
-    editingApiKeyIndex = null;
+    // With real-time syncing, changes are already in config
+    // This function now just closes the modal
+    closeApiKeyModal();
   }
 
   function removeApiKey(index: number) {
@@ -1108,8 +1170,8 @@
             {#if editingAccount}
               <div
                 class="modal-overlay"
-                onclick={() => editingAccount = null}
-                onkeydown={(e) => e.key === "Escape" && (editingAccount = null)}
+                onclick={closeAccountModal}
+                onkeydown={(e) => e.key === "Escape" && closeAccountModal()}
                 role="presentation"
               >
                 <div
@@ -1119,12 +1181,33 @@
                   aria-modal="true"
                   aria-labelledby="account-modal-title"
                 >
-                  <h3 id="account-modal-title">{editingAccount.name ? $t("settings.accounts.editAccountTitle", { name: editingAccount.name }) : $t("settings.accounts.newAccount")}</h3>
+                  <div class="modal-header-row">
+                    <h3 id="account-modal-title">{editingAccount.name ? $t("settings.accounts.editAccountTitle", { name: editingAccount.name }) : $t("settings.accounts.newAccount")}</h3>
+                    <button
+                      type="button"
+                      class="btn btn-icon webhooks-btn"
+                      class:has-webhooks={(editingAccount.webhooks?.length ?? 0) > 0}
+                      disabled={!connectionTested}
+                      title={connectionTested ? $t("settings.accounts.webhooksSection") : $t("settings.accounts.testToUnlock")}
+                      onclick={() => showWebhooksModal = !showWebhooksModal}
+                    >
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                      </svg>
+                      {#if (editingAccount.webhooks?.length ?? 0) > 0}
+                        <span class="webhook-count">{editingAccount.webhooks?.length}</span>
+                      {/if}
+                    </button>
+                  </div>
 
-                  <div class="form-group">
+                  <div class="form-group" class:field-required={!editingAccount.name}>
                     <label>
-                      <span class="label-text">{$t("settings.accounts.name")}</span>
-                      <input type="text" bind:value={editingAccount.name} placeholder="personal-gmail" />
+                      <span class="label-text">{$t("settings.accounts.name")} <span class="required-asterisk">*</span></span>
+                      <input type="text" bind:value={editingAccount.name} placeholder="personal-gmail" required />
+                      {#if !editingAccount.name}
+                        <span class="required-hint">{$t("settings.requiredField")}</span>
+                      {/if}
                     </label>
                   </div>
 
@@ -1247,32 +1330,41 @@
                     </div>
                   </div>
 
-                  <div class="form-group">
-                    <label>
-                      <span class="label-text">{$t("settings.accounts.user")} <span class="help-icon" title={helpTexts["imap.username"]}>?</span></span>
-                      <input type="text" bind:value={editingAccount.imap.username} placeholder="user@gmail.com" />
-                    </label>
-                  </div>
-
                   {#if editingAccount.imap.auth === "basic"}
-                    <div class="form-group">
-                      <label>
-                        <span class="label-text">{$t("settings.accounts.password")} <span class="help-icon" title={helpTexts["imap.password"]}>?</span></span>
-                        <input type="password" bind:value={editingAccount.imap.password} placeholder={$t("settings.accounts.passwordHelp")} />
-                      </label>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label>
+                          <span class="label-text">{$t("settings.accounts.user")} <span class="help-icon" title={helpTexts["imap.username"]}>?</span></span>
+                          <input type="text" bind:value={editingAccount.imap.username} placeholder="user@gmail.com" />
+                        </label>
+                      </div>
+                      <div class="form-group">
+                        <label>
+                          <span class="label-text">{$t("settings.accounts.password")} <span class="help-icon" title={helpTexts["imap.password"]}>?</span></span>
+                          <input type="password" bind:value={editingAccount.imap.password} placeholder={$t("settings.accounts.passwordHelp")} />
+                        </label>
+                      </div>
                     </div>
                   {:else}
                     <div class="form-group">
                       <label>
-                        <span class="label-text">{$t("settings.accounts.clientId")}</span>
-                        <input type="text" bind:value={editingAccount.imap.oauth_client_id} />
+                        <span class="label-text">{$t("settings.accounts.user")} <span class="help-icon" title={helpTexts["imap.username"]}>?</span></span>
+                        <input type="text" bind:value={editingAccount.imap.username} placeholder="user@gmail.com" />
                       </label>
                     </div>
-                    <div class="form-group">
-                      <label>
-                        <span class="label-text">{$t("settings.accounts.clientSecret")}</span>
-                        <input type="password" bind:value={editingAccount.imap.oauth_client_secret} />
-                      </label>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label>
+                          <span class="label-text">{$t("settings.accounts.clientId")}</span>
+                          <input type="text" bind:value={editingAccount.imap.oauth_client_id} />
+                        </label>
+                      </div>
+                      <div class="form-group">
+                        <label>
+                          <span class="label-text">{$t("settings.accounts.clientSecret")}</span>
+                          <input type="password" bind:value={editingAccount.imap.oauth_client_secret} />
+                        </label>
+                      </div>
                     </div>
                     <div class="form-group">
                       <label>
@@ -1578,133 +1670,144 @@
                     <p class="help-text">{$t("settings.accounts.promptOverrideHelp")}</p>
                   </div>
 
-                  <!-- Webhooks Section -->
-                  <div class="section-header webhooks-header">
-                    <h4>{$t("settings.accounts.webhooksSection")}</h4>
-                    <button type="button" class="btn btn-secondary btn-sm" onclick={addWebhook}>
-                      + {$t("settings.accounts.addWebhook")}
-                    </button>
-                  </div>
-
-                  {#if editingWebhook}
-                    <div class="webhook-editor">
-                      <div class="form-group">
-                        <label>
-                          <span class="label-text">{$t("settings.accounts.webhookUrl")} <span class="help-icon" title={helpTexts["webhook.url"]}>?</span></span>
-                          <input
-                            type="url"
-                            bind:value={editingWebhook.url}
-                            placeholder="https://example.com/webhook"
-                            oninput={() => { webhookTested = false; webhookTestResult = null; }}
-                          />
-                        </label>
-                      </div>
-
-                      <div class="form-group">
-                        <span class="label-text">{$t("settings.accounts.webhookEvents")} <span class="help-icon" title={helpTexts["webhook.events"]}>?</span></span>
-                        <div class="checkbox-group vertical">
-                          {#each webhookEventOptions as event}
-                            <label class="checkbox-inline">
-                              <input
-                                type="checkbox"
-                                checked={editingWebhook.events.includes(event)}
-                                onchange={() => toggleWebhookEvent(event)}
-                              />
-                              <span>{$t(`settings.accounts.webhookEvent.${event}`)}</span>
-                            </label>
-                          {/each}
-                        </div>
-                      </div>
-
-                      <div class="connection-test-section">
-                        <button
-                          type="button"
-                          class="btn btn-secondary btn-sm"
-                          onclick={testWebhookConnection}
-                          disabled={testingWebhook || !editingWebhook.url || editingWebhook.events.length === 0}
-                        >
-                          {#if testingWebhook}
-                            <span class="spinner-inline"></span>
-                            {$t("settings.accounts.testingWebhook")}
-                          {:else}
-                            {$t("settings.accounts.testWebhook")}
-                          {/if}
-                        </button>
-                        {#if webhookTestResult}
-                          <span class="test-result" class:success={webhookTestResult.success} class:error={!webhookTestResult.success}>
-                            {#if webhookTestResult.success}
-                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="20 6 9 17 4 12"/>
-                              </svg>
-                              {$t("settings.accounts.webhookTestSuccess")}
-                            {:else}
-                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"/>
-                                <line x1="15" y1="9" x2="9" y2="15"/>
-                                <line x1="9" y1="9" x2="15" y2="15"/>
-                              </svg>
-                              {webhookTestResult.error ?? $t("settings.accounts.webhookTestFailed")}
-                            {/if}
-                          </span>
-                        {/if}
-                      </div>
-
-                      <div class="webhook-actions">
-                        <button type="button" class="btn btn-secondary btn-sm" onclick={() => { editingWebhook = null; editingWebhookIndex = null; }}>
-                          {$t("common.cancel")}
-                        </button>
-                        <button
-                          type="button"
-                          class="btn btn-primary btn-sm"
-                          onclick={saveWebhook}
-                          disabled={!webhookTested || !editingWebhook.url || editingWebhook.events.length === 0}
-                          title={!webhookTested ? $t("settings.accounts.testWebhookFirst") : ""}
-                        >
-                          {$t("settings.accounts.saveWebhook")}
-                        </button>
-                      </div>
-                    </div>
-                  {/if}
-
-                  {#if (editingAccount.webhooks?.length ?? 0) > 0}
-                    <div class="webhooks-list">
-                      {#each editingAccount.webhooks ?? [] as webhook, idx}
-                        <div class="webhook-item">
-                          <div class="webhook-info">
-                            <span class="webhook-url">{webhook.url}</span>
-                            <span class="webhook-events">{webhook.events.join(", ")}</span>
-                          </div>
-                          <div class="webhook-item-actions">
-                            <button type="button" class="btn btn-sm" onclick={() => editWebhook(webhook, idx)}>
-                              {$t("common.edit")}
-                            </button>
-                            <button type="button" class="btn btn-sm btn-danger" onclick={() => removeWebhook(idx)}>
-                              {$t("common.remove")}
-                            </button>
-                          </div>
-                        </div>
-                      {/each}
-                    </div>
-                  {:else if !editingWebhook}
-                    <p class="empty-note">{$t("settings.accounts.noWebhooks")}</p>
-                  {/if}
-
                       </div><!-- end collapsible-content -->
                     {/if}
                   </div><!-- end collapsible-section -->
 
                   <div class="modal-actions">
-                    <button class="btn btn-secondary" onclick={() => editingAccount = null}>{$t("common.cancel")}</button>
-                    <button
-                      class="btn btn-primary"
-                      onclick={saveAccount}
-                      disabled={!connectionTested && !editingAccount.name}
-                      title={!connectionTested && !editingAccount.name ? "Test connection first" : ""}
-                    >
-                      {$t("settings.accounts.saveAccount")}
-                    </button>
+                    <button class="btn btn-secondary" onclick={closeAccountModal}>{$t("common.close")}</button>
                   </div>
                 </div>
+
+                <!-- Webhooks Side Modal -->
+                {#if showWebhooksModal}
+                  <div
+                    class="side-modal"
+                    onclick={(e) => e.stopPropagation()}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="webhooks-modal-title"
+                  >
+                    <div class="side-modal-header">
+                      <h4 id="webhooks-modal-title">{$t("settings.accounts.webhooksSection")}</h4>
+                      <button type="button" class="btn btn-icon btn-sm" onclick={() => showWebhooksModal = false}>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    </div>
+
+                    <div class="side-modal-content">
+                      <button type="button" class="btn btn-secondary btn-sm" onclick={addWebhook}>
+                        + {$t("settings.accounts.addWebhook")}
+                      </button>
+
+                      {#if editingWebhook}
+                        <div class="webhook-editor">
+                          <div class="form-group">
+                            <label>
+                              <span class="label-text">{$t("settings.accounts.webhookUrl")}</span>
+                              <input
+                                type="url"
+                                bind:value={editingWebhook.url}
+                                placeholder="https://example.com/webhook"
+                                oninput={() => { webhookTested = false; webhookTestResult = null; }}
+                              />
+                            </label>
+                          </div>
+
+                          <div class="form-group">
+                            <span class="label-text">{$t("settings.accounts.webhookEvents")}</span>
+                            <div class="checkbox-group vertical">
+                              {#each webhookEventOptions as event}
+                                <label class="checkbox-inline">
+                                  <input
+                                    type="checkbox"
+                                    checked={editingWebhook.events.includes(event)}
+                                    onchange={() => toggleWebhookEvent(event)}
+                                  />
+                                  <span>{$t(`settings.accounts.webhookEvent.${event}`)}</span>
+                                </label>
+                              {/each}
+                            </div>
+                          </div>
+
+                          <div class="connection-test-section">
+                            <button
+                              type="button"
+                              class="btn btn-secondary btn-sm"
+                              onclick={testWebhookConnection}
+                              disabled={testingWebhook || !editingWebhook.url || editingWebhook.events.length === 0}
+                            >
+                              {#if testingWebhook}
+                                <span class="spinner-inline"></span>
+                                {$t("settings.accounts.testingWebhook")}
+                              {:else}
+                                {$t("settings.accounts.testWebhook")}
+                              {/if}
+                            </button>
+                            {#if webhookTestResult}
+                              <span class="test-result" class:success={webhookTestResult.success} class:error={!webhookTestResult.success}>
+                                {#if webhookTestResult.success}
+                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                  </svg>
+                                  {$t("settings.accounts.webhookTestSuccess")}
+                                {:else}
+                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="15" y1="9" x2="9" y2="15"/>
+                                    <line x1="9" y1="9" x2="15" y2="15"/>
+                                  </svg>
+                                  {webhookTestResult.error ?? $t("settings.accounts.webhookTestFailed")}
+                                {/if}
+                              </span>
+                            {/if}
+                          </div>
+
+                          <div class="webhook-actions">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick={() => { editingWebhook = null; editingWebhookIndex = null; }}>
+                              {$t("common.cancel")}
+                            </button>
+                            <button
+                              type="button"
+                              class="btn btn-primary btn-sm"
+                              onclick={saveWebhook}
+                              disabled={!webhookTested || !editingWebhook.url || editingWebhook.events.length === 0}
+                              title={!webhookTested ? $t("settings.accounts.testWebhookFirst") : ""}
+                            >
+                              {$t("settings.accounts.saveWebhook")}
+                            </button>
+                          </div>
+                        </div>
+                      {/if}
+
+                      {#if (editingAccount.webhooks?.length ?? 0) > 0}
+                        <div class="webhooks-list">
+                          {#each editingAccount.webhooks ?? [] as webhook, idx}
+                            <div class="webhook-item">
+                              <div class="webhook-info">
+                                <span class="webhook-url">{webhook.url}</span>
+                                <span class="webhook-events">{webhook.events.join(", ")}</span>
+                              </div>
+                              <div class="webhook-item-actions">
+                                <button type="button" class="btn btn-sm" onclick={() => editWebhook(webhook, idx)}>
+                                  {$t("common.edit")}
+                                </button>
+                                <button type="button" class="btn btn-sm btn-danger" onclick={() => removeWebhook(idx)}>
+                                  {$t("common.remove")}
+                                </button>
+                              </div>
+                            </div>
+                          {/each}
+                        </div>
+                      {:else if !editingWebhook}
+                        <p class="empty-note">{$t("settings.accounts.noWebhooks")}</p>
+                      {/if}
+                    </div>
+                  </div>
+                {/if}
               </div>
             {/if}
 
@@ -1734,8 +1837,8 @@
             {#if editingProvider}
               <div
                 class="modal-overlay"
-                onclick={() => editingProvider = null}
-                onkeydown={(e) => e.key === "Escape" && (editingProvider = null)}
+                onclick={closeProviderModal}
+                onkeydown={(e) => e.key === "Escape" && closeProviderModal()}
                 role="presentation"
               >
                 <div
@@ -1780,15 +1883,19 @@
                     </div>
                   {/if}
 
-                  <div class="form-group">
+                  <div class="form-group" class:field-required={!editingProvider.name}>
                     <label>
-                      <span class="label-text">{$t("settings.providers.name")}</span>
+                      <span class="label-text">{$t("settings.providers.name")} <span class="required-asterisk">*</span></span>
                       <input
                         type="text"
                         bind:value={editingProvider.name}
                         placeholder="openai"
+                        required
                         oninput={() => { llmConnectionTested = false; llmTestResult = null; }}
                       />
+                      {#if !editingProvider.name}
+                        <span class="required-hint">{$t("settings.requiredField")}</span>
+                      {/if}
                     </label>
                   </div>
 
@@ -1894,15 +2001,7 @@
                   </div>
 
                   <div class="modal-actions">
-                    <button class="btn btn-secondary" onclick={() => editingProvider = null}>{$t("common.cancel")}</button>
-                    <button
-                      class="btn btn-primary"
-                      onclick={saveProvider}
-                      disabled={!editingProvider.name || !llmConnectionTested}
-                      title={!llmConnectionTested ? "Test connection before saving" : ""}
-                    >
-                      {$t("settings.providers.saveProvider")}
-                    </button>
+                    <button class="btn btn-secondary" onclick={closeProviderModal}>{$t("common.close")}</button>
                   </div>
                 </div>
               </div>
@@ -1943,8 +2042,8 @@
             {#if editingApiKey}
               <div
                 class="modal-overlay"
-                onclick={() => { editingApiKey = null; editingApiKeyIndex = null; }}
-                onkeydown={(e) => e.key === "Escape" && (editingApiKey = null, editingApiKeyIndex = null)}
+                onclick={closeApiKeyModal}
+                onkeydown={(e) => e.key === "Escape" && closeApiKeyModal()}
                 role="presentation"
               >
                 <div
@@ -1956,10 +2055,13 @@
                 >
                   <h3 id="apikey-modal-title">{editingApiKeyIndex !== null ? $t("settings.apiKeys.editApiKey") : $t("settings.apiKeys.newApiKey")}</h3>
 
-                  <div class="form-group">
+                  <div class="form-group" class:field-required={!editingApiKey.name}>
                     <label>
-                      <span class="label-text">{$t("settings.apiKeys.name")}</span>
-                      <input type="text" bind:value={editingApiKey.name} placeholder="My Integration" />
+                      <span class="label-text">{$t("settings.apiKeys.name")} <span class="required-asterisk">*</span></span>
+                      <input type="text" bind:value={editingApiKey.name} placeholder="My Integration" required />
+                      {#if !editingApiKey.name}
+                        <span class="required-hint">{$t("settings.requiredField")}</span>
+                      {/if}
                     </label>
                   </div>
 
@@ -2056,8 +2158,7 @@
                   </div>
 
                   <div class="modal-actions">
-                    <button class="btn btn-secondary" onclick={() => { editingApiKey = null; editingApiKeyIndex = null; }}>{$t("common.cancel")}</button>
-                    <button class="btn btn-primary" onclick={saveApiKey} disabled={!editingApiKey.name}>{$t("settings.apiKeys.saveApiKey")}</button>
+                    <button class="btn btn-secondary" onclick={closeApiKeyModal}>{$t("common.close")}</button>
                   </div>
                 </div>
               </div>
@@ -2912,6 +3013,7 @@
   }
 
   .modal {
+    position: relative;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 0.5rem;
@@ -3630,5 +3732,96 @@
     .form-row {
       grid-template-columns: 1fr;
     }
+  }
+
+  .required-asterisk {
+    color: var(--error, #ef4444);
+    font-weight: bold;
+  }
+
+  .field-required input {
+    border-color: var(--error, #ef4444);
+    background-color: rgba(239, 68, 68, 0.05);
+  }
+
+  .required-hint {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--error, #ef4444);
+    margin-top: 0.25rem;
+  }
+
+  .modal-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .modal-header-row h3 {
+    margin: 0;
+    flex: 1;
+  }
+
+  .webhooks-btn {
+    position: relative;
+    padding: 0.5rem;
+  }
+
+  .webhooks-btn.has-webhooks {
+    color: var(--accent);
+  }
+
+  .webhook-count {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--accent);
+    color: white;
+    font-size: 0.625rem;
+    font-weight: bold;
+    padding: 0.125rem 0.375rem;
+    border-radius: 9999px;
+    min-width: 1rem;
+    text-align: center;
+  }
+
+  .side-modal {
+    position: absolute;
+    top: 0;
+    right: -320px;
+    width: 300px;
+    height: 100%;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+  }
+
+  .side-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .side-modal-header h4 {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .side-modal-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
   }
 </style>

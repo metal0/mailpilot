@@ -75,6 +75,7 @@ Edit all settings through the UI without manually editing YAML:
 - Edit configuration with helpful tooltips
 - Validate changes before applying
 - **Unsaved Changes Indicator**: Shows how many settings have been modified with a visual badge next to the save button. The save button is disabled until changes are made.
+- **Auto-Save Modal Changes**: When editing accounts, providers, or API keys in modal dialogs, changes are automatically saved to pending settings in real-time. If you accidentally close the modal (clicking outside or pressing Escape), your changes are preserved and will appear in the pending changes list.
 - **Live Config Reload**: Apply changes without restarting Mailpilot
 
 ### Raw YAML Editor

@@ -278,6 +278,7 @@ const en = {
   "settings.savedNeedsRestart": "Configuration saved. Restart the server for port change to take effect.",
   "settings.saveError": "Failed to save configuration",
   "settings.loadError": "Failed to load config",
+  "settings.requiredField": "This field is required to save changes",
 
   // Settings - Navigation Sections
   "settings.sections.global": "Global Settings",

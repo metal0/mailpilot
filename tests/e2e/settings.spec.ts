@@ -682,3 +682,184 @@ test.describe('Settings - Provider Management', () => {
     }
   });
 });
+
+test.describe('Settings - Modal Persistence', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await ensureLoggedIn(page, TEST_USER);
+    await waitForDashboard(page);
+    await page.click(SELECTORS.NAV.TAB_SETTINGS);
+    await page.waitForTimeout(500);
+  });
+
+  test('account modal changes persist after closing via overlay click', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Open add account modal');
+      await page.click(SELECTORS.SETTINGS.ADD_ACCOUNT_BUTTON);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Fill in account name');
+      const accountNameInput = page.locator('.modal input[type="text"]').first();
+      await accountNameInput.fill('test-persistence-account');
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Close modal by clicking overlay');
+      await page.click('.modal-overlay', { position: { x: 10, y: 10 } });
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify save button is now enabled (changes persisted)');
+      const saveButton = page.locator(SELECTORS.SETTINGS.SAVE_BUTTON);
+      await expect(saveButton).toBeEnabled();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('provider modal changes persist after closing via overlay click', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to providers section');
+      const providersBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /providers/i });
+      await providersBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Open add provider modal');
+      await page.click(SELECTORS.SETTINGS.ADD_PROVIDER_BUTTON);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Fill in provider name');
+      const providerNameInput = page.locator('.modal input[type="text"]').first();
+      await providerNameInput.fill('test-persistence-provider');
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Close modal by clicking overlay');
+      await page.click('.modal-overlay', { position: { x: 10, y: 10 } });
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify save button is now enabled (changes persisted)');
+      const saveButton = page.locator(SELECTORS.SETTINGS.SAVE_BUTTON);
+      await expect(saveButton).toBeEnabled();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('account modal changes persist after pressing Escape', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Open add account modal');
+      await page.click(SELECTORS.SETTINGS.ADD_ACCOUNT_BUTTON);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Fill in account name');
+      const accountNameInput = page.locator('.modal input[type="text"]').first();
+      await accountNameInput.fill('test-escape-account');
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Close modal by pressing Escape');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify save button is now enabled (changes persisted)');
+      const saveButton = page.locator(SELECTORS.SETTINGS.SAVE_BUTTON);
+      await expect(saveButton).toBeEnabled();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('modal close button shows Close instead of Cancel', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Open add account modal');
+      await page.click(SELECTORS.SETTINGS.ADD_ACCOUNT_BUTTON);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify Close button is present');
+      const closeButton = page.locator('.modal button:has-text("Close")');
+      await expect(closeButton).toBeVisible();
+      await reporter.stepComplete();
+
+      await reporter.step('Verify Cancel button is not present');
+      const cancelButton = page.locator('.modal button:has-text("Cancel")');
+      await expect(cancelButton).not.toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+});
