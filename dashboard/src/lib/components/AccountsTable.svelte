@@ -10,6 +10,28 @@
   let selectedAccounts = $state<Set<string>>(new Set());
   let bulkActionLoading = $state(false);
 
+  // Sort accounts: online first, then paused, then offline; alphabetically within each group
+  function sortedAccounts(accounts: AccountStatus[]): AccountStatus[] {
+    return [...accounts].sort((a, b) => {
+      // Status priority: connected (not paused) = 0, paused = 1, disconnected = 2
+      const getStatusPriority = (acc: AccountStatus): number => {
+        if (acc.connected && !acc.paused) return 0;
+        if (acc.paused) return 1;
+        return 2;
+      };
+
+      const priorityA = getStatusPriority(a);
+      const priorityB = getStatusPriority(b);
+
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      // Alphabetically within same status group
+      return a.name.localeCompare(b.name);
+    });
+  }
+
   // Smart hybrid timestamp formatting
   function formatLastScan(timestamp: string | null): string {
     if (!timestamp) return $t("accounts.never");
@@ -230,7 +252,7 @@
         </tr>
       </thead>
       <tbody>
-        {#each $stats?.accounts ?? [] as account}
+        {#each sortedAccounts($stats?.accounts ?? []) as account}
           <tr class:selected={selectedAccounts.has(account.name)}>
               <td class="checkbox-cell">
                 <input
@@ -260,7 +282,7 @@
                     </svg>
                   </span>
                 {/if}
-                <span class="account-name">{account.name}</span>
+                <span class="account-name" title={account.imapUsername}>{account.name}</span>
                 {#if account.idleSupported && account.connected && !account.paused}
                   <span class="idle-badge">{$t("accounts.idle")}</span>
                 {/if}
