@@ -7,6 +7,7 @@
  *   pnpm seed:test --audit 50           # Seed 50 audit log entries only
  *   pnpm seed:test --dead-letter 10     # Seed 10 dead letter entries only
  *   pnpm seed:test --processed 100      # Seed 100 processed message records only
+ *   pnpm seed:test --user               # Seed test user (testadmin/testpassword123)
  *   pnpm seed:test --all                # Seed all data types (same as default)
  *   pnpm seed:test --clear              # Clear all data without seeding new data
  *   pnpm seed:test --db ./custom.db     # Use custom database path
@@ -16,6 +17,7 @@
  *   --audit <n>         Number of audit log entries to seed (default: 150)
  *   --dead-letter <n>   Number of dead letter entries to seed (default: 8)
  *   --processed <n>     Number of processed message records to seed (default: 200)
+ *   --user              Seed test user for E2E authentication tests
  *   --all               Seed all data types (default behavior)
  *   --clear             Clear existing data without seeding
  *   --no-clear          Don't clear existing data before seeding (append mode)
@@ -25,6 +27,14 @@
 import Database from "better-sqlite3";
 import { resolve } from "path";
 import { mkdirSync, existsSync } from "fs";
+import bcrypt from "bcryptjs";
+
+const BCRYPT_ROUNDS = 10;
+
+export const TEST_USER = {
+  username: "testadmin",
+  password: "testpassword123",
+};
 
 interface SeedOptions {
   dbPath: string;
@@ -34,6 +44,7 @@ interface SeedOptions {
   seedAudit: boolean;
   seedDeadLetter: boolean;
   seedProcessed: boolean;
+  seedUser: boolean;
   clearOnly: boolean;
   clearFirst: boolean;
 }
@@ -49,6 +60,7 @@ function parseArgs(): SeedOptions {
     seedAudit: false,
     seedDeadLetter: false,
     seedProcessed: false,
+    seedUser: false,
     clearOnly: false,
     clearFirst: true,
   };
@@ -114,10 +126,16 @@ function parseArgs(): SeedOptions {
         }
         break;
 
+      case "--user":
+        hasSpecificSeed = true;
+        options.seedUser = true;
+        break;
+
       case "--all":
         options.seedAudit = true;
         options.seedDeadLetter = true;
         options.seedProcessed = true;
+        options.seedUser = true;
         hasSpecificSeed = true;
         break;
 
@@ -143,6 +161,7 @@ function parseArgs(): SeedOptions {
     options.seedAudit = true;
     options.seedDeadLetter = true;
     options.seedProcessed = true;
+    options.seedUser = true;
   }
 
   return options;
@@ -161,6 +180,7 @@ Examples:
   pnpm seed:test --audit 50           # Seed 50 audit log entries only
   pnpm seed:test --dead-letter 10     # Seed 10 dead letter entries
   pnpm seed:test --processed 100      # Seed 100 processed messages
+  pnpm seed:test --user               # Seed test user only
   pnpm seed:test --audit 20 --dead-letter 5  # Seed multiple types
   pnpm seed:test --clear              # Clear all data without seeding
   pnpm seed:test --no-clear --audit 10  # Append 10 audit entries
@@ -170,6 +190,7 @@ Options:
   --audit <n>         Seed <n> audit log entries (default: 150)
   --dead-letter <n>   Seed <n> dead letter entries (default: 8)
   --processed <n>     Seed <n> processed message records (default: 200)
+  --user              Seed test user (testadmin/testpassword123)
   --all               Seed all data types (default behavior)
   --clear             Clear existing data without seeding new data
   --no-clear          Append mode - don't clear existing data before seeding
@@ -179,6 +200,7 @@ Data Types:
   audit         Activity log entries showing email processing history
   dead-letter   Failed email processing records for retry/investigation
   processed     Message ID tracking to prevent duplicate processing
+  user          Test user for E2E authentication tests
 `);
 }
 
@@ -281,9 +303,7 @@ function initializeSchema(db: Database.Database): void {
       error TEXT NOT NULL,
       attempts INTEGER DEFAULT 1,
       created_at INTEGER NOT NULL,
-      resolved_at INTEGER,
-      last_attempt_at INTEGER,
-      next_attempt_at INTEGER
+      resolved_at INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS processed_messages (
@@ -293,10 +313,26 @@ function initializeSchema(db: Database.Database): void {
       processed_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS dashboard_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS dashboard_sessions (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES dashboard_users(id) ON DELETE CASCADE,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_audit_account ON audit_log(account_name);
     CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
     CREATE INDEX IF NOT EXISTS idx_dead_letter_account ON dead_letter(account_name);
     CREATE INDEX IF NOT EXISTS idx_processed_message_id ON processed_messages(message_id);
+    CREATE INDEX IF NOT EXISTS idx_dashboard_sessions_expires ON dashboard_sessions(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_dashboard_sessions_user ON dashboard_sessions(user_id);
   `);
 }
 
@@ -349,8 +385,8 @@ function seedDeadLetter(db: Database.Database, count: number): void {
   const day = 24 * hour;
 
   const stmt = db.prepare(`
-    INSERT INTO dead_letter (message_id, account_name, folder, uid, error, attempts, created_at, resolved_at, last_attempt_at, next_attempt_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO dead_letter (message_id, account_name, folder, uid, error, attempts, created_at, resolved_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const unresolvedCount = Math.ceil(count * 0.6);
@@ -363,8 +399,6 @@ function seedDeadLetter(db: Database.Database, count: number): void {
       const error = randomElement(errors);
       const createdAt = now - randomInt(0, 3 * day);
       const attempts = randomInt(1, 5);
-      const lastAttemptAt = createdAt + randomInt(0, hour);
-      const nextAttemptAt = lastAttemptAt + randomInt(hour, 2 * hour);
 
       stmt.run(
         generateMessageId(),
@@ -374,9 +408,7 @@ function seedDeadLetter(db: Database.Database, count: number): void {
         error,
         attempts,
         createdAt,
-        null, // unresolved
-        lastAttemptAt,
-        nextAttemptAt
+        null
       );
     }
 
@@ -395,9 +427,7 @@ function seedDeadLetter(db: Database.Database, count: number): void {
         error,
         randomInt(1, 3),
         createdAt,
-        resolvedAt,
-        resolvedAt,
-        null
+        resolvedAt
       );
     }
   });
@@ -429,6 +459,28 @@ function seedProcessedMessages(db: Database.Database, count: number): void {
   console.log(`  Inserted ${count} processed message records`);
 }
 
+async function seedUser(db: Database.Database): Promise<void> {
+  console.log(`Seeding test user: ${TEST_USER.username}...`);
+
+  const existingUser = db.prepare(`SELECT id FROM dashboard_users WHERE username = ?`).get(TEST_USER.username);
+
+  if (existingUser) {
+    console.log("  Test user already exists, skipping");
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(TEST_USER.password, BCRYPT_ROUNDS);
+  const now = Date.now();
+
+  const stmt = db.prepare(`
+    INSERT INTO dashboard_users (username, password_hash, created_at)
+    VALUES (?, ?, ?)
+  `);
+
+  stmt.run(TEST_USER.username, passwordHash, now);
+  console.log(`  Created test user: ${TEST_USER.username}`);
+}
+
 function clearData(db: Database.Database, options: SeedOptions): void {
   if (options.seedAudit || options.clearOnly) {
     db.prepare("DELETE FROM audit_log").run();
@@ -442,9 +494,14 @@ function clearData(db: Database.Database, options: SeedOptions): void {
     db.prepare("DELETE FROM processed_messages").run();
     console.log("  Cleared processed_messages table");
   }
+  if (options.seedUser || options.clearOnly) {
+    db.prepare("DELETE FROM dashboard_sessions").run();
+    db.prepare("DELETE FROM dashboard_users").run();
+    console.log("  Cleared dashboard_users and dashboard_sessions tables");
+  }
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const options = parseArgs();
 
   console.log(`\nSeed Test Data`);
@@ -472,6 +529,10 @@ function main(): void {
 
     console.log("\nSeeding data...");
 
+    if (options.seedUser) {
+      await seedUser(db);
+    }
+
     if (options.seedAudit) {
       seedAuditLog(db, options.auditCount);
     }
@@ -491,4 +552,4 @@ function main(): void {
   }
 }
 
-main();
+main().catch(console.error);

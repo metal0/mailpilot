@@ -11,3 +11,14 @@ export {
   waitForNetworkIdle,
   waitForResponse,
 } from './test-helpers.js';
+export {
+  TEST_USER,
+  login,
+  ensureLoggedIn,
+  logout,
+  isLoggedIn,
+  waitForDashboard,
+  setupFirstUser,
+  type TestCredentials,
+} from './auth-helper.js';
+export { SELECTORS, type SelectorKey } from './selectors.js';

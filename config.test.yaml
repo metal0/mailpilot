@@ -8,6 +8,10 @@ server:
   port: 8085
   session_secret: e2e-test-secret-key
 
+dashboard:
+  enabled: true
+  session_ttl: 24h
+
 state:
   database_path: ./data/test-mailpilot.db
 

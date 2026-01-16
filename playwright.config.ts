@@ -28,8 +28,8 @@ export default defineConfig({
   webServer: {
     command: 'pnpm dev',
     url: 'http://localhost:8085/health',
-    reuseExistingServer: !process.env.CI,
-    timeout: 30 * 1000,
+    reuseExistingServer: true,
+    timeout: 120 * 1000,
     stdout: 'pipe',
     stderr: 'pipe',
     env: {
