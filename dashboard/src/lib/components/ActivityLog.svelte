@@ -140,7 +140,9 @@
       }
     }
 
-    if (hasErrorFilter && allEntries.length > 0) {
+    if (hasErrorFilter && hasActionFilters && allEntries.length > 0) {
+      // When both action filters and error filter are active, show dead letters
+      // that fall within the time range of the loaded activity entries
       const timestamps = allEntries.map(e => e.createdAt);
       const newestTime = Math.max(...timestamps);
       const oldestTime = Math.min(...timestamps);
@@ -157,7 +159,8 @@
           entries.push({ type: "error", data: deadLetter });
         }
       }
-    } else if (hasErrorFilter && !hasActionFilters) {
+    } else if (hasErrorFilter) {
+      // When only error filter is active, show all dead letters
       for (const deadLetter of $deadLetters) {
         const matchesAccount = !$selectedAccount || deadLetter.accountName === $selectedAccount;
         const matchesSearch = !$activitySearchQuery ||
