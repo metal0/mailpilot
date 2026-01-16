@@ -1174,14 +1174,14 @@
                 onkeydown={(e) => e.key === "Escape" && closeAccountModal()}
                 role="presentation"
               >
-                <div
-                  class="modal"
-                  onclick={(e) => e.stopPropagation()}
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby="account-modal-title"
-                >
-                  <div class="modal-header-row">
+                <div class="modal-with-side" onclick={(e) => e.stopPropagation()}>
+                  <div
+                    class="modal"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="account-modal-title"
+                  >
+                    <div class="modal-header-row">
                     <h3 id="account-modal-title">{editingAccount.name ? $t("settings.accounts.editAccountTitle", { name: editingAccount.name }) : $t("settings.accounts.newAccount")}</h3>
                     <button
                       type="button"
@@ -1192,8 +1192,8 @@
                       onclick={() => showWebhooksModal = !showWebhooksModal}
                     >
                       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
                       </svg>
                       {#if (editingAccount.webhooks?.length ?? 0) > 0}
                         <span class="webhook-count">{editingAccount.webhooks?.length}</span>
@@ -1674,13 +1674,13 @@
                     {/if}
                   </div><!-- end collapsible-section -->
 
-                  <div class="modal-actions">
-                    <button class="btn btn-secondary" onclick={closeAccountModal}>{$t("common.close")}</button>
+                    <div class="modal-actions">
+                      <button class="btn btn-secondary" onclick={closeAccountModal}>{$t("common.close")}</button>
+                    </div>
                   </div>
-                </div>
 
-                <!-- Webhooks Side Modal -->
-                {#if showWebhooksModal}
+                  <!-- Webhooks Side Modal -->
+                  {#if showWebhooksModal}
                   <div
                     class="side-modal"
                     onclick={(e) => e.stopPropagation()}
@@ -1807,7 +1807,8 @@
                       {/if}
                     </div>
                   </div>
-                {/if}
+                  {/if}
+                </div>
               </div>
             {/if}
 
@@ -3012,8 +3013,14 @@
     z-index: 100;
   }
 
-  .modal {
+  .modal-with-side {
     position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .modal {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 0.5rem;
@@ -3788,18 +3795,15 @@
   }
 
   .side-modal {
-    position: absolute;
-    top: 0;
-    right: -320px;
-    width: 300px;
-    height: 100%;
-    background: var(--bg-primary);
+    width: 320px;
+    max-height: 90vh;
+    background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 0.5rem;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
     display: flex;
     flex-direction: column;
-    z-index: 10;
+    flex-shrink: 0;
   }
 
   .side-modal-header {
