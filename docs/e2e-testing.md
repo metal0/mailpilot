@@ -11,6 +11,73 @@ Mailpilot uses two complementary E2E testing approaches:
 | **Automated Tests** | Playwright | Regression testing, CI/CD | Before releases, after major changes |
 | **AI Agent Testing** | Chrome MCP | Interactive development testing | During feature development |
 
+## Test Data Seeding
+
+Before running tests, the database is seeded with test fixtures automatically.
+
+### Automatic Seeding
+
+Playwright tests use `globalSetup` to seed data before test runs:
+
+```typescript
+// playwright.config.ts
+{
+  globalSetup: './tests/e2e/global-setup.ts',
+}
+```
+
+### Manual Seeding
+
+You can also seed data manually for development or AI agent testing:
+
+```bash
+# Seed all data with defaults
+pnpm seed:test
+
+# Seed specific data types with custom counts
+pnpm seed:test --audit 50           # 50 audit log entries
+pnpm seed:test --dead-letter 10     # 10 dead letter entries
+pnpm seed:test --processed 100      # 100 processed message records
+
+# Combine options
+pnpm seed:test --audit 20 --dead-letter 5
+
+# Clear data without seeding
+pnpm seed:test --clear
+
+# Append data (don't clear first)
+pnpm seed:test --no-clear --audit 10
+
+# Use custom database path
+pnpm seed:test --db ./custom.db
+
+# Show help
+pnpm seed:test --help
+```
+
+### Default Data
+
+| Data Type | Default Count | Description |
+|-----------|---------------|-------------|
+| `audit` | 150 | Email processing activity log entries |
+| `dead-letter` | 8 | Failed processing records (60% unresolved) |
+| `processed` | 200 | Processed message tracking records |
+
+### Seed Script Options
+
+| Option | Description |
+|--------|-------------|
+| `--db <path>` | Database path (default: `./data/test-mailpilot.db`) |
+| `--audit <n>` | Seed n audit log entries |
+| `--dead-letter <n>` | Seed n dead letter entries |
+| `--processed <n>` | Seed n processed message records |
+| `--all` | Seed all data types (default behavior) |
+| `--clear` | Clear existing data without seeding |
+| `--no-clear` | Append mode - don't clear before seeding |
+| `--help` | Show usage information |
+
+---
+
 ## Automated Playwright Tests
 
 ### Quick Start

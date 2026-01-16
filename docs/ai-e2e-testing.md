@@ -8,9 +8,26 @@ AI agents use the Chrome MCP tools to perform interactive E2E testing during dev
 
 ## Test Environment Setup
 
-### Step 1: Start the Application
+### Step 1: Seed Test Data
 
-Before any browser testing, start the development server:
+Before testing, seed the database with test fixtures:
+
+```bash
+# Seed all data with defaults
+pnpm seed:test
+
+# Or seed specific data with custom counts
+pnpm seed:test --audit 50 --dead-letter 10
+
+# Show all options
+pnpm seed:test --help
+```
+
+See [E2E Testing Reference](./e2e-testing.md#test-data-seeding) for all seeding options.
+
+### Step 2: Start the Application
+
+Start the development server:
 
 ```bash
 pnpm dev
@@ -23,7 +40,7 @@ This starts:
 
 **Wait for**: Log message `Dashboard server started on port 8085`
 
-### Step 2: Initialize Browser Context
+### Step 3: Initialize Browser Context
 
 Get the current MCP tab context:
 
@@ -37,7 +54,7 @@ Create a new tab for testing (each test session should use a fresh tab):
 mcp__Claude_in_Chrome__tabs_create_mcp
 ```
 
-### Step 3: Navigate to Dashboard
+### Step 4: Navigate to Dashboard
 
 ```
 mcp__Claude_in_Chrome__navigate with url: "http://localhost:8085"
