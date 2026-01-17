@@ -142,6 +142,26 @@ Real-time system logs with:
 - **Search**: Search through log messages
 - **Auto-scroll**: Automatically scroll to latest entries
 
+### Rule Testing Sandbox
+
+Test classification prompts against sample emails before deploying to production:
+
+- **Prompt Editor**: CodeMirror-based editor with syntax highlighting for action keywords
+- **Sample Email Entry**: Enter test emails manually (from, subject, body) or paste raw RFC822 content
+- **Configuration Options**:
+  - Select LLM provider and model
+  - Choose folder mode (predefined or auto-create)
+  - Configure allowed folders
+  - Toggle allowed actions (move, spam, flag, read, delete)
+- **Results Display**:
+  - View classified actions with folder destinations
+  - See the full prompt sent to the LLM
+  - View raw LLM response for debugging
+  - Latency measurement for performance tuning
+- **Prompt Validation**: Real-time validation with character count and token estimates
+
+Navigate to the Sandbox tab to test prompts without affecting your live email processing.
+
 ### Debug Page
 
 Detailed system information for troubleshooting:

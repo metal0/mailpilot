@@ -187,134 +187,37 @@ notifications:
 
 ---
 
-## 9. Rule Testing Sandbox
+## 9. Rule Testing Sandbox ✅
+
+> **Status: Complete** - Implemented January 2026
 
 ### Overview
 Allow users to test classification prompts against sample emails before deploying to production.
 
-### Backend Changes
+### Implementation
 
-**New API endpoints:**
+**Backend:**
+- `POST /api/test-classification` - Test with structured email data
+- `POST /api/test-classification/raw` - Test with raw RFC822 email
+- `POST /api/validate-prompt` - Real-time prompt validation
+- Uses `mailparser` for raw email parsing
+- Returns classified actions, raw LLM response, and latency metrics
 
-**`POST /api/test-classification`** - Test with structured email data
-```typescript
-interface TestRequest {
-  prompt: string;
-  email: {
-    from: string;
-    subject: string;
-    body: string;
-  };
-  provider?: string;
-  model?: string;
-}
-
-interface TestResponse {
-  success: boolean;
-  classification: {
-    actions: Action[];
-    reasoning: string;
-    raw_response: string;
-  };
-  tokens_used: number;
-  latency_ms: number;
-}
-```
-
-**`POST /api/test-classification/raw`** - Test with raw email (EML/RFC822)
-```typescript
-interface RawTestRequest {
-  prompt: string;
-  rawEmail: string;  // Raw RFC822 email content
-  provider?: string;
-  model?: string;
-}
-
-interface RawTestResponse extends TestResponse {
-  parsed: {
-    from: string;
-    to: string;
-    subject: string;
-    date: string;
-    body: string;
-    attachments: { filename: string; contentType: string; size: number }[];
-  };
-}
-```
-
-**Implementation:**
-- Use `mailparser` to parse raw email content
-- Extract headers, body, and attachment metadata
-- Pass parsed content to existing classification logic
-- Return both parsed email info and classification results
-
-### Frontend Changes
-
-**New component: `RuleTestingSandbox.svelte`**
-
-Layout:
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Rule Testing Sandbox                                       │
-├─────────────────────────┬───────────────────────────────────┤
-│  Classification Prompt  │  Sample Email                     │
-│  ┌───────────────────┐  │  From: [________________]         │
-│  │ <textarea>        │  │  Subject: [______________]        │
-│  │                   │  │  Body: <textarea>                 │
-│  └───────────────────┘  │                                   │
-│  Provider: [ollama ▼]   │  [Load from template ▼]           │
-│                         │                                   │
-│        [Test Classification]                                │
-├─────────────────────────┴───────────────────────────────────┤
-│  Results                                                    │
-│  Actions: move → "Receipts", flag → "important"             │
-│  Reasoning: This appears to be a purchase receipt...        │
-│  Tokens: 342 | Latency: 1.2s                                │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Features:**
-- Load current account's prompt as starting point
-- Email templates: "Newsletter", "Receipt", "Spam", "Personal"
-- History of recent tests (localStorage)
-- "Use this prompt" button to update account config
-
-**Raw Email Upload:**
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Sample Email                                               │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │ [Manual Entry] [Upload Raw Email]                       ││
-│  └─────────────────────────────────────────────────────────┘│
-│                                                             │
-│  [If Upload Raw Email selected:]                            │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │ Drop .eml file here or click to browse                  ││
-│  │ ─────────────────────────────────────────────────────── ││
-│  │ Or paste raw email content:                             ││
-│  │ ┌─────────────────────────────────────────────────────┐ ││
-│  │ │ <textarea placeholder="Paste RFC822 content...">   │ ││
-│  │ └─────────────────────────────────────────────────────┘ ││
-│  └─────────────────────────────────────────────────────────┘│
-│                                                             │
-│  [After parsing, show preview:]                             │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │ Parsed Email Preview                                    ││
-│  │ From: sender@example.com                                ││
-│  │ To: recipient@example.com                               ││
-│  │ Subject: Your order has shipped                         ││
-│  │ Date: 2024-01-15 10:30:00                               ││
-│  │ Attachments: invoice.pdf (24 KB)                        ││
-│  │ Body: [truncated preview...]                            ││
-│  └─────────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Raw email sources:**
-- Export from email client (Thunderbird, Apple Mail → "Save As")
-- Gmail: "Show Original" → "Download Original"
-- Outlook: "View Message Source"
-- Drag & drop .eml files directly into browser
+**Frontend:**
+- New "Sandbox" tab in main navigation
+- `RuleTestingSandbox.svelte` component with:
+  - CodeMirror-based prompt editor with action keyword highlighting
+  - Manual email entry (from, subject, body fields)
+  - Raw email mode for pasting RFC822 content
+  - LLM provider and model selection
+  - Folder mode configuration (predefined/auto-create)
+  - Allowed actions toggles (noop excluded - always allowed by backend)
+  - Results display with actions, full prompt, and raw response tabs
+  - Latency measurement for performance tuning
+- `PromptEditor.svelte` component with:
+  - Syntax highlighting for action keywords
+  - Character count and token estimates
+  - Real-time validation feedback
 
 ---
 
@@ -388,50 +291,31 @@ Fix accessibility warnings in modal overlays - add proper ARIA roles and keyboar
 
 ---
 
-## 14. Config Validation UI
+## 14. Config Validation UI ✅
+
+> **Status: Complete** - Implemented January 2026 (as part of Rule Testing Sandbox)
 
 ### Overview
 Visual editor for classification prompts with syntax highlighting and real-time validation.
 
-### Backend Changes
+### Implementation
 
-**New API endpoint: `POST /api/validate-prompt`**
-```typescript
-interface ValidationResponse {
-  valid: boolean;
-  errors: ValidationError[];
-  warnings: ValidationWarning[];
-  suggestions: string[];
-}
-```
+**Backend:**
+- `POST /api/validate-prompt` endpoint for real-time validation
+- Validation rules:
+  - Empty prompt check
+  - Character count warning (>4000 chars may truncate)
+  - Disallowed action type detection
 
-**Validation rules:**
-1. Must include placeholders: `{{subject}}`, `{{from}}`, `{{body}}`
-2. Must request JSON output format
-3. Must specify valid action types
-4. Warn if prompt is too long (>4000 chars)
-5. Warn if no examples provided
+**Frontend:**
+- `PromptEditor.svelte` component with CodeMirror 6:
+  - Syntax highlighting for action keywords (`move`, `spam`, `flag`, `read`, `delete`, `noop`)
+  - Line numbers
+  - Character count with token estimates
+  - Real-time validation feedback panel
+- Used in Rule Testing Sandbox for prompt editing
 
-### Frontend Changes
-
-**New component: `PromptEditor.svelte`**
-
-Features:
-- CodeMirror or Monaco editor integration
-- Syntax highlighting for:
-  - Placeholders: `{{variable}}` in blue
-  - JSON blocks in prompt
-  - Action types: `move`, `flag`, `read`, etc.
-- Line numbers
-- Real-time validation with error markers
-- Autocomplete for placeholders and action types
-- Character count with warning at limit
-- Expand/collapse to fullscreen
-
-**Integration:**
-- Replace textarea in Settings → Account → Classification Prompt
-- Replace textarea in Settings → Global Settings → Default Prompt
-- Add in Rule Testing Sandbox
+**Note:** The roadmap originally mentioned `{{variable}}` placeholders, but the codebase doesn't use template variables. Users write classification rules in plain text, and `buildPrompt()` dynamically injects folder lists, allowed actions, JSON schema, and email content.
 
 ---
 
@@ -722,8 +606,8 @@ shutdown:
 | 4. Smart Retry | Medium | High | P2 | ✅ Complete |
 | 7. Notifications | Medium | Medium | P2 | ✅ Complete |
 | 17. Keyboard Shortcuts | Medium | Medium | P2 | |
-| 18. Confidence Scores | Medium | High | P2 | |
+| 18. Confidence Scores | Medium | High | P2 | ✅ Implemented |
 | 19. Graceful Shutdown | Low | Medium | P2 | |
-| 14. Config Editor | Medium | Medium | P3 | |
-| 9. Rule Sandbox | High | Medium | P3 | |
+| 14. Config Editor | Medium | Medium | P3 | ✅ Complete |
+| 9. Rule Sandbox | High | Medium | P3 | ✅ Complete |
 | 1. OAuth UI | High | High | P4 | |

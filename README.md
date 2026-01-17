@@ -20,6 +20,7 @@ AI-powered email processing daemon that uses LLM classification to automatically
 - **Multi-Account** - Process multiple email accounts with per-account configuration
 - **Rate Limiting** - Per-provider rate limiting with automatic 429 handling
 - **Web Dashboard** - Modern Svelte SPA with real-time WebSocket updates and keyboard shortcuts
+- **Rule Testing Sandbox** - Test classification prompts against sample emails before deploying
 - **Attachment Extraction** - Extract text from PDF, DOCX, Excel via Apache Tika
 - **Multimodal Vision** - Send images to vision-capable LLMs for analysis
 - **Antivirus Scanning** - Optional ClamAV integration for malware detection
