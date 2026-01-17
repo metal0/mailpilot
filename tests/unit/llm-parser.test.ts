@@ -18,12 +18,12 @@ describe("LLM Parser", () => {
           actions: [{ type: "move", folder: "Archive", reason: "Old email" }],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("move");
-        expect(actions[0].folder).toBe("Archive");
-        expect(actions[0].reason).toBe("Old email");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("move");
+        expect(result.actions[0].folder).toBe("Archive");
+        expect(result.actions[0].reason).toBe("Old email");
       });
 
       it("parses valid JSON with multiple actions", () => {
@@ -34,11 +34,11 @@ describe("LLM Parser", () => {
           ],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(2);
-        expect(actions[0].type).toBe("move");
-        expect(actions[1].type).toBe("flag");
+        expect(result.actions).toHaveLength(2);
+        expect(result.actions[0].type).toBe("move");
+        expect(result.actions[1].type).toBe("flag");
       });
 
       it("parses noop action", () => {
@@ -46,11 +46,11 @@ describe("LLM Parser", () => {
           actions: [{ type: "noop", reason: "No action needed" }],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("noop");
-        expect(actions[0].reason).toBe("No action needed");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("noop");
+        expect(result.actions[0].reason).toBe("No action needed");
       });
 
       it("parses spam action", () => {
@@ -58,10 +58,10 @@ describe("LLM Parser", () => {
           actions: [{ type: "spam" }],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("spam");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("spam");
       });
 
       it("parses read action", () => {
@@ -69,10 +69,10 @@ describe("LLM Parser", () => {
           actions: [{ type: "read" }],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("read");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("read");
       });
 
       it("parses delete action", () => {
@@ -80,10 +80,10 @@ describe("LLM Parser", () => {
           actions: [{ type: "delete" }],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("delete");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("delete");
       });
     });
 
@@ -95,11 +95,11 @@ describe("LLM Parser", () => {
 \`\`\`
 That's my recommendation.`;
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("move");
-        expect(actions[0].folder).toBe("Important");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("move");
+        expect(result.actions[0].folder).toBe("Important");
       });
 
       it("extracts JSON from code block without language specifier", () => {
@@ -107,10 +107,10 @@ That's my recommendation.`;
 {"actions": [{"type": "noop"}]}
 \`\`\``;
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("noop");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("noop");
       });
 
       it("handles extra whitespace in code blocks", () => {
@@ -120,10 +120,10 @@ That's my recommendation.`;
 
 \`\`\``;
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("read");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("read");
       });
     });
 
@@ -131,29 +131,29 @@ That's my recommendation.`;
       it("extracts JSON object from prose", () => {
         const response = `Based on my analysis, I recommend: {"actions": [{"type": "spam"}]} which should work.`;
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("spam");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("spam");
       });
 
       it("handles JSON with extra text before", () => {
         const response = `Let me process this email... {"actions": [{"type": "move", "folder": "Receipts"}]}`;
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("move");
-        expect(actions[0].folder).toBe("Receipts");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("move");
+        expect(result.actions[0].folder).toBe("Receipts");
       });
 
       it("handles JSON with extra text after", () => {
         const response = `{"actions": [{"type": "flag", "flags": ["\\\\Seen"]}]} That completes the analysis.`;
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("flag");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("flag");
       });
     });
 
@@ -163,11 +163,11 @@ That's my recommendation.`;
           actions: [{ type: "move" }],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("noop");
-        expect(actions[0].reason).toBe("Move action missing folder");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("noop");
+        expect(result.actions[0].reason).toBe("Move action missing folder");
       });
 
       it("converts flag without flags to noop", () => {
@@ -175,11 +175,11 @@ That's my recommendation.`;
           actions: [{ type: "flag" }],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("noop");
-        expect(actions[0].reason).toBe("Flag action missing flags");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("noop");
+        expect(result.actions[0].reason).toBe("Flag action missing flags");
       });
 
       it("converts flag with empty flags array to noop", () => {
@@ -187,11 +187,11 @@ That's my recommendation.`;
           actions: [{ type: "flag", flags: [] }],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("noop");
-        expect(actions[0].reason).toBe("Flag action missing flags");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("noop");
+        expect(result.actions[0].reason).toBe("Flag action missing flags");
       });
 
       it("validates each action independently", () => {
@@ -203,12 +203,12 @@ That's my recommendation.`;
           ],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(3);
-        expect(actions[0].type).toBe("move");
-        expect(actions[1].type).toBe("noop");
-        expect(actions[2].type).toBe("flag");
+        expect(result.actions).toHaveLength(3);
+        expect(result.actions[0].type).toBe("move");
+        expect(result.actions[1].type).toBe("noop");
+        expect(result.actions[2].type).toBe("flag");
       });
     });
 
@@ -216,46 +216,46 @@ That's my recommendation.`;
       it("returns noop on invalid JSON", () => {
         const response = "This is not JSON at all";
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("noop");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("noop");
       });
 
       it("returns noop on empty response", () => {
         const response = "";
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("noop");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("noop");
       });
 
       it("returns noop on whitespace only", () => {
         const response = "   \n\t  ";
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("noop");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("noop");
       });
 
       it("returns noop for JSON without actions array", () => {
         const response = JSON.stringify({ result: "success" });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("noop");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("noop");
       });
 
       it("returns noop for JSON with empty actions array", () => {
         const response = JSON.stringify({ actions: [] });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("noop");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("noop");
       });
 
       it("skips invalid actions and keeps valid ones", () => {
@@ -267,10 +267,10 @@ That's my recommendation.`;
           ],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("move");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("move");
       });
 
       it("returns noop when all actions are invalid", () => {
@@ -278,10 +278,10 @@ That's my recommendation.`;
           actions: [{ type: "unknown" }, { invalid: true }],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("noop");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("noop");
       });
     });
 
@@ -297,10 +297,10 @@ That's my recommendation.`;
           ],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].type).toBe("move");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].type).toBe("move");
       });
 
       it("handles unicode in folder names", () => {
@@ -308,10 +308,10 @@ That's my recommendation.`;
           actions: [{ type: "move", folder: "Архив" }],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].folder).toBe("Архив");
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].folder).toBe("Архив");
       });
 
       it("handles special characters in reason", () => {
@@ -319,9 +319,9 @@ That's my recommendation.`;
           actions: [{ type: "noop", reason: "Email from <user@example.com> & others" }],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions[0].reason).toBe("Email from <user@example.com> & others");
+        expect(result.actions[0].reason).toBe("Email from <user@example.com> & others");
       });
 
       it("handles very long responses", () => {
@@ -330,10 +330,10 @@ That's my recommendation.`;
           actions: [{ type: "noop", reason: longReason }],
         });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(1);
-        expect(actions[0].reason).toBe(longReason);
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].reason).toBe(longReason);
       });
 
       it("handles many actions", () => {
@@ -343,9 +343,66 @@ That's my recommendation.`;
         }));
         const response = JSON.stringify({ actions: manyActions });
 
-        const actions = parseLlmResponse(response);
+        const result = parseLlmResponse(response);
 
-        expect(actions).toHaveLength(50);
+        expect(result.actions).toHaveLength(50);
+      });
+    });
+
+    describe("confidence parsing", () => {
+      it("extracts confidence from response", () => {
+        const response = JSON.stringify({
+          actions: [{ type: "move", folder: "Archive" }],
+          confidence: 0.95,
+        });
+
+        const result = parseLlmResponse(response);
+
+        expect(result.confidence).toBe(0.95);
+      });
+
+      it("extracts reasoning from response", () => {
+        const response = JSON.stringify({
+          actions: [{ type: "move", folder: "Archive" }],
+          reasoning: "This email is clearly an archive candidate",
+        });
+
+        const result = parseLlmResponse(response);
+
+        expect(result.reasoning).toBe("This email is clearly an archive candidate");
+      });
+
+      it("extracts both confidence and reasoning", () => {
+        const response = JSON.stringify({
+          actions: [{ type: "spam" }],
+          confidence: 0.87,
+          reasoning: "Contains spam indicators",
+        });
+
+        const result = parseLlmResponse(response);
+
+        expect(result.confidence).toBe(0.87);
+        expect(result.reasoning).toBe("Contains spam indicators");
+      });
+
+      it("handles missing confidence", () => {
+        const response = JSON.stringify({
+          actions: [{ type: "noop" }],
+        });
+
+        const result = parseLlmResponse(response);
+
+        expect(result.confidence).toBeUndefined();
+      });
+
+      it("handles missing reasoning", () => {
+        const response = JSON.stringify({
+          actions: [{ type: "noop" }],
+        });
+
+        const result = parseLlmResponse(response);
+
+        expect(result.reasoning).toBeUndefined();
       });
     });
   });

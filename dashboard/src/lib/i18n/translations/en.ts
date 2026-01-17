@@ -125,6 +125,7 @@ const en = {
   "activity.showingEntries": "Showing {start} - {end} of {total} entries",
   "activity.preview": "Preview",
   "activity.previewEmail": "Preview Email",
+  "activity.confidence": "Confidence",
 
   // Log Viewer
   "logs.title": "System Logs",
@@ -314,6 +315,8 @@ const en = {
   "settings.accounts.autoCreateFolders": "Auto-create folders",
   "settings.accounts.useProviderDefault": "Use provider default",
   "settings.accounts.leaveEmptyForDefault": "Leave empty to use the default prompt",
+  "settings.accounts.minimumConfidence": "Minimum Confidence Threshold",
+  "settings.accounts.minimumConfidenceHint": "Classifications below this threshold go to dead letter queue (requires confidence scoring enabled globally)",
   "settings.accounts.autoDiscoverNote": "All existing folders will be auto-discovered via IMAP",
   "settings.accounts.saveAccount": "Save Account",
   "settings.accounts.removeConfirm": "Remove account \"{name}\"? This cannot be undone.",
@@ -380,6 +383,13 @@ const en = {
   "settings.notifications.enableQuietHours": "Enable Quiet Hours",
   "settings.notifications.quietStart": "Start",
   "settings.notifications.quietEnd": "End",
+
+  // Settings - Confidence Scoring
+  "settings.confidence.sectionTitle": "Confidence Scoring",
+  "settings.confidence.description": "Route low-confidence classifications to the dead letter queue for manual review.",
+  "settings.confidence.enableLabel": "Enable Confidence Scoring",
+  "settings.confidence.requestReasoning": "Request LLM Reasoning",
+  "settings.confidence.thresholdNote": "Configure minimum confidence thresholds per account in the account's Advanced Settings.",
 
   // Settings - Dashboard Section
   "settings.dashboard.sectionTitle": "Dashboard Settings",

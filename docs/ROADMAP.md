@@ -611,68 +611,32 @@ interface ShortcutConfig {
 
 ---
 
-## 18. Classification Confidence Scores
+## 18. Classification Confidence Scores ✅ IMPLEMENTED
 
 ### Overview
 Request confidence percentage from LLM. Route low-confidence classifications to dead letter queue for manual review instead of auto-executing potentially wrong actions.
 
-### Backend Changes
+### Implementation Status
 
-**Schema update (`src/config/schema.ts`):**
-```yaml
-confidence:
-  enabled: true                    # Enable confidence scoring
-  minimum_threshold: 0.7           # Below this → dead letter
-  request_reasoning: true          # Ask LLM for reasoning (optional)
-```
+**Backend - DONE:**
+- ✅ Global `confidence.enabled` and `confidence.request_reasoning` config options
+- ✅ Per-account `minimum_confidence` threshold (0.0-1.0)
+- ✅ LLM response parsing for confidence and reasoning fields
+- ✅ Prompt injection for confidence/reasoning requests
+- ✅ Dead letter queue routing for low-confidence classifications
+- ✅ Audit log stores confidence and reasoning
 
-**LLM response schema update (`src/llm/parser.ts`):**
-```typescript
-const llmResponseSchema = z.object({
-  actions: z.array(llmActionSchema),
-  confidence: z.number().min(0).max(1).optional(),
-  reasoning: z.string().optional(),
-});
-```
+**Frontend - DONE:**
+- ✅ Confidence scoring toggle in Settings → Providers section
+- ✅ Request reasoning toggle (conditional on confidence enabled)
+- ✅ Per-account minimum confidence slider in Advanced Settings
+- ✅ Hint text explaining dead letter queue routing
 
-**Prompt update (`src/llm/prompt.ts`):**
-- Add confidence request to prompt template:
-  ```
-  Include a "confidence" field (0.0 to 1.0) indicating how certain you are.
-  Include a "reasoning" field briefly explaining your classification.
-  ```
-
-**Worker update (`src/processor/worker.ts`):**
-```typescript
-// After classifyEmail()
-if (confidenceConfig.enabled && response.confidence !== undefined) {
-  if (response.confidence < confidenceConfig.minimum_threshold) {
-    addToDeadLetter(messageId, accountName, folder, uid,
-      `Low confidence: ${(response.confidence * 100).toFixed(0)}%`);
-    return false; // Don't execute actions
-  }
-}
-```
-
-**Audit log update (`src/storage/audit.ts`):**
-- Add `confidence` column to audit entries
-- Store reasoning if available
-
-### Frontend Changes
-
-**Activity log enhancements:**
-- Show confidence badge on each entry (color-coded: green >80%, yellow 50-80%, red <50%)
-- Show reasoning in expandable details
-- Filter by confidence range
-
-**Dead letter UI:**
-- Show confidence score for low-confidence entries
-- "Low confidence" as a distinct error type/category
-
-**Settings:**
-- Confidence threshold slider (0-100%)
-- Toggle confidence scoring on/off
-- Toggle reasoning requests
+**Remaining UI enhancements (optional):**
+- [ ] Show confidence badge on activity entries (color-coded)
+- [ ] Show reasoning in expandable activity details
+- [ ] Filter activity by confidence range
+- [ ] Show confidence in dead letter queue entries
 
 ---
 

@@ -564,6 +564,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       version: getVersion(),
       uptime: getUptime(),
       dryRun: currentConfig?.dry_run ?? dryRun,
+      confidenceEnabled: currentConfig?.confidence?.enabled ?? false,
       totals: {
         emailsProcessed: getActionCount(),
         actionsTaken: getEmailsWithActionsCount(),

@@ -5,7 +5,7 @@ import {
   acquireRateLimit,
   handleRateLimitResponse,
 } from "./rate-limiter.js";
-import { parseLlmResponse, type LlmAction } from "./parser.js";
+import { parseLlmResponse, type ParsedLlmResult } from "./parser.js";
 import { recordProviderRequest, recordProviderFailure } from "./providers.js";
 import type { MultimodalContent } from "../attachments/index.js";
 
@@ -34,7 +34,7 @@ export interface LlmRequestOptions {
 
 export async function classifyEmail(
   options: LlmRequestOptions
-): Promise<LlmAction[]> {
+): Promise<ParsedLlmResult> {
   const { provider, model, prompt, multimodalContent, temperature = 0.3 } = options;
 
   await acquireRateLimit(provider.api_url, provider.rate_limit_rpm);
@@ -123,7 +123,7 @@ export async function classifyEmail(
   const content = response.choices[0]?.message.content;
   if (!content) {
     logger.error("Empty response from LLM");
-    return [{ type: "noop", reason: "Empty LLM response" }];
+    return { actions: [{ type: "noop", reason: "Empty LLM response" }] };
   }
 
   logger.debug("Received response from LLM", {
@@ -158,13 +158,13 @@ export async function testConnection(
   model: string
 ): Promise<boolean> {
   try {
-    const actions = await classifyEmail({
+    const result = await classifyEmail({
       provider,
       model,
       prompt: 'Test connection. Respond with: {"actions": [{"type": "noop"}]}',
     });
 
-    return actions.length > 0;
+    return result.actions.length > 0;
   } catch (error) {
     logger.error("LLM connection test failed", {
       provider: provider.name,

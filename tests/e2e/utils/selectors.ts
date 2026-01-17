@@ -113,6 +113,12 @@ export const SELECTORS = {
     ACCOUNT_CELL: '.account-cell',
     SUBJECT_CELL: '.subject-cell',
     ACTIONS_CELL: '.actions-cell',
+    CONFIDENCE_CELL: '.confidence-cell',
+    CONFIDENCE_BADGE: '.confidence-badge',
+    CONFIDENCE_HIGH: '.confidence-high',
+    CONFIDENCE_MEDIUM: '.confidence-medium',
+    CONFIDENCE_LOW: '.confidence-low',
+    CONFIDENCE_COLUMN_HEADER: 'th.confidence-col',
   },
 
   LOGS: {

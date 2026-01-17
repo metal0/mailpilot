@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { activitySearchQuery, activitySelectedFilters, selectedAccount, accountList, deadLetters, activity, type AuditEntry, type DeadLetterEntry } from "../stores/data";
+  import { activitySearchQuery, activitySelectedFilters, selectedAccount, accountList, deadLetters, activity, stats, type AuditEntry, type DeadLetterEntry } from "../stores/data";
+  import { selectedIndex } from "../stores/shortcuts";
   import { t } from "../i18n";
   import * as api from "../api";
   import EmailPreview from "./EmailPreview.svelte";
@@ -78,7 +79,13 @@
     }
   }
 
-  const allFilterTypes = ["move", "flag", "read", "delete", "spam", "noop", "errors"];
+  const baseFilterTypes = ["move", "flag", "read", "delete", "spam", "noop", "errors"];
+  const confidenceFilterTypes = ["conf-high", "conf-medium", "conf-low"];
+  const allFilterTypes = $derived(
+    $stats?.confidenceEnabled
+      ? [...baseFilterTypes, ...confidenceFilterTypes]
+      : baseFilterTypes
+  );
   let showFilterDropdown = $state(false);
 
   // Use store value, but apply initial filter on first mount if set
@@ -126,6 +133,26 @@
   const actionFilterTypes = ["move", "flag", "read", "delete", "spam", "noop"];
   const hasActionFilters = $derived(actionFilterTypes.some(t => $activitySelectedFilters.has(t)));
   const hasErrorFilter = $derived($activitySelectedFilters.has("errors"));
+  const hasConfidenceFilters = $derived(
+    $activitySelectedFilters.has("conf-high") ||
+    $activitySelectedFilters.has("conf-medium") ||
+    $activitySelectedFilters.has("conf-low")
+  );
+
+  function matchesConfidenceFilter(confidence: number | undefined): boolean {
+    if (!hasConfidenceFilters) return true;
+    if (confidence === undefined) return false;
+
+    const highSelected = $activitySelectedFilters.has("conf-high");
+    const mediumSelected = $activitySelectedFilters.has("conf-medium");
+    const lowSelected = $activitySelectedFilters.has("conf-low");
+
+    if (highSelected && confidence >= 0.8) return true;
+    if (mediumSelected && confidence >= 0.5 && confidence < 0.8) return true;
+    if (lowSelected && confidence < 0.5) return true;
+
+    return false;
+  }
 
   // All loaded activity entries (accumulated across pages)
   let allEntries = $state<AuditEntry[]>([]);
@@ -136,7 +163,9 @@
 
     if (hasActionFilters) {
       for (const entry of allEntries) {
-        entries.push({ type: "activity", data: entry });
+        if (matchesConfidenceFilter(entry.confidence)) {
+          entries.push({ type: "activity", data: entry });
+        }
       }
     }
 
@@ -319,6 +348,31 @@
     return classes[type] ?? "";
   }
 
+  function getConfidenceBadgeClass(confidence: number): string {
+    if (confidence >= 0.8) return "confidence-high";
+    if (confidence >= 0.5) return "confidence-medium";
+    return "confidence-low";
+  }
+
+  function formatConfidence(confidence: number): string {
+    return `${Math.round(confidence * 100)}%`;
+  }
+
+  function formatFilterLabel(filter: string): string {
+    const labels: Record<string, string> = {
+      "conf-high": "High (≥80%)",
+      "conf-medium": "Medium (50-79%)",
+      "conf-low": "Low (<50%)",
+    };
+    return labels[filter] ?? filter;
+  }
+
+  function isConfidenceFilter(filter: string): boolean {
+    return filter.startsWith("conf-");
+  }
+
+  const confidenceEnabled = $derived($stats?.confidenceEnabled ?? false);
+
   function formatAction(action: { type: string; folder?: string; flags?: string[]; reason?: string }): string {
     switch (action.type) {
       case "move":
@@ -405,6 +459,51 @@
       observer.disconnect();
     }
   });
+
+  // Ref to search input for keyboard focus
+  let searchInputRef: HTMLInputElement | null = $state(null);
+
+  // Exported methods for keyboard shortcuts
+  export function toggleStreaming() {
+    handleStreamToggle(!streaming);
+  }
+
+  export function focusSearch() {
+    searchInputRef?.focus();
+  }
+
+  export function retrySelected() {
+    const idx = $selectedIndex;
+    if (idx >= 0 && idx < unifiedEntries.length) {
+      const entry = unifiedEntries[idx];
+      if (entry.type === "error") {
+        openErrorPreview(entry.data);
+      }
+    }
+  }
+
+  export function dismissSelected() {
+    const idx = $selectedIndex;
+    if (idx >= 0 && idx < unifiedEntries.length) {
+      const entry = unifiedEntries[idx];
+      if (entry.type === "error" && (entry.data.retryStatus === "pending" || entry.data.retryStatus === "retrying")) {
+        errorPreviewEntry = entry.data;
+        handleSkipDeadLetter();
+      }
+    }
+  }
+
+  export function openSelected() {
+    const idx = $selectedIndex;
+    if (idx >= 0 && idx < unifiedEntries.length) {
+      const entry = unifiedEntries[idx];
+      if (entry.type === "activity") {
+        openPreview(entry.data);
+      } else {
+        openErrorPreview(entry.data);
+      }
+    }
+  }
 </script>
 
 <div class="card" class:density-compact={density === "compact"} class:density-comfortable={density === "comfortable"}>
@@ -452,7 +551,13 @@
               {#each allFilterTypes as filter}
                 <label class="filter-option">
                   <input type="checkbox" checked={$activitySelectedFilters.has(filter)} onchange={() => toggleFilter(filter)} />
-                  <span class="filter-option-label" class:is-error={filter === "errors"}>{filter}</span>
+                  <span
+                    class="filter-option-label"
+                    class:is-error={filter === "errors"}
+                    class:is-confidence={isConfidenceFilter(filter)}
+                  >
+                    {formatFilterLabel(filter)}
+                  </span>
                 </label>
               {/each}
             </div>
@@ -468,6 +573,7 @@
       class="search-input"
       placeholder={$t("activity.searchPlaceholder")}
       bind:value={$activitySearchQuery}
+      bind:this={searchInputRef}
     />
     <select class="filter-select" value={$selectedAccount ?? ""} onchange={(e) => selectedAccount.set(e.currentTarget.value || null)}>
       <option value="">{$t("common.all")} {$t("common.accounts")}</option>
@@ -499,13 +605,16 @@
             <th>{$t("common.account")}</th>
             <th>{$t("activity.subject")}</th>
             <th>{$t("common.actions")}</th>
+            {#if confidenceEnabled}
+              <th class="confidence-col">{$t("activity.confidence")}</th>
+            {/if}
             <th class="action-col"></th>
           </tr>
         </thead>
         <tbody>
-          {#each unifiedEntries as entry}
+          {#each unifiedEntries as entry, idx}
             {#if entry.type === "activity"}
-              <tr>
+              <tr class:selected={$selectedIndex === idx}>
                 <td class="time-cell" title={formatUtcTooltip(entry.data.createdAt)}>{formatTime(entry.data.createdAt)}</td>
                 <td class="account-cell">{entry.data.accountName}</td>
                 <td class="subject-cell">
@@ -522,6 +631,20 @@
                     </span>
                   {/each}
                 </td>
+                {#if confidenceEnabled}
+                  <td class="confidence-cell">
+                    {#if entry.data.confidence !== undefined}
+                      <span
+                        class="confidence-badge {getConfidenceBadgeClass(entry.data.confidence)}"
+                        title={entry.data.reasoning ?? ""}
+                      >
+                        {formatConfidence(entry.data.confidence)}
+                      </span>
+                    {:else}
+                      <span class="muted">-</span>
+                    {/if}
+                  </td>
+                {/if}
                 <td class="action-col">
                   <button class="btn-icon" onclick={() => openPreview(entry.data)} title={$t("activity.preview")}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -532,7 +655,7 @@
                 </td>
               </tr>
             {:else}
-              <tr class="error-row">
+              <tr class="error-row" class:selected={$selectedIndex === idx}>
                 <td class="time-cell" title={formatUtcTooltip(entry.data.createdAt)}>{formatTime(entry.data.createdAt)}</td>
                 <td class="account-cell">{entry.data.accountName}</td>
                 <td class="subject-cell">
@@ -552,6 +675,11 @@
                     Failed ({entry.data.attempts})
                   </span>
                 </td>
+                {#if confidenceEnabled}
+                  <td class="confidence-cell">
+                    <span class="muted">-</span>
+                  </td>
+                {/if}
                 <td class="action-col">
                   <button class="btn-icon" onclick={() => openErrorPreview(entry.data)} title="View details">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -959,6 +1087,16 @@
     background: var(--bg-tertiary);
   }
 
+  tbody tr.selected {
+    background: color-mix(in srgb, var(--accent) 15%, var(--bg-secondary));
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  tbody tr.selected:hover {
+    background: color-mix(in srgb, var(--accent) 20%, var(--bg-secondary));
+  }
+
   .error-row {
     background: color-mix(in srgb, var(--warning) 5%, transparent);
   }
@@ -1071,6 +1209,44 @@
   .badge-error {
     background: var(--warning-muted);
     color: var(--warning);
+  }
+
+  .confidence-col {
+    width: 80px;
+    text-align: center;
+  }
+
+  .confidence-cell {
+    text-align: center;
+  }
+
+  .confidence-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    cursor: help;
+  }
+
+  .confidence-high {
+    background: var(--success-muted);
+    color: var(--success);
+  }
+
+  .confidence-medium {
+    background: var(--warning-muted);
+    color: var(--warning);
+  }
+
+  .confidence-low {
+    background: var(--error-muted);
+    color: var(--error);
+  }
+
+  .filter-option-label.is-confidence {
+    color: var(--accent);
   }
 
   .btn-icon {

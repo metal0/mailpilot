@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { selectedAccount, accountList, logs, logsSearchQuery, logsSelectedLevels, type LogEntry } from "../stores/data";
+  import { selectedIndex } from "../stores/shortcuts";
   import { t } from "../i18n";
   import * as api from "../api";
   import StreamToggle from "./StreamToggle.svelte";
   import Backdrop from "./Backdrop.svelte";
+  import Modal from "./Modal.svelte";
 
   // Windowed scroll configuration
   const PAGE_SIZE = 10;       // Fetch smaller batches from API
@@ -315,6 +317,34 @@
       observer.disconnect();
     }
   });
+
+  // Ref to search input for keyboard focus
+  let searchInputRef: HTMLInputElement | null = $state(null);
+
+  // Log detail modal
+  let showLogDetail = $state(false);
+  let detailLog: LogEntry | null = $state(null);
+
+  function openLogDetail(log: LogEntry) {
+    detailLog = log;
+    showLogDetail = true;
+  }
+
+  // Exported methods for keyboard shortcuts
+  export function toggleStreaming() {
+    handleStreamToggle(!streaming);
+  }
+
+  export function focusSearch() {
+    searchInputRef?.focus();
+  }
+
+  export function openSelected() {
+    const idx = $selectedIndex;
+    if (idx >= 0 && idx < displayLogs.length) {
+      openLogDetail(displayLogs[idx]);
+    }
+  }
 </script>
 
 <div class="card">
@@ -361,6 +391,7 @@
       class="search-input"
       placeholder={$t("common.search")}
       bind:value={$logsSearchQuery}
+      bind:this={searchInputRef}
     />
     <select class="filter-select" value={$selectedAccount ?? ""} onchange={(e) => selectedAccount.set(e.currentTarget.value || null)}>
       <option value="">{$t("common.all")} {$t("common.accounts")}</option>
@@ -377,8 +408,15 @@
     {:else if displayLogs.length === 0}
       <div class="empty">{$t("logs.noLogs")}</div>
     {:else}
-      {#each displayLogs as log}
-        <div class="log-entry {getLevelClass(log.level)}">
+      {#each displayLogs as log, idx}
+        <div
+          class="log-entry {getLevelClass(log.level)}"
+          class:selected={$selectedIndex === idx}
+          onclick={() => openLogDetail(log)}
+          role="button"
+          tabindex="0"
+          onkeydown={(e) => e.key === 'Enter' && openLogDetail(log)}
+        >
           <span class="log-time" title={formatUtcTooltip(log.timestamp)}>{formatTime(log.timestamp)}</span>
           <span class="log-level">{log.level.toUpperCase()}</span>
           <span class="log-context">[{log.context}]</span>
@@ -403,6 +441,42 @@
     {/if}
   </div>
 </div>
+
+{#if showLogDetail && detailLog}
+  <Modal
+    open={showLogDetail}
+    title="Log Entry Details"
+    onclose={() => { showLogDetail = false; detailLog = null; }}
+    maxWidth="600px"
+  >
+    {#snippet children()}
+      <div class="log-detail-content">
+        <div class="log-detail-row">
+          <span class="log-detail-label">Timestamp</span>
+          <span class="log-detail-value">{detailLog.timestamp}</span>
+        </div>
+        <div class="log-detail-row">
+          <span class="log-detail-label">Level</span>
+          <span class="log-detail-value log-detail-level level-{detailLog.level}">{detailLog.level.toUpperCase()}</span>
+        </div>
+        <div class="log-detail-row">
+          <span class="log-detail-label">Context</span>
+          <span class="log-detail-value">{detailLog.context}</span>
+        </div>
+        <div class="log-detail-row log-detail-row-full">
+          <span class="log-detail-label">Message</span>
+          <div class="log-detail-message">{detailLog.message}</div>
+        </div>
+        {#if detailLog.meta}
+          <div class="log-detail-row log-detail-row-full">
+            <span class="log-detail-label">Metadata</span>
+            <pre class="log-detail-meta">{JSON.stringify(detailLog.meta, null, 2)}</pre>
+          </div>
+        {/if}
+      </div>
+    {/snippet}
+  </Modal>
+{/if}
 
 <style>
   .card {
@@ -615,6 +689,17 @@
 
   .log-entry:hover {
     background: var(--bg-tertiary);
+    cursor: pointer;
+  }
+
+  .log-entry.selected {
+    background: color-mix(in srgb, var(--accent) 15%, var(--bg-secondary));
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  .log-entry.selected:hover {
+    background: color-mix(in srgb, var(--accent) 20%, var(--bg-secondary));
   }
 
   .log-time {
@@ -697,6 +782,85 @@
     font-size: var(--text-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+  }
+
+  /* Log Detail Modal Content */
+  .log-detail-content {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .log-detail-row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .log-detail-row:last-child {
+    border-bottom: none;
+  }
+
+  .log-detail-row-full {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .log-detail-label {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text-muted);
+    min-width: 80px;
+    flex-shrink: 0;
+  }
+
+  .log-detail-value {
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    word-break: break-word;
+  }
+
+  .log-detail-level {
+    font-weight: 600;
+    font-family: var(--font-mono);
+  }
+
+  .log-detail-level.level-debug {
+    color: var(--text-muted);
+  }
+
+  .log-detail-level.level-info {
+    color: #60a5fa;
+  }
+
+  .log-detail-level.level-warn {
+    color: var(--warning);
+  }
+
+  .log-detail-level.level-error {
+    color: var(--error);
+  }
+
+  .log-detail-message {
+    background: var(--bg-tertiary);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    font-family: var(--font-mono);
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+
+  .log-detail-meta {
+    background: var(--bg-tertiary);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-xs);
+    font-family: var(--font-mono);
+    overflow-x: auto;
+    margin: 0;
+    color: var(--text-secondary);
   }
 
   @media (max-width: 768px) {

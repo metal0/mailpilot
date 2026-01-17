@@ -11,9 +11,11 @@
   import Settings from "../lib/components/Settings.svelte";
   import Debug from "../lib/components/Debug.svelte";
   import Modal from "../lib/components/Modal.svelte";
+  import KeyboardShortcuts from "../lib/components/KeyboardShortcuts.svelte";
   import { connect, disconnect, versionMismatch, dismissVersionMismatch, refreshForNewVersion } from "../lib/stores/websocket";
   import { stats, activity, logs, deadLetters } from "../lib/stores/data";
   import { navigation, settingsHasChanges, type Tab } from "../lib/stores/navigation";
+  import { currentScope, selectedIndex } from "../lib/stores/shortcuts";
   import { t, initLocale } from "../lib/i18n";
   import * as api from "../lib/api";
 
@@ -93,7 +95,67 @@
       return;
     }
     currentTab = tab;
+    currentScope.set(tab);
+    selectedIndex.set(-1);
   }
+
+  // Keyboard shortcut handlers
+  function handleTabSwitch(tabNum: number) {
+    const tabs: Tab[] = ["overview", "activity", "logs", "settings", "debug"];
+    if (tabNum >= 1 && tabNum <= 5) {
+      switchTab(tabs[tabNum - 1]);
+    }
+  }
+
+  // References to child components for keyboard actions
+  let activityLogRef: ActivityLog | null = $state(null);
+  let logViewerRef: LogViewer | null = $state(null);
+
+  function handleToggleStream() {
+    if (currentTab === "activity") {
+      activityLogRef?.toggleStreaming?.();
+    } else if (currentTab === "logs") {
+      logViewerRef?.toggleStreaming?.();
+    }
+  }
+
+  function handleFocusSearch() {
+    if (currentTab === "activity") {
+      activityLogRef?.focusSearch?.();
+    } else if (currentTab === "logs") {
+      logViewerRef?.focusSearch?.();
+    }
+  }
+
+  function handleRetry() {
+    if (currentTab === "activity") {
+      activityLogRef?.retrySelected?.();
+    }
+  }
+
+  function handleDismiss() {
+    if (currentTab === "activity") {
+      activityLogRef?.dismissSelected?.();
+    }
+  }
+
+  function handleOpenSelected() {
+    if (currentTab === "activity") {
+      activityLogRef?.openSelected?.();
+    } else if (currentTab === "logs") {
+      logViewerRef?.openSelected?.();
+    }
+  }
+
+  // Get item count for keyboard navigation
+  let itemCount = $derived(() => {
+    if (currentTab === "activity") {
+      return $activity.length + $deadLetters.length;
+    } else if (currentTab === "logs") {
+      return $logs.length;
+    }
+    return 0;
+  });
 
   function confirmLeaveSettings() {
     if (pendingTab) {
@@ -111,6 +173,16 @@
 </script>
 
 <div class="dashboard">
+  <KeyboardShortcuts
+    onTabSwitch={handleTabSwitch}
+    onToggleStream={handleToggleStream}
+    onFocusSearch={handleFocusSearch}
+    onRetry={handleRetry}
+    onDismiss={handleDismiss}
+    onOpenSelected={handleOpenSelected}
+    itemCount={itemCount()}
+  />
+
   <Modal
     open={showUnsavedModal}
     title={$t("settings.unsavedModal.title")}
@@ -220,10 +292,10 @@
 
       <!-- Activity and Logs are always mounted, hidden via CSS for seamless tab switching -->
       <div class="tab-content" class:hidden={currentTab !== "activity"}>
-        <ActivityLog initialFilter={activityInitialFilter} />
+        <ActivityLog bind:this={activityLogRef} initialFilter={activityInitialFilter} />
       </div>
       <div class="tab-content" class:hidden={currentTab !== "logs"}>
-        <LogViewer />
+        <LogViewer bind:this={logViewerRef} />
       </div>
 
       {#if currentTab === "settings"}

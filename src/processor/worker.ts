@@ -20,6 +20,7 @@ import {
 } from "../attachments/index.js";
 import { addToDeadLetter } from "../storage/dead-letter.js";
 import { notifyDeadLetter } from "../utils/notifier.js";
+import { inflightTracker } from "../utils/inflight.js";
 
 const logger = createLogger("worker");
 
@@ -83,6 +84,9 @@ export async function processMessage(
     log.debug("Message already processed", { messageId });
     return false;
   }
+
+  const opId = `${account.name}:${messageId}`;
+  inflightTracker.start(opId, `Processing ${messageId.substring(0, 20)}...`);
 
   try {
     const avConfig = config.antivirus;
@@ -168,10 +172,16 @@ export async function processMessage(
     // Determine allowed actions for this account (default excludes delete for safety)
     const allowedActions = account.allowed_actions ?? [...DEFAULT_ALLOWED_ACTIONS];
 
+    // Confidence scoring config (opt-in, disabled by default)
+    const confidenceConfig = config.confidence;
+    const confidenceEnabled = confidenceConfig?.enabled ?? false;
+
     const promptOptions: PromptOptions = {
       basePrompt,
       folderMode: foldersConfig.mode,
       allowedActions,
+      requestConfidence: confidenceEnabled,
+      requestReasoning: confidenceEnabled && (confidenceConfig?.request_reasoning ?? true),
     };
 
     // For predefined mode: use allowed folders if specified, otherwise use discovered folders
@@ -205,21 +215,47 @@ export async function processMessage(
       imageCount: useMultimodal ? extractedAttachments.filter((a) => a.imageBase64).length : 0,
     });
 
-    const rawActions = await classifyEmail({
+    const classificationResult = await classifyEmail({
       provider,
       model,
       prompt,
       ...(multimodalContent && { multimodalContent }),
     });
 
+    // Check confidence threshold if enabled
+    // Per-account threshold takes precedence over global config
+    if (confidenceEnabled && classificationResult.confidence !== undefined) {
+      const threshold = account.minimum_confidence ?? confidenceConfig?.minimum_threshold ?? 0.7;
+      if (classificationResult.confidence < threshold) {
+        const confidencePercent = (classificationResult.confidence * 100).toFixed(0);
+        const thresholdPercent = (threshold * 100).toFixed(0);
+        const reason = `Low confidence: ${confidencePercent}% (threshold: ${thresholdPercent}%)`;
+
+        log.warn("Classification confidence below threshold", {
+          messageId,
+          confidence: classificationResult.confidence,
+          threshold,
+          reasoning: classificationResult.reasoning,
+        });
+
+        addToDeadLetter(messageId, account.name, folder, uid, reason);
+        notifyDeadLetter(account.name, messageId, reason);
+
+        return false;
+      }
+    }
+
     // Filter out any disallowed actions (backend enforcement)
-    const actions = filterDisallowedActions(rawActions, allowedActions);
+    const actions = filterDisallowedActions(classificationResult.actions, allowedActions);
 
     log.info("Classification complete", {
       messageId,
-      rawActions: rawActions.map((a) => a.type),
       actions: actions.map((a) => a.type),
       allowedActions,
+      ...(confidenceEnabled && classificationResult.confidence !== undefined && {
+        confidence: classificationResult.confidence,
+        reasoning: classificationResult.reasoning,
+      }),
     });
 
     if (!config.dry_run) {
@@ -248,7 +284,16 @@ export async function processMessage(
     markMessageProcessed(messageId, account.name);
 
     const subject = stateConfig.audit_subjects ? email.subject : undefined;
-    logAction(messageId, account.name, actions, provider.name, model, subject);
+    logAction(
+      messageId,
+      account.name,
+      actions,
+      provider.name,
+      model,
+      subject,
+      classificationResult.confidence,
+      classificationResult.reasoning
+    );
 
     return true;
   } catch (error) {
@@ -262,6 +307,8 @@ export async function processMessage(
     notifyDeadLetter(account.name, messageId, errorMessage);
 
     return false;
+  } finally {
+    inflightTracker.complete(opId);
   }
 }
 

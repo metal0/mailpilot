@@ -20,7 +20,20 @@ export interface AuditEntry {
   llmProvider?: string;
   llmModel?: string;
   subject?: string;
+  confidence?: number;
+  reasoning?: string;
   createdAt: number;
+}
+
+export interface LogActionOptions {
+  messageId: string;
+  accountName: string;
+  actions: LlmAction[];
+  llmProvider?: string;
+  llmModel?: string;
+  subject?: string;
+  confidence?: number;
+  reasoning?: string;
 }
 
 export function logAction(
@@ -29,14 +42,16 @@ export function logAction(
   actions: LlmAction[],
   llmProvider?: string,
   llmModel?: string,
-  subject?: string
+  subject?: string,
+  confidence?: number,
+  reasoning?: string
 ): void {
   const db = getDatabase();
   const createdAt = Date.now();
 
   const stmt = db.prepare(`
-    INSERT INTO audit_log (message_id, account_name, actions, llm_provider, llm_model, subject, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO audit_log (message_id, account_name, actions, llm_provider, llm_model, subject, confidence, reasoning, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const result = stmt.run(
@@ -46,6 +61,8 @@ export function logAction(
     llmProvider ?? null,
     llmModel ?? null,
     subject ?? null,
+    confidence ?? null,
+    reasoning ?? null,
     createdAt
   );
 
@@ -53,6 +70,7 @@ export function logAction(
     messageId,
     accountName,
     actionCount: actions.length,
+    confidence,
   });
 
   // Broadcast to WebSocket clients
@@ -67,6 +85,8 @@ export function logAction(
     if (llmProvider) entry.llmProvider = llmProvider;
     if (llmModel) entry.llmModel = llmModel;
     if (subject) entry.subject = subject;
+    if (confidence !== undefined) entry.confidence = confidence;
+    if (reasoning) entry.reasoning = reasoning;
 
     broadcastActivityFn(entry);
   }
@@ -93,6 +113,37 @@ export function cleanupAuditLog(retention: string): number {
   return result.changes;
 }
 
+interface AuditLogRow {
+  id: number;
+  message_id: string;
+  account_name: string;
+  actions: string;
+  llm_provider: string | null;
+  llm_model: string | null;
+  subject: string | null;
+  confidence: number | null;
+  reasoning: string | null;
+  created_at: number;
+}
+
+function mapRowToEntry(row: AuditLogRow): AuditEntry {
+  const entry: AuditEntry = {
+    id: row.id,
+    messageId: row.message_id,
+    accountName: row.account_name,
+    actions: JSON.parse(row.actions) as LlmAction[],
+    createdAt: row.created_at,
+  };
+
+  if (row.llm_provider !== null) entry.llmProvider = row.llm_provider;
+  if (row.llm_model !== null) entry.llmModel = row.llm_model;
+  if (row.subject !== null) entry.subject = row.subject;
+  if (row.confidence !== null) entry.confidence = row.confidence;
+  if (row.reasoning !== null) entry.reasoning = row.reasoning;
+
+  return entry;
+}
+
 export function getAuditEntries(
   accountName?: string,
   limit = 100
@@ -100,7 +151,7 @@ export function getAuditEntries(
   const db = getDatabase();
 
   let query = `
-    SELECT id, message_id, account_name, actions, llm_provider, llm_model, subject, created_at
+    SELECT id, message_id, account_name, actions, llm_provider, llm_model, subject, confidence, reasoning, created_at
     FROM audit_log
   `;
   const params: (string | number)[] = [];
@@ -114,38 +165,9 @@ export function getAuditEntries(
   params.push(limit);
 
   const stmt = db.prepare(query);
-  const rows = stmt.all(...params) as Array<{
-    id: number;
-    message_id: string;
-    account_name: string;
-    actions: string;
-    llm_provider: string | null;
-    llm_model: string | null;
-    subject: string | null;
-    created_at: number;
-  }>;
+  const rows = stmt.all(...params) as AuditLogRow[];
 
-  return rows.map((row) => {
-    const entry: AuditEntry = {
-      id: row.id,
-      messageId: row.message_id,
-      accountName: row.account_name,
-      actions: JSON.parse(row.actions) as LlmAction[],
-      createdAt: row.created_at,
-    };
-
-    if (row.llm_provider !== null) {
-      entry.llmProvider = row.llm_provider;
-    }
-    if (row.llm_model !== null) {
-      entry.llmModel = row.llm_model;
-    }
-    if (row.subject !== null) {
-      entry.subject = row.subject;
-    }
-
-    return entry;
-  });
+  return rows.map(mapRowToEntry);
 }
 
 export function getActionCount(accountName?: string): number {
@@ -287,45 +309,15 @@ export function getAuditEntriesPaginated(
   // Get paginated entries
   const queryParams = [...params, pageSize, offset];
   const stmt = db.prepare(`
-    SELECT id, message_id, account_name, actions, llm_provider, llm_model, subject, created_at
+    SELECT id, message_id, account_name, actions, llm_provider, llm_model, subject, confidence, reasoning, created_at
     FROM audit_log
     ${whereClause}
     ORDER BY created_at DESC
     LIMIT ? OFFSET ?
   `);
 
-  const rows = stmt.all(...queryParams) as Array<{
-    id: number;
-    message_id: string;
-    account_name: string;
-    actions: string;
-    llm_provider: string | null;
-    llm_model: string | null;
-    subject: string | null;
-    created_at: number;
-  }>;
-
-  const entries = rows.map((row) => {
-    const entry: AuditEntry = {
-      id: row.id,
-      messageId: row.message_id,
-      accountName: row.account_name,
-      actions: JSON.parse(row.actions) as LlmAction[],
-      createdAt: row.created_at,
-    };
-
-    if (row.llm_provider !== null) {
-      entry.llmProvider = row.llm_provider;
-    }
-    if (row.llm_model !== null) {
-      entry.llmModel = row.llm_model;
-    }
-    if (row.subject !== null) {
-      entry.subject = row.subject;
-    }
-
-    return entry;
-  });
+  const rows = stmt.all(...queryParams) as AuditLogRow[];
+  const entries = rows.map(mapRowToEntry);
 
   return {
     entries,
@@ -371,42 +363,12 @@ export function exportAuditLog(filters: AuditFilters = {}): AuditEntry[] {
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
   const stmt = db.prepare(`
-    SELECT id, message_id, account_name, actions, llm_provider, llm_model, subject, created_at
+    SELECT id, message_id, account_name, actions, llm_provider, llm_model, subject, confidence, reasoning, created_at
     FROM audit_log
     ${whereClause}
     ORDER BY created_at DESC
   `);
 
-  const rows = stmt.all(...params) as Array<{
-    id: number;
-    message_id: string;
-    account_name: string;
-    actions: string;
-    llm_provider: string | null;
-    llm_model: string | null;
-    subject: string | null;
-    created_at: number;
-  }>;
-
-  return rows.map((row) => {
-    const entry: AuditEntry = {
-      id: row.id,
-      messageId: row.message_id,
-      accountName: row.account_name,
-      actions: JSON.parse(row.actions) as LlmAction[],
-      createdAt: row.created_at,
-    };
-
-    if (row.llm_provider !== null) {
-      entry.llmProvider = row.llm_provider;
-    }
-    if (row.llm_model !== null) {
-      entry.llmModel = row.llm_model;
-    }
-    if (row.subject !== null) {
-      entry.subject = row.subject;
-    }
-
-    return entry;
-  });
+  const rows = stmt.all(...params) as AuditLogRow[];
+  return rows.map(mapRowToEntry);
 }

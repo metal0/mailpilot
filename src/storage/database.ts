@@ -104,6 +104,9 @@ function createTables(database: Database.Database): void {
   // Migration: Add retry columns to existing dead_letter table
   migrateDeadLetterRetry(database);
 
+  // Migration: Add confidence columns to existing audit_log table
+  migrateAuditLogConfidence(database);
+
   logger.debug("Database tables created");
 }
 
@@ -127,6 +130,20 @@ function migrateDeadLetterRetry(database: Database.Database): void {
     `);
 
     logger.info("Dead letter retry migration completed");
+  }
+}
+
+function migrateAuditLogConfidence(database: Database.Database): void {
+  const tableInfo = database.prepare("PRAGMA table_info(audit_log)").all() as Array<{ name: string }>;
+  const hasConfidence = tableInfo.some((col) => col.name === "confidence");
+
+  if (!hasConfidence) {
+    logger.info("Migrating audit_log table to add confidence columns");
+    database.exec(`
+      ALTER TABLE audit_log ADD COLUMN confidence REAL;
+      ALTER TABLE audit_log ADD COLUMN reasoning TEXT;
+    `);
+    logger.info("Audit log confidence migration completed");
   }
 }
 

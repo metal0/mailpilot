@@ -143,7 +143,8 @@ The LLM must return valid JSON with an `actions` array:
 ```typescript
 interface LlmResponse {
   actions: LlmAction[];
-  reasoning?: string;
+  confidence?: number;  // 0.0-1.0, required if confidence scoring enabled
+  reasoning?: string;   // Required if request_reasoning enabled
 }
 
 type LlmAction =
@@ -154,6 +155,42 @@ type LlmAction =
   | { type: "delete" }
   | { type: "noop"; reason?: string };
 ```
+
+## Confidence Scoring (Optional)
+
+Confidence scoring is an opt-in feature that routes low-confidence classifications to the dead letter queue for manual review.
+
+### Global Settings
+
+```yaml
+confidence:
+  enabled: true              # Enable confidence scoring (default: false)
+  request_reasoning: true    # Ask LLM for reasoning (default: true)
+```
+
+### Per-Account Threshold
+
+Each account can have its own minimum confidence threshold:
+
+```yaml
+accounts:
+  - name: work
+    minimum_confidence: 0.8  # Higher threshold for work emails
+    # ...other account config
+  - name: personal
+    minimum_confidence: 0.5  # More lenient for personal
+    # ...other account config
+```
+
+If `minimum_confidence` is not set for an account, the global default of 0.7 is used.
+
+### How It Works
+
+When enabled:
+- LLM is asked to include a `confidence` field (0.0-1.0) in its response
+- Classifications below the account's `minimum_confidence` go to dead letter queue
+- The reasoning is stored in the audit log for review
+- Dashboard shows confidence badges on activity entries
 
 ## Rate Limiting
 

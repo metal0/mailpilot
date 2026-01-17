@@ -186,6 +186,60 @@ describe("buildPrompt", () => {
       expect(prompt).toContain("You MUST respond with valid JSON");
     });
   });
+
+  describe("confidence options", () => {
+    it("includes confidence instruction when requestConfidence is true", () => {
+      const options: PromptOptions = {
+        ...baseOptions,
+        requestConfidence: true,
+      };
+
+      const prompt = buildPrompt(baseEmail, options);
+
+      expect(prompt).toContain("confidence");
+      expect(prompt).toContain("0.0");
+      expect(prompt).toContain("1.0");
+      expect(prompt).toContain("REQUIRED");
+    });
+
+    it("includes reasoning instruction when requestReasoning is true", () => {
+      const options: PromptOptions = {
+        ...baseOptions,
+        requestReasoning: true,
+      };
+
+      const prompt = buildPrompt(baseEmail, options);
+
+      expect(prompt).toContain("reasoning");
+      expect(prompt).toContain("explain");
+    });
+
+    it("includes both when both options are true", () => {
+      const options: PromptOptions = {
+        ...baseOptions,
+        requestConfidence: true,
+        requestReasoning: true,
+      };
+
+      const prompt = buildPrompt(baseEmail, options);
+
+      expect(prompt).toContain("confidence");
+      expect(prompt).toContain("reasoning");
+    });
+
+    it("excludes confidence/reasoning when options are false", () => {
+      const options: PromptOptions = {
+        ...baseOptions,
+        requestConfidence: false,
+        requestReasoning: false,
+      };
+
+      const prompt = buildPrompt(baseEmail, options);
+
+      expect(prompt).not.toContain("The `confidence` field is REQUIRED");
+      expect(prompt).not.toContain("The `reasoning` field is REQUIRED");
+    });
+  });
 });
 
 describe("truncateToTokens", () => {
