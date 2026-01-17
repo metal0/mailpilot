@@ -142,6 +142,18 @@ Real-time system logs with:
 - **Search**: Search through log messages
 - **Auto-scroll**: Automatically scroll to latest entries
 
+### Account Settings
+
+#### Polling Interval
+
+The `polling_interval` setting is configured per-account and controls how often Mailpilot checks for new emails when IMAP IDLE is not supported:
+
+- **Default**: `60s` (60 seconds)
+- **Format**: Duration string (e.g., `30s`, `5m`, `1h`)
+- **Auto-lock**: If the IMAP server supports IDLE (instant notifications), the polling interval is automatically locked and ignored
+
+When adding or editing an account, the polling interval is shown in the "Connection Settings" section. After running a connection test, if IDLE is detected, the field is locked with an "IDLE enabled" badge indicating that the server supports real-time notifications.
+
 ### Rule Testing Sandbox
 
 Test classification prompts against sample emails before deploying to production:
