@@ -29,6 +29,14 @@ import { getAccountStatuses, getUptime, getVersion } from "./status.js";
 import { broadcastStats } from "./websocket.js";
 import { getDetailedProviderStats, getAllProviders, updateProviderHealth } from "../llm/providers.js";
 import { testConnection as testLlmConnection } from "../llm/client.js";
+import {
+  testClassification,
+  testClassificationRaw,
+  validatePrompt,
+  type TestClassificationRequest,
+  type RawTestClassificationRequest,
+  type ValidatePromptRequest,
+} from "../llm/test-classification.js";
 import { getLogsPaginated, type LogLevel, type LogsFilter, createLogger } from "../utils/logger.js";
 
 const logger = createLogger("dashboard");
@@ -794,6 +802,148 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       return c.json({
         success: false,
         error: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
+  });
+
+  // Test classification sandbox - structured email
+  router.post("/api/test-classification", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
+    try {
+      const body = await c.req.json<{
+        prompt: string;
+        email: {
+          from: string;
+          subject: string;
+          body: string;
+          attachments?: string[];
+        };
+        folderMode: "predefined" | "auto_create";
+        allowedFolders?: string[];
+        existingFolders?: string[];
+        allowedActions?: string[];
+        providerName: string;
+        model?: string;
+      }>();
+
+      const { prompt, email, folderMode, allowedFolders, existingFolders, allowedActions, providerName, model } = body;
+
+      if (!prompt?.trim()) {
+        return c.json({ success: false, error: "Prompt is required" }, 400);
+      }
+
+      if (!email?.from || !email?.subject || !email?.body) {
+        return c.json({ success: false, error: "Email from, subject, and body are required" }, 400);
+      }
+
+      if (!providerName) {
+        return c.json({ success: false, error: "Provider name is required" }, 400);
+      }
+
+      const provider = getAllProviders().find((p) => p.name === providerName);
+      if (!provider) {
+        return c.json({ success: false, error: `Provider "${providerName}" not found` }, 404);
+      }
+
+      const request: TestClassificationRequest = {
+        prompt,
+        email,
+        folderMode: folderMode || "predefined",
+        allowedFolders,
+        existingFolders,
+        allowedActions: allowedActions as TestClassificationRequest["allowedActions"],
+        provider,
+        model,
+      };
+
+      const result = await testClassification(request);
+      return c.json(result);
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        promptUsed: "",
+        latencyMs: 0,
+      }, 500);
+    }
+  });
+
+  // Test classification sandbox - raw RFC822 email
+  router.post("/api/test-classification/raw", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
+    try {
+      const body = await c.req.json<{
+        prompt: string;
+        rawEmail: string;
+        folderMode: "predefined" | "auto_create";
+        allowedFolders?: string[];
+        existingFolders?: string[];
+        allowedActions?: string[];
+        providerName: string;
+        model?: string;
+      }>();
+
+      const { prompt, rawEmail, folderMode, allowedFolders, existingFolders, allowedActions, providerName, model } = body;
+
+      if (!prompt?.trim()) {
+        return c.json({ success: false, error: "Prompt is required" }, 400);
+      }
+
+      if (!rawEmail?.trim()) {
+        return c.json({ success: false, error: "Raw email content is required" }, 400);
+      }
+
+      if (!providerName) {
+        return c.json({ success: false, error: "Provider name is required" }, 400);
+      }
+
+      const provider = getAllProviders().find((p) => p.name === providerName);
+      if (!provider) {
+        return c.json({ success: false, error: `Provider "${providerName}" not found` }, 404);
+      }
+
+      const request: RawTestClassificationRequest = {
+        prompt,
+        rawEmail,
+        folderMode: folderMode || "predefined",
+        allowedFolders,
+        existingFolders,
+        allowedActions: allowedActions as RawTestClassificationRequest["allowedActions"],
+        provider,
+        model,
+      };
+
+      const result = await testClassificationRaw(request);
+      return c.json(result);
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        promptUsed: "",
+        latencyMs: 0,
+      }, 500);
+    }
+  });
+
+  // Validate prompt
+  router.post("/api/validate-prompt", requireAuthOrApiKeyWithDryRun("read:activity"), async (c) => {
+    try {
+      const body = await c.req.json<{
+        prompt: string;
+        allowedActions?: string[];
+      }>();
+
+      const request: ValidatePromptRequest = {
+        prompt: body.prompt || "",
+        allowedActions: body.allowedActions as ValidatePromptRequest["allowedActions"],
+      };
+
+      const result = validatePrompt(request);
+      return c.json(result);
+    } catch (error) {
+      return c.json({
+        valid: false,
+        errors: [{ message: error instanceof Error ? error.message : String(error) }],
+        warnings: [],
+        stats: { charCount: 0, wordCount: 0, estimatedTokens: 0 },
       }, 500);
     }
   });

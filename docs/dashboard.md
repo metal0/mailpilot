@@ -329,6 +329,9 @@ When the dashboard is enabled but no account exists:
 | `/api/probe-imap` | POST | Session/Key | `write:accounts` | Probe IMAP server capabilities |
 | `/api/test-imap` | POST | Session/Key | `write:accounts` | Test IMAP connection |
 | `/api/test-llm` | POST | Session/Key | `write:accounts` | Test LLM provider connectivity |
+| `/api/test-classification` | POST | Session/Key | `write:accounts` | Test email classification sandbox |
+| `/api/test-classification/raw` | POST | Session/Key | `write:accounts` | Test classification with raw RFC822 email |
+| `/api/validate-prompt` | POST | Session/Key | `read:activity` | Validate classification prompt |
 | `/api/imap-folders` | POST | Session/Key | `write:accounts` | List folders from IMAP server |
 
 ### Query Parameters

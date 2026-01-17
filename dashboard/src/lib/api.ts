@@ -403,6 +403,114 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+// Rule Testing Sandbox
+export interface TestClassificationParams {
+  prompt: string;
+  email: {
+    from: string;
+    subject: string;
+    body: string;
+    attachments?: string[];
+  };
+  folderMode: "predefined" | "auto_create";
+  allowedFolders?: string[];
+  existingFolders?: string[];
+  allowedActions?: ActionType[];
+  providerName: string;
+  model?: string;
+}
+
+export interface ClassificationAction {
+  type: ActionType;
+  folder?: string;
+  flags?: string[];
+  reason?: string;
+}
+
+export interface TestClassificationResult {
+  success: boolean;
+  classification?: {
+    actions: ClassificationAction[];
+    rawResponse: string;
+  };
+  error?: string;
+  promptUsed: string;
+  latencyMs: number;
+}
+
+export async function testClassification(params: TestClassificationParams): Promise<TestClassificationResult> {
+  return fetchJson(`${BASE_URL}/test-classification`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+// Raw email classification
+export interface RawTestClassificationParams {
+  prompt: string;
+  rawEmail: string;
+  folderMode: "predefined" | "auto_create";
+  allowedFolders?: string[];
+  existingFolders?: string[];
+  allowedActions?: ActionType[];
+  providerName: string;
+  model?: string;
+}
+
+export interface ParsedEmailInfo {
+  from: string;
+  to: string;
+  subject: string;
+  date: string;
+  body: string;
+  attachments: { filename: string; contentType: string; size: number }[];
+}
+
+export interface RawTestClassificationResult extends TestClassificationResult {
+  parsed?: ParsedEmailInfo;
+}
+
+export async function testClassificationRaw(params: RawTestClassificationParams): Promise<RawTestClassificationResult> {
+  return fetchJson(`${BASE_URL}/test-classification/raw`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+// Prompt validation
+export interface ValidatePromptParams {
+  prompt: string;
+  allowedActions?: ActionType[];
+}
+
+export interface ValidationError {
+  line?: number;
+  message: string;
+}
+
+export interface ValidationWarning {
+  line?: number;
+  message: string;
+}
+
+export interface ValidatePromptResult {
+  valid: boolean;
+  errors: ValidationError[];
+  warnings: ValidationWarning[];
+  stats: {
+    charCount: number;
+    wordCount: number;
+    estimatedTokens: number;
+  };
+}
+
+export async function validatePrompt(params: ValidatePromptParams): Promise<ValidatePromptResult> {
+  return fetchJson(`${BASE_URL}/validate-prompt`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
 // Export
 export function exportCsvUrl(params: ActivityParams = {}): string {
   const searchParams = new URLSearchParams();

@@ -9,6 +9,7 @@
   import LogViewer from "../lib/components/LogViewer.svelte";
   import Sidebar from "../lib/components/Sidebar.svelte";
   import Settings from "../lib/components/Settings.svelte";
+  import RuleTestingSandbox from "../lib/components/RuleTestingSandbox.svelte";
   import Debug from "../lib/components/Debug.svelte";
   import Modal from "../lib/components/Modal.svelte";
   import KeyboardShortcuts from "../lib/components/KeyboardShortcuts.svelte";
@@ -267,6 +268,13 @@
         </button>
         <button
           class="tab-btn"
+          class:active={currentTab === "sandbox"}
+          onclick={() => switchTab("sandbox")}
+        >
+          {$t("nav.sandbox")}
+        </button>
+        <button
+          class="tab-btn"
           class:active={currentTab === "debug"}
           onclick={() => switchTab("debug")}
         >
@@ -300,6 +308,8 @@
 
       {#if currentTab === "settings"}
         <Settings />
+      {:else if currentTab === "sandbox"}
+        <RuleTestingSandbox />
       {:else if currentTab === "debug"}
         <Debug />
       {/if}
