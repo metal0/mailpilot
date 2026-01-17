@@ -74,6 +74,27 @@ Manual edits to lock files cause:
 
 If the lock file gets corrupted, regenerate it with `pnpm install --no-frozen-lockfile`.
 
+### Test CI Locally Before Pushing (MANDATORY)
+
+**ALWAYS run the full CI check locally before pushing:**
+
+```bash
+pnpm install --frozen-lockfile  # Verify lockfile is valid
+pnpm lint                       # Run linter
+pnpm typecheck                  # Run TypeScript checks
+pnpm build                      # Build backend + dashboard
+pnpm test                       # Run all tests
+```
+
+**All commands must pass before pushing.** If any fail, fix the issues locally first.
+
+Common CI failures and fixes:
+- `ERR_PNPM_OUTDATED_LOCKFILE` → Run `pnpm install` to update lockfile
+- `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY` → Run `pnpm install` to regenerate
+- Lint errors → Fix the code issues reported
+- Type errors → Fix TypeScript type issues
+- Build errors → Check for missing imports/dependencies
+
 ### Feature Branch Workflow (REQUIRED)
 
 **All new feature implementations MUST follow this workflow:**

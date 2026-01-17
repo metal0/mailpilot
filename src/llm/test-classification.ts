@@ -280,13 +280,6 @@ export function validatePrompt(request: ValidatePromptRequest): ValidatePromptRe
     });
   }
 
-  const mentionsJson = /json|JSON|respond.*format|format.*respond/i.test(prompt);
-  if (!mentionsJson) {
-    warnings.push({
-      message: "Prompt doesn't mention JSON format. Note: JSON schema is auto-injected, but you may want to mention it for clarity.",
-    });
-  }
-
   if (allowedActions && allowedActions.length > 0) {
     const actionPattern = /\b(move|spam|flag|read|delete|noop)\b/gi;
     const mentionedActions = [...prompt.matchAll(actionPattern)]

@@ -42,6 +42,19 @@ pnpm install                    # Regenerate lock file
 
 Manual edits cause broken dependency resolution and CI failures.
 
+### Test CI Locally Before Pushing (MANDATORY)
+
+**ALWAYS run the full CI check locally before pushing:**
+
+```bash
+pnpm install --frozen-lockfile  # Verify lockfile is valid
+pnpm lint && pnpm typecheck && pnpm build && pnpm test
+```
+
+All commands must pass before pushing. Common fixes:
+- `ERR_PNPM_OUTDATED_LOCKFILE` → Run `pnpm install` to update lockfile
+- Lint/Type errors → Fix the code issues reported
+
 ### Related Documentation
 
 | Document | Purpose |
