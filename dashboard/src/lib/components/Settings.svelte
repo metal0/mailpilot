@@ -3226,6 +3226,7 @@
     padding: 1.5rem;
     width: 100%;
     max-width: 600px;
+    min-height: 580px;
     max-height: 90vh;
     overflow-y: auto;
   }
@@ -3574,6 +3575,18 @@
   .collapsible-content {
     padding: 1rem;
     background: var(--bg-secondary);
+    animation: slideDown 0.2s ease-out;
+  }
+
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   /* Webhook styles */
@@ -3871,13 +3884,13 @@
     top: 100%;
     left: 0;
     right: 0;
-    max-height: 200px;
+    max-height: 300px;
     overflow-y: auto;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 0.375rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    z-index: 100;
+    z-index: 160;
     margin-top: 0.25rem;
   }
 
@@ -4048,7 +4061,8 @@
   }
 
   .side-modal {
-    width: 320px;
+    width: 380px;
+    min-height: 400px;
     max-height: 90vh;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
@@ -4057,6 +4071,18 @@
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
+    animation: slideIn 0.2s ease-out;
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateX(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
   }
 
   .side-modal-header {
