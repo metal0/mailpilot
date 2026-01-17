@@ -87,10 +87,11 @@ export interface ValidatePromptResponse {
 
 function formatAddress(address: AddressObject | AddressObject[] | undefined): string {
   if (!address) return "";
-  const addr = Array.isArray(address) ? address[0] : address;
-  if (!addr.value || !addr.value[0]) return "";
-  const first = addr.value[0];
-  return first.name ? `${first.name} <${first.address}>` : first.address || "";
+  const addrObj = Array.isArray(address) ? address[0] : address;
+  if (!addrObj) return "";
+  const firstValue = addrObj.value[0];
+  if (!firstValue) return "";
+  return firstValue.name ? `${firstValue.name} <${firstValue.address}>` : firstValue.address || "";
 }
 
 export async function parseRawEmail(rawEmail: string): Promise<ParsedEmailInfo> {

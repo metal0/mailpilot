@@ -847,7 +847,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       const request: TestClassificationRequest = {
         prompt,
         email,
-        folderMode: folderMode || "predefined",
+        folderMode,
         provider,
         ...(allowedFolders && { allowedFolders }),
         ...(existingFolders && { existingFolders }),
@@ -903,7 +903,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       const request: RawTestClassificationRequest = {
         prompt,
         rawEmail,
-        folderMode: folderMode || "predefined",
+        folderMode,
         provider,
         ...(allowedFolders && { allowedFolders }),
         ...(existingFolders && { existingFolders }),
