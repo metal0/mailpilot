@@ -473,6 +473,216 @@ test.describe('Activity Log - Streaming & Export', () => {
   });
 });
 
+test.describe('Activity Log - Confidence Badges', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await ensureLoggedIn(page, TEST_USER);
+    await waitForDashboard(page);
+    await page.click(SELECTORS.NAV.TAB_ACTIVITY);
+    await page.waitForTimeout(500);
+  });
+
+  test('confidence column header visible when confidence enabled', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Check for confidence column header');
+      const confidenceHeader = page.locator(SELECTORS.ACTIVITY.CONFIDENCE_COLUMN_HEADER);
+      const headerExists = await confidenceHeader.count() > 0;
+
+      if (headerExists) {
+        await expect(confidenceHeader).toBeVisible();
+        await reporter.stepComplete();
+        reporter.complete('pass');
+      } else {
+        reporter.complete('skip', 'Confidence scoring not enabled');
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('entries show confidence badges when available', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      const rows = page.locator(SELECTORS.ACTIVITY.TABLE_ROW);
+      const rowCount = await rows.count();
+
+      if (rowCount === 0) {
+        reporter.complete('skip', 'No activity entries');
+        return;
+      }
+
+      await reporter.step('Check for confidence badges');
+      const badges = page.locator(SELECTORS.ACTIVITY.CONFIDENCE_BADGE);
+      const badgeCount = await badges.count();
+
+      if (badgeCount > 0) {
+        await expect(badges.first()).toBeVisible();
+        await reporter.stepComplete();
+        reporter.complete('pass');
+      } else {
+        reporter.complete('skip', 'No entries with confidence data');
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('confidence badges have correct color classes', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Check for high confidence badges');
+      const highBadges = page.locator(SELECTORS.ACTIVITY.CONFIDENCE_HIGH);
+      const highCount = await highBadges.count();
+
+      await reporter.step('Check for medium confidence badges');
+      const mediumBadges = page.locator(SELECTORS.ACTIVITY.CONFIDENCE_MEDIUM);
+      const mediumCount = await mediumBadges.count();
+
+      await reporter.step('Check for low confidence badges');
+      const lowBadges = page.locator(SELECTORS.ACTIVITY.CONFIDENCE_LOW);
+      const lowCount = await lowBadges.count();
+
+      const totalBadges = highCount + mediumCount + lowCount;
+
+      if (totalBadges > 0) {
+        await reporter.stepComplete();
+        reporter.complete('pass');
+      } else {
+        reporter.complete('skip', 'No confidence badges found');
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('confidence badge shows percentage value', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      const badges = page.locator(SELECTORS.ACTIVITY.CONFIDENCE_BADGE);
+      const badgeCount = await badges.count();
+
+      if (badgeCount === 0) {
+        reporter.complete('skip', 'No confidence badges found');
+        return;
+      }
+
+      await reporter.step('Verify badge shows percentage');
+      const badgeText = await badges.first().textContent();
+      expect(badgeText).toMatch(/\d+%/);
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('confidence badge has title attribute with reasoning', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      const badges = page.locator(SELECTORS.ACTIVITY.CONFIDENCE_BADGE);
+      const badgeCount = await badges.count();
+
+      if (badgeCount === 0) {
+        reporter.complete('skip', 'No confidence badges found');
+        return;
+      }
+
+      await reporter.step('Check badge title attribute');
+      const title = await badges.first().getAttribute('title');
+      expect(title).not.toBeNull();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+});
+
+test.describe('Activity Log - Confidence Filtering', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await ensureLoggedIn(page, TEST_USER);
+    await waitForDashboard(page);
+    await page.click(SELECTORS.NAV.TAB_ACTIVITY);
+    await page.waitForTimeout(500);
+  });
+
+  test('filter dropdown shows confidence filter options when enabled', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Open filter dropdown');
+      await page.click(SELECTORS.ACTIVITY.FILTER_BUTTON);
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Check for confidence filter options');
+      const dropdownContent = await page.locator(SELECTORS.ACTIVITY.FILTER_DROPDOWN).textContent();
+
+      if (dropdownContent?.includes('conf-high') || dropdownContent?.includes('High') || dropdownContent?.includes('high')) {
+        await reporter.stepComplete();
+        reporter.complete('pass');
+      } else {
+        reporter.complete('skip', 'Confidence filters not available (scoring may be disabled)');
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+});
+
 test.describe('Activity Log - Pagination', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');

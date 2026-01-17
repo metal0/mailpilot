@@ -48,6 +48,8 @@ export interface AuditEntry {
   llmProvider?: string;
   llmModel?: string;
   subject?: string;
+  confidence?: number;
+  reasoning?: string;
   createdAt: number;
 }
 
@@ -79,6 +81,7 @@ export interface DashboardStats {
   version: string;
   uptime: number;
   dryRun: boolean;
+  confidenceEnabled: boolean;
   totals: {
     emailsProcessed: number;
     actionsTaken: number;

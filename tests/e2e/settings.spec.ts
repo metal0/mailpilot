@@ -1821,3 +1821,490 @@ test.describe('Settings - Collapsible Advanced Section', () => {
     }
   });
 });
+
+test.describe('Settings - Confidence Scoring', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await ensureLoggedIn(page, TEST_USER);
+    await waitForDashboard(page);
+    await page.click(SELECTORS.NAV.TAB_SETTINGS);
+    await page.waitForTimeout(500);
+  });
+
+  test('confidence scoring section exists in providers tab', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to providers section');
+      const providersBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /providers/i });
+      await providersBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify confidence scoring section title exists');
+      const confidenceTitle = page.locator('h4:has-text("Confidence Scoring")');
+      await expect(confidenceTitle).toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('confidence scoring enable checkbox exists', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to providers section');
+      const providersBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /providers/i });
+      await providersBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify enable confidence scoring checkbox exists');
+      const enableCheckbox = page.locator('label:has-text("Enable Confidence Scoring") input[type="checkbox"]');
+      await expect(enableCheckbox).toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('enabling confidence scoring reveals additional options', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to providers section');
+      const providersBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /providers/i });
+      await providersBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Enable confidence scoring');
+      const enableCheckbox = page.locator('label:has-text("Enable Confidence Scoring") input[type="checkbox"]');
+      const isChecked = await enableCheckbox.isChecked();
+      if (!isChecked) {
+        await enableCheckbox.click();
+        await page.waitForTimeout(300);
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Verify reasoning checkbox appears');
+      const reasoningCheckbox = page.locator('label:has-text("Request LLM Reasoning") input[type="checkbox"]');
+      await expect(reasoningCheckbox).toBeVisible();
+      await reporter.stepComplete();
+
+      await reporter.step('Verify threshold note appears');
+      const thresholdNote = page.locator('p.section-note:has-text("threshold")');
+      await expect(thresholdNote).toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('save button enabled after toggling confidence scoring', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to providers section');
+      const providersBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /providers/i });
+      await providersBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Toggle confidence scoring checkbox');
+      const enableCheckbox = page.locator('label:has-text("Enable Confidence Scoring") input[type="checkbox"]');
+      await enableCheckbox.click();
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify save button is enabled');
+      const saveButton = page.locator(SELECTORS.SETTINGS.SAVE_BUTTON);
+      await expect(saveButton).toBeEnabled();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+});
+
+test.describe('Settings - Account Minimum Confidence', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await ensureLoggedIn(page, TEST_USER);
+    await waitForDashboard(page);
+    await page.click(SELECTORS.NAV.TAB_SETTINGS);
+    await page.waitForTimeout(500);
+  });
+
+  test('account advanced section contains minimum confidence slider when enabled', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to providers section to check confidence status');
+      const providersBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /providers/i });
+      await providersBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if confidence scoring is enabled');
+      const enableCheckbox = page.locator('label:has-text("Enable Confidence Scoring") input[type="checkbox"]');
+      const isEnabled = await enableCheckbox.isChecked();
+      if (!isEnabled) {
+        reporter.complete('skip', 'Confidence scoring is not enabled - slider will not be visible');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if there are existing accounts');
+      const accountCards = page.locator('.account-card, .item-card, .list-item').first();
+      const hasAccounts = await accountCards.isVisible().catch(() => false);
+
+      if (!hasAccounts) {
+        reporter.complete('skip', 'No existing accounts to test confidence slider');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click first account to edit');
+      await accountCards.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Expand advanced section');
+      const advancedHeader = page.locator('.collapsible-header:has-text("Advanced")');
+      const headerExists = await advancedHeader.isVisible().catch(() => false);
+      if (headerExists) {
+        const content = page.locator('.collapsible-content');
+        const isExpanded = await content.isVisible().catch(() => false);
+        if (!isExpanded) {
+          await advancedHeader.click();
+          await page.waitForTimeout(300);
+        }
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Verify minimum confidence slider exists');
+      const confidenceSlider = page.locator('.modal input[type="range"]');
+      await expect(confidenceSlider).toBeVisible();
+      await reporter.stepComplete();
+
+      await reporter.step('Verify slider value display exists');
+      const sliderValue = page.locator('.slider-value');
+      await expect(sliderValue).toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('minimum confidence slider has correct range', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if there are existing accounts');
+      const accountCards = page.locator('.account-card, .item-card, .list-item').first();
+      const hasAccounts = await accountCards.isVisible().catch(() => false);
+
+      if (!hasAccounts) {
+        reporter.complete('skip', 'No existing accounts to test slider range');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click first account to edit');
+      await accountCards.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Expand advanced section');
+      const advancedHeader = page.locator('.collapsible-header:has-text("Advanced")');
+      const headerExists = await advancedHeader.isVisible().catch(() => false);
+      if (headerExists) {
+        const content = page.locator('.collapsible-content');
+        const isExpanded = await content.isVisible().catch(() => false);
+        if (!isExpanded) {
+          await advancedHeader.click();
+          await page.waitForTimeout(300);
+        }
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Verify slider attributes');
+      const slider = page.locator('.modal input[type="range"]');
+      const min = await slider.getAttribute('min');
+      const max = await slider.getAttribute('max');
+      const step = await slider.getAttribute('step');
+
+      expect(min).toBe('0');
+      expect(max).toBe('100');
+      expect(step).toBe('5');
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('changing minimum confidence slider updates value display', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if there are existing accounts');
+      const accountCards = page.locator('.account-card, .item-card, .list-item').first();
+      const hasAccounts = await accountCards.isVisible().catch(() => false);
+
+      if (!hasAccounts) {
+        reporter.complete('skip', 'No existing accounts to test slider interaction');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click first account to edit');
+      await accountCards.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Expand advanced section');
+      const advancedHeader = page.locator('.collapsible-header:has-text("Advanced")');
+      const headerExists = await advancedHeader.isVisible().catch(() => false);
+      if (headerExists) {
+        const content = page.locator('.collapsible-content');
+        const isExpanded = await content.isVisible().catch(() => false);
+        if (!isExpanded) {
+          await advancedHeader.click();
+          await page.waitForTimeout(300);
+        }
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Get initial slider value');
+      const slider = page.locator('.modal input[type="range"]');
+      const sliderValueDisplay = page.locator('.slider-value');
+      const initialValue = await sliderValueDisplay.textContent();
+      await reporter.stepComplete();
+
+      await reporter.step('Change slider value');
+      await slider.fill('50');
+      await page.waitForTimeout(200);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify value display updated');
+      const newValue = await sliderValueDisplay.textContent();
+      expect(newValue).toBe('50%');
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('minimum confidence field has helpful hint text', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if there are existing accounts');
+      const accountCards = page.locator('.account-card, .item-card, .list-item').first();
+      const hasAccounts = await accountCards.isVisible().catch(() => false);
+
+      if (!hasAccounts) {
+        reporter.complete('skip', 'No existing accounts to test hint text');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click first account to edit');
+      await accountCards.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Expand advanced section');
+      const advancedHeader = page.locator('.collapsible-header:has-text("Advanced")');
+      const headerExists = await advancedHeader.isVisible().catch(() => false);
+      if (headerExists) {
+        const content = page.locator('.collapsible-content');
+        const isExpanded = await content.isVisible().catch(() => false);
+        if (!isExpanded) {
+          await advancedHeader.click();
+          await page.waitForTimeout(300);
+        }
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Verify hint text is visible');
+      const hintText = page.locator('.field-hint:has-text("dead letter")');
+      await expect(hintText).toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('minimum confidence slider hidden when confidence scoring disabled', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to providers section to check confidence status');
+      const providersBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /providers/i });
+      await providersBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if confidence scoring is disabled');
+      const enableCheckbox = page.locator('label:has-text("Enable Confidence Scoring") input[type="checkbox"]');
+      const isEnabled = await enableCheckbox.isChecked();
+      if (isEnabled) {
+        reporter.complete('skip', 'Confidence scoring is enabled - this test is for disabled state');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if there are existing accounts');
+      const accountCards = page.locator('.account-card, .item-card, .list-item').first();
+      const hasAccounts = await accountCards.isVisible().catch(() => false);
+
+      if (!hasAccounts) {
+        reporter.complete('skip', 'No existing accounts to test');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click first account to edit');
+      await accountCards.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Expand advanced section');
+      const advancedHeader = page.locator('.collapsible-header:has-text("Advanced")');
+      const headerExists = await advancedHeader.isVisible().catch(() => false);
+      if (headerExists) {
+        const content = page.locator('.collapsible-content');
+        const isExpanded = await content.isVisible().catch(() => false);
+        if (!isExpanded) {
+          await advancedHeader.click();
+          await page.waitForTimeout(300);
+        }
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Verify minimum confidence slider is NOT visible');
+      const confidenceSlider = page.locator('.modal .slider-input');
+      const sliderVisible = await confidenceSlider.isVisible().catch(() => false);
+      expect(sliderVisible).toBe(false);
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+});

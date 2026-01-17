@@ -223,8 +223,9 @@ export async function processMessage(
     });
 
     // Check confidence threshold if enabled
+    // Per-account threshold takes precedence over global config
     if (confidenceEnabled && classificationResult.confidence !== undefined) {
-      const threshold = confidenceConfig?.minimum_threshold ?? 0.7;
+      const threshold = account.minimum_confidence ?? confidenceConfig?.minimum_threshold ?? 0.7;
       if (classificationResult.confidence < threshold) {
         const confidencePercent = (classificationResult.confidence * 100).toFixed(0);
         const thresholdPercent = (threshold * 100).toFixed(0);

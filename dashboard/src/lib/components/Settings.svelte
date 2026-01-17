@@ -21,6 +21,7 @@
     antivirus?: AntivirusConfig;
     attachments?: AttachmentsConfig;
     notifications?: NotificationsConfig;
+    confidence?: ConfidenceConfig;
   }
 
   interface LlmProvider {
@@ -44,6 +45,7 @@
     prompt_override?: string;
     prompt_file?: string;
     allowed_actions?: string[];
+    minimum_confidence?: number;
   }
 
   interface ImapConfig {
@@ -103,6 +105,11 @@
       start?: string;
       end?: string;
     };
+  }
+
+  interface ConfidenceConfig {
+    enabled?: boolean;
+    request_reasoning?: boolean;
   }
 
   let config = $state<Config | null>(null);
@@ -198,6 +205,7 @@
       if (JSON.stringify(config.attachments) !== JSON.stringify(original.attachments)) count++;
       if (JSON.stringify(config.antivirus) !== JSON.stringify(original.antivirus)) count++;
       if (JSON.stringify(config.notifications) !== JSON.stringify(original.notifications)) count++;
+      if (JSON.stringify(config.confidence) !== JSON.stringify(original.confidence)) count++;
 
       // Compare arrays
       if (JSON.stringify(config.accounts) !== JSON.stringify(original.accounts)) count++;
@@ -295,6 +303,7 @@
     "folders.mode": "Predefined: only allow moves to specified folders. Auto-create: create folders as needed",
     "folders.allowed": "Folders LLM can move emails to. Leave empty to auto-discover all existing folders via IMAP",
     prompt_override: "Overrides the global default prompt",
+    "account.minimum_confidence": "Minimum confidence threshold for this account. Classifications below this go to dead letter queue.",
     "llm.provider": "Which LLM provider to use for this account",
     "llm.model": "Model to use (overrides provider default)",
     "provider.api_url": "API endpoint URL for the LLM provider",
@@ -325,6 +334,9 @@
     "notifications.events": "Which events trigger notifications",
     "notifications.daily_summary_time": "When to send daily summary (24h format, e.g., 09:00)",
     "notifications.quiet_hours": "Suppress notifications during these hours",
+    "confidence.enabled": "Enable confidence scoring to route low-confidence classifications to the dead letter queue",
+    "confidence.minimum_threshold": "Classifications below this threshold go to dead letter queue (0.0-1.0)",
+    "confidence.request_reasoning": "Ask the LLM to explain its classification reasoning",
   };
 
   onMount(async () => {
@@ -390,6 +402,10 @@
         enabled: true,
         events: ["error", "connection_lost"],
         quiet_hours: { enabled: false, start: "22:00", end: "08:00" },
+      };
+      loadedConfig.confidence = loadedConfig.confidence ?? {
+        enabled: false,
+        request_reasoning: true,
       };
 
       config = loadedConfig;
@@ -1565,6 +1581,30 @@
                             ></textarea>
                           </label>
                         </div>
+                        {#if config.confidence?.enabled}
+                          <div class="form-group">
+                            <label>
+                              <span class="label-text">
+                                {$t("settings.accounts.minimumConfidence")}
+                                <span class="help-icon" title={helpTexts["account.minimum_confidence"]}>?</span>
+                              </span>
+                              <div class="slider-input">
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="100"
+                                  step="5"
+                                  value={(editingAccount.minimum_confidence ?? 0.7) * 100}
+                                  oninput={(e) => {
+                                    editingAccount!.minimum_confidence = Number((e.target as HTMLInputElement).value) / 100;
+                                  }}
+                                />
+                                <span class="slider-value">{Math.round((editingAccount.minimum_confidence ?? 0.7) * 100)}%</span>
+                              </div>
+                              <span class="field-hint">{$t("settings.accounts.minimumConfidenceHint")}</span>
+                            </label>
+                          </div>
+                        {/if}
                       </div><!-- end collapsible-content -->
                     {/if}
                   </div><!-- end collapsible-section -->
@@ -2073,6 +2113,32 @@
                 <textarea bind:value={config.default_prompt} rows="8" placeholder={$t("settings.prompt.placeholder")}></textarea>
               </label>
             </div>
+
+            <h4>{$t("settings.confidence.sectionTitle")}</h4>
+            <p class="section-note">{$t("settings.confidence.description")}</p>
+
+            <div class="form-group checkbox">
+              <label>
+                <input type="checkbox" bind:checked={config.confidence.enabled} />
+                <span class="label-text">
+                  {$t("settings.confidence.enableLabel")}
+                  <span class="help-icon" title={helpTexts["confidence.enabled"]}>?</span>
+                </span>
+              </label>
+            </div>
+
+            {#if config.confidence?.enabled}
+              <div class="form-group checkbox">
+                <label>
+                  <input type="checkbox" bind:checked={config.confidence.request_reasoning} />
+                  <span class="label-text">
+                    {$t("settings.confidence.requestReasoning")}
+                    <span class="help-icon" title={helpTexts["confidence.request_reasoning"]}>?</span>
+                  </span>
+                </label>
+              </div>
+              <p class="section-note">{$t("settings.confidence.thresholdNote")}</p>
+            {/if}
           </section>
 
         {:else if activeSection === "apikeys"}
@@ -2959,6 +3025,35 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
+  }
+
+  .slider-input {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .slider-input input[type="range"] {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
+
+  .slider-value {
+    min-width: 3rem;
+    text-align: right;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .field-hint {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
   }
 
   .items-list {

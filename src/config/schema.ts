@@ -80,6 +80,8 @@ const accountConfigSchema = z.object({
   // Allowed action types for this account. If not specified, all actions are allowed.
   // Actions not in this list will be blocked even if the LLM returns them.
   allowed_actions: z.array(actionTypeSchema).optional(),
+  // Per-account minimum confidence threshold. Overrides global confidence.minimum_threshold.
+  minimum_confidence: z.number().min(0).max(1).optional(),
 });
 
 const llmProviderSchema = z.object({

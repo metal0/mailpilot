@@ -244,6 +244,17 @@ const llmProviders = [
   { provider: "anthropic", model: "claude-3-5-sonnet-20241022" },
 ];
 
+const reasonings = [
+  "Email contains newsletter subscription content with marketing links",
+  "Sender is from corporate domain, subject mentions project deadlines",
+  "Financial document detected with invoice reference number",
+  "Personal conversation with friend about weekend plans",
+  "Urgent security notice requiring immediate attention",
+  "Automated system notification, informational only",
+  "Unable to determine clear category from content",
+  "Promotional content with unsubscribe links",
+];
+
 const errors = [
   "IMAP connection timeout after 30000ms",
   "LLM rate limit exceeded, retry after 60s",
@@ -291,6 +302,8 @@ function initializeSchema(db: Database.Database): void {
       llm_provider TEXT,
       llm_model TEXT,
       subject TEXT,
+      confidence REAL,
+      reasoning TEXT,
       created_at INTEGER NOT NULL
     );
 
@@ -344,8 +357,8 @@ function seedAuditLog(db: Database.Database, count: number): void {
   const day = 24 * hour;
 
   const stmt = db.prepare(`
-    INSERT INTO audit_log (message_id, account_name, actions, llm_provider, llm_model, subject, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO audit_log (message_id, account_name, actions, llm_provider, llm_model, subject, confidence, reasoning, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertMany = db.transaction(() => {
@@ -361,6 +374,20 @@ function seedAuditLog(db: Database.Database, count: number): void {
         actions.push({ type: "read", reason: "Marked as read after processing" });
       }
 
+      // Generate confidence: ~60% high (0.8-1.0), ~25% medium (0.5-0.79), ~15% low (0.3-0.49)
+      let confidence: number;
+      const roll = Math.random();
+      if (roll < 0.6) {
+        confidence = 0.8 + Math.random() * 0.2; // High: 0.8-1.0
+      } else if (roll < 0.85) {
+        confidence = 0.5 + Math.random() * 0.3; // Medium: 0.5-0.79
+      } else {
+        confidence = 0.3 + Math.random() * 0.2; // Low: 0.3-0.49
+      }
+      confidence = Math.round(confidence * 100) / 100; // Round to 2 decimal places
+
+      const reasoning = randomElement(reasonings);
+
       stmt.run(
         generateMessageId(),
         account,
@@ -368,6 +395,8 @@ function seedAuditLog(db: Database.Database, count: number): void {
         llm.provider,
         llm.model,
         subject,
+        confidence,
+        reasoning,
         createdAt
       );
     }
