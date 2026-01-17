@@ -146,13 +146,13 @@ export async function testClassification(
       promptLength: fullPrompt.length,
     });
 
-    const actions = await classifyEmail({
+    const result = await classifyEmail({
       provider: request.provider,
       model,
       prompt: fullPrompt,
     });
 
-    const filteredActions = filterDisallowedActions(actions, allowedActions);
+    const filteredActions = filterDisallowedActions(result.actions, allowedActions);
 
     return {
       success: true,
@@ -226,13 +226,13 @@ export async function testClassificationRaw(
       parsedSubject: parsed.subject,
     });
 
-    const actions = await classifyEmail({
+    const result = await classifyEmail({
       provider: request.provider,
       model,
       prompt: fullPrompt,
     });
 
-    const filteredActions = filterDisallowedActions(actions, allowedActions);
+    const filteredActions = filterDisallowedActions(result.actions, allowedActions);
 
     return {
       success: true,

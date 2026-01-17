@@ -29,7 +29,7 @@
   let existingFolders = $state("INBOX, Sent, Drafts, Trash");
   let selectedProvider = $state("");
   let selectedModel = $state("");
-  let allowedActions = $state<ActionType[]>(["move", "spam", "flag", "read", "noop"]);
+  let allowedActions = $state<ActionType[]>(["move", "spam", "flag", "read"]);
 
   // Raw email mode
   let useRawEmail = $state(false);
@@ -51,7 +51,8 @@ You can paste a real RFC822 email here.`);
   // Tabs
   let activeResultTab = $state<"actions" | "prompt" | "raw">("actions");
 
-  const allActionTypes: ActionType[] = ["move", "spam", "flag", "read", "delete", "noop"];
+  // Note: 'noop' is excluded since it's always allowed by the backend
+  const allActionTypes: ActionType[] = ["move", "spam", "flag", "read", "delete"];
 
   async function loadConfig() {
     try {
