@@ -199,7 +199,6 @@ const en = {
   "settings.accounts.allowedActionsHelp": "Select which action types the LLM can use for this account. Delete is disabled by default for safety.",
   "settings.accounts.deleteWarning": "Warning: Delete action is enabled. Emails may be permanently deleted.",
   "settings.accounts.promptOverride": "Prompt Override",
-  "settings.accounts.promptOverrideHelp": "Custom classification prompt for this account (overrides global default)",
   "settings.accounts.oauth2": "OAuth2 Settings",
   "settings.accounts.clientId": "Client ID",
   "settings.accounts.clientSecret": "Client Secret",
