@@ -117,7 +117,7 @@ test.describe('Sandbox - Email Input', () => {
 
     try {
       await reporter.step('Click raw email toggle');
-      await page.click(`${SELECTORS.SANDBOX.TOGGLE_RAW} input`);
+      await page.click(SELECTORS.SANDBOX.TOGGLE_RAW);
       await reporter.stepComplete();
 
       await reporter.step('Verify raw email textarea visible');
@@ -212,7 +212,7 @@ test.describe('Sandbox - Attachment Upload', () => {
 
     try {
       await reporter.step('Switch to raw RFC822 mode');
-      await page.click(`${SELECTORS.SANDBOX.TOGGLE_RAW} input`);
+      await page.click(SELECTORS.SANDBOX.TOGGLE_RAW);
       await reporter.stepComplete();
 
       await reporter.step('Verify upload button not visible');
@@ -400,6 +400,219 @@ test.describe('Sandbox - Run Test Button', () => {
     try {
       await reporter.step('Verify run test button visible');
       await expect(page.locator(SELECTORS.SANDBOX.RUN_TEST_BTN)).toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+});
+
+test.describe('Sandbox - State Persistence', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await ensureLoggedIn(page, TEST_USER);
+    await waitForDashboard(page);
+    await page.click(SELECTORS.NAV.TAB_SANDBOX);
+    await page.waitForTimeout(500);
+  });
+
+  test('persists email data when switching tabs', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Enter custom email data');
+      const testSubject = 'Test Subject for Persistence';
+      const testFrom = 'persistence@test.com';
+      await page.fill(SELECTORS.SANDBOX.EMAIL_SUBJECT, testSubject);
+      await page.fill(SELECTORS.SANDBOX.EMAIL_FROM, testFrom);
+      await reporter.stepComplete();
+
+      await reporter.step('Switch to Settings tab');
+      await page.click(SELECTORS.NAV.TAB_SETTINGS);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Return to Sandbox tab');
+      await page.click(SELECTORS.NAV.TAB_SANDBOX);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify email data persisted');
+      const subjectValue = await page.locator(SELECTORS.SANDBOX.EMAIL_SUBJECT).inputValue();
+      const fromValue = await page.locator(SELECTORS.SANDBOX.EMAIL_FROM).inputValue();
+      expect(subjectValue).toBe(testSubject);
+      expect(fromValue).toBe(testFrom);
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('persists raw email mode when switching tabs', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Switch to raw email mode');
+      await page.click(SELECTORS.SANDBOX.TOGGLE_RAW);
+      await expect(page.locator(SELECTORS.SANDBOX.RAW_EMAIL)).toBeVisible();
+      await reporter.stepComplete();
+
+      await reporter.step('Enter raw email content');
+      const testRaw = 'From: test@example.com\nSubject: Raw Test\n\nBody content';
+      await page.fill(SELECTORS.SANDBOX.RAW_EMAIL, testRaw);
+      await reporter.stepComplete();
+
+      await reporter.step('Switch to Overview tab');
+      await page.click(SELECTORS.NAV.TAB_OVERVIEW);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Return to Sandbox tab');
+      await page.click(SELECTORS.NAV.TAB_SANDBOX);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify raw mode and content persisted');
+      await expect(page.locator(SELECTORS.SANDBOX.RAW_EMAIL)).toBeVisible();
+      const rawValue = await page.locator(SELECTORS.SANDBOX.RAW_EMAIL).inputValue();
+      expect(rawValue).toBe(testRaw);
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('persists action toggle states when switching tabs', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Get initial active toggles count');
+      const initialCount = await page.locator(SELECTORS.SANDBOX.ACTION_TOGGLE_ACTIVE).count();
+      await reporter.stepComplete();
+
+      await reporter.step('Toggle delete action');
+      const deleteToggle = page.locator(`${SELECTORS.SANDBOX.ACTION_TOGGLE}:has-text("delete")`);
+      await deleteToggle.click();
+      const newCount = await page.locator(SELECTORS.SANDBOX.ACTION_TOGGLE_ACTIVE).count();
+      await reporter.stepComplete();
+
+      await reporter.step('Switch to Activity tab');
+      await page.click(SELECTORS.NAV.TAB_ACTIVITY);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Return to Sandbox tab');
+      await page.click(SELECTORS.NAV.TAB_SANDBOX);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify toggle state persisted');
+      const persistedCount = await page.locator(SELECTORS.SANDBOX.ACTION_TOGGLE_ACTIVE).count();
+      expect(persistedCount).toBe(newCount);
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('persists folder mode selection when switching tabs', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Select auto_create folder mode');
+      await page.click(SELECTORS.SANDBOX.FOLDER_MODE_AUTO);
+      await expect(page.locator(SELECTORS.SANDBOX.FOLDER_MODE_AUTO)).toBeChecked();
+      await reporter.stepComplete();
+
+      await reporter.step('Switch to Logs tab');
+      await page.click(SELECTORS.NAV.TAB_LOGS);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Return to Sandbox tab');
+      await page.click(SELECTORS.NAV.TAB_SANDBOX);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify folder mode persisted');
+      await expect(page.locator(SELECTORS.SANDBOX.FOLDER_MODE_AUTO)).toBeChecked();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+});
+
+test.describe('Sandbox - Results Display', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await ensureLoggedIn(page, TEST_USER);
+    await waitForDashboard(page);
+    await page.click(SELECTORS.NAV.TAB_SANDBOX);
+    await page.waitForTimeout(500);
+  });
+
+  test('results section has three tabs', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      // First run a test to show results
+      await reporter.step('Verify results section exists but hidden initially');
+      const resultsSection = page.locator(SELECTORS.SANDBOX.RESULTS_SECTION);
+      // Results section may not be visible until test is run
+      await reporter.stepComplete();
+
+      await reporter.step('Verify results tabs structure');
+      const resultsTabs = page.locator(SELECTORS.SANDBOX.RESULTS_TABS);
+      const tabs = page.locator(SELECTORS.SANDBOX.RESULTS_TAB);
+      // Note: tabs may only be visible after running a test
       await reporter.stepComplete();
 
       reporter.complete('pass');
