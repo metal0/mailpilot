@@ -3,6 +3,135 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // We'll test the endpoint handler logic by mocking fetch
 // and simulating the behavior of the test-webhook endpoint
 
+/**
+ * SSRF protection: Block requests to private/local addresses.
+ * This is a copy of the function in dashboard.ts for unit testing.
+ */
+function isPrivateOrLocalUrl(url: string): boolean {
+  const parsed = new URL(url);
+  const hostname = parsed.hostname.toLowerCase();
+
+  // Block localhost variants
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]") {
+    return true;
+  }
+
+  // Block cloud metadata endpoints (AWS, GCP, Azure)
+  if (hostname === "169.254.169.254" || hostname === "metadata.google.internal") {
+    return true;
+  }
+
+  // Block private IP ranges (RFC 1918)
+  const ipMatch = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (ipMatch) {
+    const octets = ipMatch.slice(1).map(Number);
+    const a = octets[0];
+    const b = octets[1];
+    if (a === 10) return true;  // 10.0.0.0/8
+    if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;  // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;  // 192.168.0.0/16
+    if (a === 0) return true;  // 0.0.0.0/8
+  }
+
+  // Block link-local addresses
+  if (hostname.startsWith("169.254.")) return true;
+
+  // Block IPv6 private/local ranges
+  if (hostname.startsWith("fe80:") || hostname.startsWith("[fe80:")) return true;  // Link-local
+  if (hostname.startsWith("fc") || hostname.startsWith("[fc")) return true;  // Unique local
+  if (hostname.startsWith("fd") || hostname.startsWith("[fd")) return true;  // Unique local
+
+  return false;
+}
+
+describe("SSRF Protection", () => {
+  describe("blocks localhost and loopback addresses", () => {
+    it("blocks localhost", () => {
+      expect(isPrivateOrLocalUrl("http://localhost/webhook")).toBe(true);
+      expect(isPrivateOrLocalUrl("https://localhost:8080/webhook")).toBe(true);
+    });
+
+    it("blocks 127.0.0.1", () => {
+      expect(isPrivateOrLocalUrl("http://127.0.0.1/webhook")).toBe(true);
+      expect(isPrivateOrLocalUrl("https://127.0.0.1:3000/webhook")).toBe(true);
+    });
+
+    it("blocks IPv6 loopback", () => {
+      expect(isPrivateOrLocalUrl("http://[::1]/webhook")).toBe(true);
+    });
+  });
+
+  describe("blocks cloud metadata endpoints", () => {
+    it("blocks AWS metadata endpoint", () => {
+      expect(isPrivateOrLocalUrl("http://169.254.169.254/latest/meta-data/")).toBe(true);
+    });
+
+    it("blocks GCP metadata endpoint", () => {
+      expect(isPrivateOrLocalUrl("http://metadata.google.internal/computeMetadata/v1/")).toBe(true);
+    });
+  });
+
+  describe("blocks RFC 1918 private IP ranges", () => {
+    it("blocks 10.0.0.0/8 range", () => {
+      expect(isPrivateOrLocalUrl("http://10.0.0.1/webhook")).toBe(true);
+      expect(isPrivateOrLocalUrl("http://10.255.255.255/webhook")).toBe(true);
+    });
+
+    it("blocks 172.16.0.0/12 range", () => {
+      expect(isPrivateOrLocalUrl("http://172.16.0.1/webhook")).toBe(true);
+      expect(isPrivateOrLocalUrl("http://172.31.255.255/webhook")).toBe(true);
+    });
+
+    it("allows 172.x outside the private range", () => {
+      expect(isPrivateOrLocalUrl("http://172.15.0.1/webhook")).toBe(false);
+      expect(isPrivateOrLocalUrl("http://172.32.0.1/webhook")).toBe(false);
+    });
+
+    it("blocks 192.168.0.0/16 range", () => {
+      expect(isPrivateOrLocalUrl("http://192.168.0.1/webhook")).toBe(true);
+      expect(isPrivateOrLocalUrl("http://192.168.255.255/webhook")).toBe(true);
+    });
+
+    it("blocks 0.0.0.0/8 range", () => {
+      expect(isPrivateOrLocalUrl("http://0.0.0.0/webhook")).toBe(true);
+    });
+  });
+
+  describe("blocks link-local addresses", () => {
+    it("blocks 169.254.x.x link-local", () => {
+      expect(isPrivateOrLocalUrl("http://169.254.1.1/webhook")).toBe(true);
+    });
+
+    it("blocks IPv6 link-local (fe80::)", () => {
+      expect(isPrivateOrLocalUrl("http://[fe80::1]/webhook")).toBe(true);
+    });
+  });
+
+  describe("blocks IPv6 unique local addresses", () => {
+    it("blocks fc00::/7 range", () => {
+      expect(isPrivateOrLocalUrl("http://[fc00::1]/webhook")).toBe(true);
+      expect(isPrivateOrLocalUrl("http://[fd00::1]/webhook")).toBe(true);
+    });
+  });
+
+  describe("allows public addresses", () => {
+    it("allows public IP addresses", () => {
+      expect(isPrivateOrLocalUrl("http://8.8.8.8/webhook")).toBe(false);
+      expect(isPrivateOrLocalUrl("https://1.1.1.1/webhook")).toBe(false);
+    });
+
+    it("allows public domains", () => {
+      expect(isPrivateOrLocalUrl("https://example.com/webhook")).toBe(false);
+      expect(isPrivateOrLocalUrl("https://api.slack.com/webhook")).toBe(false);
+      expect(isPrivateOrLocalUrl("https://hooks.zapier.com/webhook")).toBe(false);
+    });
+
+    it("allows public domains with ports", () => {
+      expect(isPrivateOrLocalUrl("https://example.com:8080/webhook")).toBe(false);
+    });
+  });
+});
+
 describe("Webhook Test Endpoint Logic", () => {
   const mockFetch = vi.fn();
   const originalFetch = global.fetch;

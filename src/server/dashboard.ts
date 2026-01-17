@@ -192,6 +192,47 @@ const LLM_PRESETS: LlmPreset[] = [
   },
 ];
 
+/**
+ * SSRF protection: Block requests to private/local addresses.
+ * This prevents the webhook test endpoint from being abused to probe internal networks.
+ */
+function isPrivateOrLocalUrl(url: string): boolean {
+  const parsed = new URL(url);
+  const hostname = parsed.hostname.toLowerCase();
+
+  // Block localhost variants
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]") {
+    return true;
+  }
+
+  // Block cloud metadata endpoints (AWS, GCP, Azure)
+  if (hostname === "169.254.169.254" || hostname === "metadata.google.internal") {
+    return true;
+  }
+
+  // Block private IP ranges (RFC 1918)
+  const ipMatch = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (ipMatch) {
+    const octets = ipMatch.slice(1).map(Number);
+    const a = octets[0];
+    const b = octets[1];
+    if (a === 10) return true;  // 10.0.0.0/8
+    if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;  // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;  // 192.168.0.0/16
+    if (a === 0) return true;  // 0.0.0.0/8
+  }
+
+  // Block link-local addresses
+  if (hostname.startsWith("169.254.")) return true;
+
+  // Block IPv6 private/local ranges
+  if (hostname.startsWith("fe80:") || hostname.startsWith("[fe80:")) return true;  // Link-local
+  if (hostname.startsWith("fc") || hostname.startsWith("[fc")) return true;  // Unique local
+  if (hostname.startsWith("fd") || hostname.startsWith("[fd")) return true;  // Unique local
+
+  return false;
+}
+
 interface PortProbeResult {
   port: number;
   tls: "tls" | "starttls" | "none";
@@ -775,6 +816,11 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         new URL(url);
       } catch {
         return c.json({ success: false, error: "Invalid URL format" });
+      }
+
+      // SSRF protection: Block requests to private/local addresses
+      if (isPrivateOrLocalUrl(url)) {
+        return c.json({ success: false, error: "Cannot test webhooks to private or local addresses" });
       }
 
       // Send a test POST request to the webhook URL

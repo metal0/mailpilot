@@ -1518,4 +1518,306 @@ test.describe('Settings - Side Modals', () => {
       reporter.saveMarkdownReport();
     }
   });
+
+  test('webhooks side modal shows add webhook form', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if there are existing accounts');
+      const accountCards = page.locator('.account-card, .item-card').first();
+      const hasAccounts = await accountCards.isVisible().catch(() => false);
+
+      if (!hasAccounts) {
+        reporter.complete('skip', 'No existing accounts to test webhooks modal');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click first account to edit');
+      await accountCards.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if webhooks button is enabled');
+      const webhooksButton = page.locator(SELECTORS.MODAL.HEADER_ACTION_BTN).nth(2);
+      const isEnabled = await webhooksButton.isEnabled();
+
+      if (!isEnabled) {
+        reporter.complete('skip', 'Webhooks button disabled - connection not tested');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click webhooks button');
+      await webhooksButton.click();
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify side modal is visible');
+      const sideModal = page.locator(SELECTORS.MODAL.SIDE_MODAL);
+      await expect(sideModal).toBeVisible();
+      await reporter.stepComplete();
+
+      await reporter.step('Verify webhook URL input exists');
+      const urlInput = sideModal.locator('input[type="url"], input[placeholder*="webhook"], input[placeholder*="URL"]');
+      const urlInputVisible = await urlInput.isVisible().catch(() => false);
+      expect(urlInputVisible).toBe(true);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify add button exists');
+      const addButton = sideModal.locator('button:has-text("Add")');
+      await expect(addButton).toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('webhooks side modal shows test button for added webhooks', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if there are existing accounts');
+      const accountCards = page.locator('.account-card, .item-card').first();
+      const hasAccounts = await accountCards.isVisible().catch(() => false);
+
+      if (!hasAccounts) {
+        reporter.complete('skip', 'No existing accounts to test webhooks modal');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click first account to edit');
+      await accountCards.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if webhooks button is enabled');
+      const webhooksButton = page.locator(SELECTORS.MODAL.HEADER_ACTION_BTN).nth(2);
+      const isEnabled = await webhooksButton.isEnabled();
+
+      if (!isEnabled) {
+        reporter.complete('skip', 'Webhooks button disabled - connection not tested');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click webhooks button');
+      await webhooksButton.click();
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify side modal is visible');
+      const sideModal = page.locator(SELECTORS.MODAL.SIDE_MODAL);
+      await expect(sideModal).toBeVisible();
+      await reporter.stepComplete();
+
+      await reporter.step('Add a test webhook');
+      const urlInput = sideModal.locator('input[type="url"], input[placeholder*="webhook"], input[placeholder*="URL"]').first();
+      await urlInput.fill('https://httpbin.org/post');
+      await page.waitForTimeout(200);
+      await reporter.stepComplete();
+
+      await reporter.step('Click add button');
+      const addButton = sideModal.locator('button:has-text("Add")');
+      await addButton.click();
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify test button appears for the webhook');
+      const testButton = sideModal.locator('button:has-text("Test")');
+      await expect(testButton).toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+});
+
+test.describe('Settings - Collapsible Advanced Section', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await ensureLoggedIn(page, TEST_USER);
+    await waitForDashboard(page);
+    await page.click(SELECTORS.NAV.TAB_SETTINGS);
+    await page.waitForTimeout(500);
+  });
+
+  test('advanced section is collapsible in account modal', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Open add account modal');
+      await page.click(SELECTORS.SETTINGS.ADD_ACCOUNT_BUTTON);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Find collapsible advanced section header');
+      const advancedHeader = page.locator('.collapsible-header:has-text("Advanced"), .section-header:has-text("Advanced")');
+      const headerExists = await advancedHeader.isVisible().catch(() => false);
+
+      if (!headerExists) {
+        reporter.complete('skip', 'No collapsible advanced section found');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Check initial collapsed state');
+      const advancedContent = page.locator('.collapsible-content, .advanced-content').first();
+      const initiallyVisible = await advancedContent.isVisible().catch(() => false);
+      await reporter.stepComplete();
+
+      await reporter.step('Toggle advanced section');
+      await advancedHeader.click();
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify section toggled');
+      const nowVisible = await advancedContent.isVisible().catch(() => false);
+      expect(nowVisible).not.toBe(initiallyVisible);
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('advanced section contains LLM provider settings', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Open add account modal');
+      await page.click(SELECTORS.SETTINGS.ADD_ACCOUNT_BUTTON);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Find and expand advanced section');
+      const advancedHeader = page.locator('.collapsible-header:has-text("Advanced"), .section-header:has-text("Advanced")');
+      const headerExists = await advancedHeader.isVisible().catch(() => false);
+
+      if (headerExists) {
+        await advancedHeader.click();
+        await page.waitForTimeout(300);
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Verify LLM provider select exists');
+      const providerSelect = page.locator('.modal select').first();
+      const selectExists = await providerSelect.isVisible().catch(() => false);
+      expect(selectExists).toBe(true);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify LLM provider has options');
+      const options = providerSelect.locator('option');
+      const optionCount = await options.count();
+      expect(optionCount).toBeGreaterThan(0);
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('advanced section shows chevron toggle icon', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Open add account modal');
+      await page.click(SELECTORS.SETTINGS.ADD_ACCOUNT_BUTTON);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Find advanced section header');
+      const advancedHeader = page.locator('.collapsible-header:has-text("Advanced"), .section-header:has-text("Advanced")');
+      const headerExists = await advancedHeader.isVisible().catch(() => false);
+
+      if (!headerExists) {
+        reporter.complete('skip', 'No collapsible advanced section found');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Verify chevron icon exists');
+      const chevronIcon = advancedHeader.locator('svg, .chevron, .toggle-icon');
+      const iconExists = await chevronIcon.isVisible().catch(() => false);
+      expect(iconExists).toBe(true);
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
 });
