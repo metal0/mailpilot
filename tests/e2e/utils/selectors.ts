@@ -241,6 +241,15 @@ export const SELECTORS = {
     CANCEL_BUTTON: '.btn-cancel',
     CONFIRM_BUTTON: '.btn-confirm',
     DANGER_BUTTON: '.btn-danger',
+    HEADER_ROW: '.modal-header-row',
+    HEADER_ACTIONS: '.modal-header-actions',
+    HEADER_ACTION_BTN: '.header-action-btn',
+    HEADER_BADGE: '.header-badge',
+    HEADER_DROPDOWN_WRAPPER: '.header-dropdown-wrapper',
+    HEADER_DROPDOWN_MENU: '.header-dropdown-menu',
+    SIDE_MODAL: '.side-modal',
+    SIDE_MODAL_HEADER: '.side-modal-header',
+    SIDE_MODAL_CONTENT: '.side-modal-content',
   },
 
   TOAST: {

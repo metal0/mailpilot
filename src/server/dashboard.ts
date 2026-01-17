@@ -779,7 +779,9 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
 
       // Send a test POST request to the webhook URL
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeout = setTimeout(() => {
+        controller.abort();
+      }, 10000); // 10 second timeout
 
       try {
         const response = await fetch(url, {

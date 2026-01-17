@@ -863,3 +863,597 @@ test.describe('Settings - Modal Persistence', () => {
     }
   });
 });
+
+test.describe('Settings - Account Modal Header Icons', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await ensureLoggedIn(page, TEST_USER);
+    await waitForDashboard(page);
+    await page.click(SELECTORS.NAV.TAB_SETTINGS);
+    await page.waitForTimeout(500);
+  });
+
+  test('account modal shows header action buttons', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Open add account modal');
+      await page.click(SELECTORS.SETTINGS.ADD_ACCOUNT_BUTTON);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify header actions container exists');
+      const headerActions = page.locator(SELECTORS.MODAL.HEADER_ACTIONS);
+      await expect(headerActions).toBeVisible();
+      await reporter.stepComplete();
+
+      await reporter.step('Verify three header action buttons exist');
+      const actionButtons = page.locator(SELECTORS.MODAL.HEADER_ACTION_BTN);
+      const count = await actionButtons.count();
+      expect(count).toBe(3);
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('header action buttons are disabled before connection test', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Open add account modal');
+      await page.click(SELECTORS.SETTINGS.ADD_ACCOUNT_BUTTON);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify header action buttons are disabled');
+      const actionButtons = page.locator(SELECTORS.MODAL.HEADER_ACTION_BTN);
+      const count = await actionButtons.count();
+      for (let i = 0; i < count; i++) {
+        await expect(actionButtons.nth(i)).toBeDisabled();
+      }
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('clicking disabled header button does not open side modal', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Open add account modal');
+      await page.click(SELECTORS.SETTINGS.ADD_ACCOUNT_BUTTON);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Try clicking folders button (should be disabled)');
+      const foldersButton = page.locator(SELECTORS.MODAL.HEADER_ACTION_BTN).nth(1);
+      await foldersButton.click({ force: true });
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify side modal is not visible');
+      const sideModal = page.locator(SELECTORS.MODAL.SIDE_MODAL);
+      await expect(sideModal).not.toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+});
+
+test.describe('Settings - Allowed Actions Dropdown', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await ensureLoggedIn(page, TEST_USER);
+    await waitForDashboard(page);
+    await page.click(SELECTORS.NAV.TAB_SETTINGS);
+    await page.waitForTimeout(500);
+  });
+
+  test('allowed actions dropdown shows badge with count', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if there are existing accounts');
+      const accountCards = page.locator('.account-card, .item-card').first();
+      const hasAccounts = await accountCards.isVisible().catch(() => false);
+
+      if (!hasAccounts) {
+        reporter.complete('skip', 'No existing accounts to test badge count');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click first account to edit');
+      await accountCards.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify badge exists on allowed actions button');
+      const badge = page.locator(SELECTORS.MODAL.HEADER_BADGE).first();
+      const badgeVisible = await badge.isVisible().catch(() => false);
+      expect(badgeVisible).toBe(true);
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('noop action is not present in dropdown options', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if there are existing accounts with tested connection');
+      const accountCards = page.locator('.account-card, .item-card').first();
+      const hasAccounts = await accountCards.isVisible().catch(() => false);
+
+      if (!hasAccounts) {
+        reporter.complete('skip', 'No existing accounts to test dropdown');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click first account to edit');
+      await accountCards.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if allowed actions button is enabled');
+      const actionsButton = page.locator(SELECTORS.MODAL.HEADER_ACTION_BTN).first();
+      const isEnabled = await actionsButton.isEnabled();
+
+      if (!isEnabled) {
+        reporter.complete('skip', 'Actions button disabled - connection not tested');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click allowed actions button to open dropdown');
+      await actionsButton.click();
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify dropdown is visible');
+      const dropdown = page.locator(SELECTORS.MODAL.HEADER_DROPDOWN_MENU);
+      await expect(dropdown).toBeVisible();
+      await reporter.stepComplete();
+
+      await reporter.step('Verify noop is not in dropdown options');
+      const noopOption = dropdown.locator('label:has-text("noop")');
+      await expect(noopOption).not.toBeVisible();
+      await reporter.stepComplete();
+
+      await reporter.step('Verify other action types are present');
+      const moveOption = dropdown.locator('label:has-text("move")');
+      const spamOption = dropdown.locator('label:has-text("spam")');
+      const flagOption = dropdown.locator('label:has-text("flag")');
+      await expect(moveOption).toBeVisible();
+      await expect(spamOption).toBeVisible();
+      await expect(flagOption).toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('dropdown closes when clicking outside', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if there are existing accounts');
+      const accountCards = page.locator('.account-card, .item-card').first();
+      const hasAccounts = await accountCards.isVisible().catch(() => false);
+
+      if (!hasAccounts) {
+        reporter.complete('skip', 'No existing accounts to test dropdown');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click first account to edit');
+      await accountCards.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if allowed actions button is enabled');
+      const actionsButton = page.locator(SELECTORS.MODAL.HEADER_ACTION_BTN).first();
+      const isEnabled = await actionsButton.isEnabled();
+
+      if (!isEnabled) {
+        reporter.complete('skip', 'Actions button disabled - connection not tested');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Open dropdown');
+      await actionsButton.click();
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify dropdown is visible');
+      const dropdown = page.locator(SELECTORS.MODAL.HEADER_DROPDOWN_MENU);
+      await expect(dropdown).toBeVisible();
+      await reporter.stepComplete();
+
+      await reporter.step('Click outside dropdown');
+      await page.locator('.modal-body').click();
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify dropdown is closed');
+      await expect(dropdown).not.toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+});
+
+test.describe('Settings - Side Modals', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await ensureLoggedIn(page, TEST_USER);
+    await waitForDashboard(page);
+    await page.click(SELECTORS.NAV.TAB_SETTINGS);
+    await page.waitForTimeout(500);
+  });
+
+  test('folders side modal opens when button clicked (connection tested)', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if there are existing accounts');
+      const accountCards = page.locator('.account-card, .item-card').first();
+      const hasAccounts = await accountCards.isVisible().catch(() => false);
+
+      if (!hasAccounts) {
+        reporter.complete('skip', 'No existing accounts to test side modal');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click first account to edit');
+      await accountCards.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if folders button is enabled');
+      const foldersButton = page.locator(SELECTORS.MODAL.HEADER_ACTION_BTN).nth(1);
+      const isEnabled = await foldersButton.isEnabled();
+
+      if (!isEnabled) {
+        reporter.complete('skip', 'Folders button disabled - connection not tested');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click folders button');
+      await foldersButton.click();
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify side modal is visible');
+      const sideModal = page.locator(SELECTORS.MODAL.SIDE_MODAL);
+      await expect(sideModal).toBeVisible();
+      await reporter.stepComplete();
+
+      await reporter.step('Verify side modal has folders content');
+      const foldersHeader = sideModal.locator('h4:has-text("Folders")');
+      await expect(foldersHeader).toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('webhooks side modal opens when button clicked (connection tested)', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if there are existing accounts');
+      const accountCards = page.locator('.account-card, .item-card').first();
+      const hasAccounts = await accountCards.isVisible().catch(() => false);
+
+      if (!hasAccounts) {
+        reporter.complete('skip', 'No existing accounts to test side modal');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click first account to edit');
+      await accountCards.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if webhooks button is enabled');
+      const webhooksButton = page.locator(SELECTORS.MODAL.HEADER_ACTION_BTN).nth(2);
+      const isEnabled = await webhooksButton.isEnabled();
+
+      if (!isEnabled) {
+        reporter.complete('skip', 'Webhooks button disabled - connection not tested');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click webhooks button');
+      await webhooksButton.click();
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify side modal is visible');
+      const sideModal = page.locator(SELECTORS.MODAL.SIDE_MODAL);
+      await expect(sideModal).toBeVisible();
+      await reporter.stepComplete();
+
+      await reporter.step('Verify side modal has webhooks content');
+      const webhooksHeader = sideModal.locator('h4:has-text("Webhooks")');
+      await expect(webhooksHeader).toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('side modal closes when X button clicked', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if there are existing accounts');
+      const accountCards = page.locator('.account-card, .item-card').first();
+      const hasAccounts = await accountCards.isVisible().catch(() => false);
+
+      if (!hasAccounts) {
+        reporter.complete('skip', 'No existing accounts to test side modal');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click first account to edit');
+      await accountCards.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if folders button is enabled');
+      const foldersButton = page.locator(SELECTORS.MODAL.HEADER_ACTION_BTN).nth(1);
+      const isEnabled = await foldersButton.isEnabled();
+
+      if (!isEnabled) {
+        reporter.complete('skip', 'Folders button disabled - connection not tested');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click folders button to open side modal');
+      await foldersButton.click();
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify side modal is visible');
+      const sideModal = page.locator(SELECTORS.MODAL.SIDE_MODAL);
+      await expect(sideModal).toBeVisible();
+      await reporter.stepComplete();
+
+      await reporter.step('Click X button to close side modal');
+      const closeButton = sideModal.locator('button').first();
+      await closeButton.click();
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify side modal is closed');
+      await expect(sideModal).not.toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('closing account modal also closes side modals', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if there are existing accounts');
+      const accountCards = page.locator('.account-card, .item-card').first();
+      const hasAccounts = await accountCards.isVisible().catch(() => false);
+
+      if (!hasAccounts) {
+        reporter.complete('skip', 'No existing accounts to test side modal');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Click first account to edit');
+      await accountCards.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Check if folders button is enabled');
+      const foldersButton = page.locator(SELECTORS.MODAL.HEADER_ACTION_BTN).nth(1);
+      const isEnabled = await foldersButton.isEnabled();
+
+      if (!isEnabled) {
+        reporter.complete('skip', 'Folders button disabled - connection not tested');
+        return;
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Open folders side modal');
+      await foldersButton.click();
+      await page.waitForTimeout(300);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify side modal is visible');
+      const sideModal = page.locator(SELECTORS.MODAL.SIDE_MODAL);
+      await expect(sideModal).toBeVisible();
+      await reporter.stepComplete();
+
+      await reporter.step('Close account modal by clicking Close button');
+      const closeButton = page.locator('.modal button:has-text("Close")');
+      await closeButton.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Verify both modals are closed');
+      const modal = page.locator(SELECTORS.MODAL.CONTAINER);
+      await expect(modal).not.toBeVisible();
+      await expect(sideModal).not.toBeVisible();
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+});
