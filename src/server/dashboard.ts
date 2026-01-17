@@ -827,11 +827,11 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
 
       const { prompt, email, folderMode, allowedFolders, existingFolders, allowedActions, providerName, model } = body;
 
-      if (!prompt?.trim()) {
+      if (!prompt || !prompt.trim()) {
         return c.json({ success: false, error: "Prompt is required" }, 400);
       }
 
-      if (!email?.from || !email?.subject || !email?.body) {
+      if (!email || !email.from || !email.subject || !email.body) {
         return c.json({ success: false, error: "Email from, subject, and body are required" }, 400);
       }
 
@@ -847,7 +847,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       const request: TestClassificationRequest = {
         prompt,
         email,
-        folderMode: folderMode || "predefined",
+        folderMode: folderMode ? folderMode : "predefined",
         allowedFolders,
         existingFolders,
         allowedActions: allowedActions as TestClassificationRequest["allowedActions"],
@@ -883,11 +883,11 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
 
       const { prompt, rawEmail, folderMode, allowedFolders, existingFolders, allowedActions, providerName, model } = body;
 
-      if (!prompt?.trim()) {
+      if (!prompt || !prompt.trim()) {
         return c.json({ success: false, error: "Prompt is required" }, 400);
       }
 
-      if (!rawEmail?.trim()) {
+      if (!rawEmail || !rawEmail.trim()) {
         return c.json({ success: false, error: "Raw email content is required" }, 400);
       }
 
@@ -903,7 +903,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       const request: RawTestClassificationRequest = {
         prompt,
         rawEmail,
-        folderMode: folderMode || "predefined",
+        folderMode: folderMode ? folderMode : "predefined",
         allowedFolders,
         existingFolders,
         allowedActions: allowedActions as RawTestClassificationRequest["allowedActions"],

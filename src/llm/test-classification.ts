@@ -2,7 +2,7 @@ import type { LlmProviderConfig, ActionType, FolderMode } from "../config/schema
 import { DEFAULT_ALLOWED_ACTIONS } from "../config/schema.js";
 import { classifyEmail } from "./client.js";
 import { buildPrompt, truncateToTokens, type EmailContext, type PromptOptions } from "./prompt.js";
-import { parseLlmResponse, filterDisallowedActions, type LlmAction } from "./parser.js";
+import { filterDisallowedActions, type LlmAction } from "./parser.js";
 import { simpleParser, type ParsedMail, type AddressObject } from "mailparser";
 import { createLogger } from "../utils/logger.js";
 
@@ -88,21 +88,22 @@ export interface ValidatePromptResponse {
 function formatAddress(address: AddressObject | AddressObject[] | undefined): string {
   if (!address) return "";
   const addr = Array.isArray(address) ? address[0] : address;
-  if (!addr?.value?.[0]) return "";
+  if (!addr || !addr.value || !addr.value[0]) return "";
   const first = addr.value[0];
-  return first.name ? `${first.name} <${first.address}>` : first.address || "";
+  return first.name ? `${first.name} <${first.address}>` : first.address ?? "";
 }
 
 export async function parseRawEmail(rawEmail: string): Promise<ParsedEmailInfo> {
   const parsed: ParsedMail = await simpleParser(rawEmail);
 
+  const htmlText = parsed.html ? parsed.html.replace(/<[^>]*>/g, " ").trim() : "";
   return {
     from: formatAddress(parsed.from),
     to: formatAddress(parsed.to),
-    subject: parsed.subject || "(no subject)",
-    date: parsed.date?.toISOString() || new Date().toISOString(),
-    body: parsed.text || parsed.html?.replace(/<[^>]*>/g, " ").trim() || "",
-    attachments: (parsed.attachments || []).map((a) => ({
+    subject: parsed.subject ?? "(no subject)",
+    date: parsed.date ? parsed.date.toISOString() : new Date().toISOString(),
+    body: parsed.text ?? htmlText,
+    attachments: (parsed.attachments ?? []).map((a) => ({
       filename: a.filename || "unnamed",
       contentType: a.contentType || "application/octet-stream",
       size: a.size || 0,
