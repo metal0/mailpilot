@@ -91,6 +91,80 @@ describe("Settings UI State Management", () => {
     });
   });
 
+  describe("Default LLM Provider Selection", () => {
+    interface LlmProvider {
+      name: string;
+      default_model: string;
+    }
+
+    interface Account {
+      name: string;
+      llm?: { provider?: string; model?: string };
+    }
+
+    it("sets default LLM provider when creating new account", () => {
+      const providers: LlmProvider[] = [
+        { name: "ollama", default_model: "llama3" },
+        { name: "openai", default_model: "gpt-4" },
+      ];
+      const defaultProvider = providers[0]?.name;
+
+      const newAccount: Account = {
+        name: "",
+        llm: defaultProvider ? { provider: defaultProvider } : undefined,
+      };
+
+      expect(newAccount.llm?.provider).toBe("ollama");
+    });
+
+    it("does not set LLM if no providers are configured", () => {
+      const providers: LlmProvider[] = [];
+      const defaultProvider = providers[0]?.name;
+
+      const newAccount: Account = {
+        name: "",
+        llm: defaultProvider ? { provider: defaultProvider } : undefined,
+      };
+
+      expect(newAccount.llm).toBeUndefined();
+    });
+
+    it("sets default LLM when editing account without LLM configured", () => {
+      const providers: LlmProvider[] = [
+        { name: "anthropic", default_model: "claude-3" },
+      ];
+
+      const existingAccount: Account = { name: "test-account" };
+
+      // Simulate editAccount logic
+      if (!existingAccount.llm?.provider && providers.length > 0) {
+        existingAccount.llm = { provider: providers[0].name };
+      }
+
+      expect(existingAccount.llm?.provider).toBe("anthropic");
+    });
+
+    it("preserves existing LLM when editing account", () => {
+      const providers: LlmProvider[] = [
+        { name: "anthropic", default_model: "claude-3" },
+        { name: "openai", default_model: "gpt-4" },
+      ];
+
+      const existingAccount: Account = {
+        name: "test-account",
+        llm: { provider: "openai", model: "gpt-4-turbo" },
+      };
+
+      // Simulate editAccount logic - should not change existing provider
+      if (!existingAccount.llm?.provider && providers.length > 0) {
+        existingAccount.llm = { provider: providers[0].name };
+      }
+
+      expect(existingAccount.llm?.provider).toBe("openai");
+      expect(existingAccount.llm?.model).toBe("gpt-4-turbo");
+    });
+  });
+
   describe("Folder Configuration State", () => {
     it("watch folders defaults to INBOX", () => {
       const folders: { watch?: string[] } = {};

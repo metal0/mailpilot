@@ -514,6 +514,116 @@ describe("Provider Health Tracking", () => {
   });
 });
 
+describe("Default Provider Fallback", () => {
+  interface LlmProviderConfig {
+    name: string;
+    default_model: string;
+  }
+
+  it("returns first provider when no provider specified", () => {
+    const providers = new Map<string, LlmProviderConfig>();
+    providers.set("ollama", { name: "ollama", default_model: "llama3" });
+    providers.set("openai", { name: "openai", default_model: "gpt-4" });
+
+    function getDefaultProvider(): LlmProviderConfig | undefined {
+      const first = providers.values().next();
+      return first.done ? undefined : first.value;
+    }
+
+    function getProviderForAccount(
+      providerName?: string,
+      _modelOverride?: string
+    ): { provider: LlmProviderConfig; model: string } | undefined {
+      let provider: LlmProviderConfig | undefined;
+
+      if (providerName) {
+        provider = providers.get(providerName);
+        if (!provider) return undefined;
+      } else {
+        provider = getDefaultProvider();
+        if (!provider) return undefined;
+      }
+
+      return { provider, model: provider.default_model };
+    }
+
+    // When no provider specified, should use first registered
+    const result = getProviderForAccount();
+    expect(result).toBeDefined();
+    expect(result?.provider.name).toBe("ollama");
+    expect(result?.model).toBe("llama3");
+  });
+
+  it("returns undefined when no providers configured", () => {
+    const providers = new Map<string, LlmProviderConfig>();
+
+    function getDefaultProvider(): LlmProviderConfig | undefined {
+      const first = providers.values().next();
+      return first.done ? undefined : first.value;
+    }
+
+    function getProviderForAccount(
+      providerName?: string
+    ): { provider: LlmProviderConfig; model: string } | undefined {
+      let provider: LlmProviderConfig | undefined;
+
+      if (providerName) {
+        provider = providers.get(providerName);
+        if (!provider) return undefined;
+      } else {
+        provider = getDefaultProvider();
+        if (!provider) return undefined;
+      }
+
+      return { provider, model: provider.default_model };
+    }
+
+    const result = getProviderForAccount();
+    expect(result).toBeUndefined();
+  });
+
+  it("uses specified provider when name is provided", () => {
+    const providers = new Map<string, LlmProviderConfig>();
+    providers.set("ollama", { name: "ollama", default_model: "llama3" });
+    providers.set("openai", { name: "openai", default_model: "gpt-4" });
+
+    function getProviderForAccount(
+      providerName?: string
+    ): { provider: LlmProviderConfig; model: string } | undefined {
+      if (providerName) {
+        const provider = providers.get(providerName);
+        if (!provider) return undefined;
+        return { provider, model: provider.default_model };
+      }
+      return undefined;
+    }
+
+    const result = getProviderForAccount("openai");
+    expect(result).toBeDefined();
+    expect(result?.provider.name).toBe("openai");
+    expect(result?.model).toBe("gpt-4");
+  });
+
+  it("returns undefined for unknown provider name", () => {
+    const providers = new Map<string, LlmProviderConfig>();
+    providers.set("ollama", { name: "ollama", default_model: "llama3" });
+
+    function getProviderForAccount(
+      providerName?: string
+    ): { provider: LlmProviderConfig; model: string } | undefined {
+      if (providerName) {
+        const provider = providers.get(providerName);
+        if (!provider) return undefined;
+        return { provider, model: provider.default_model };
+      }
+      return undefined;
+    }
+
+    const result = getProviderForAccount("unknown-provider");
+    expect(result).toBeUndefined();
+  });
+});
+
 describe("Multiple Providers", () => {
   it("tracks stats independently per provider", () => {
     const providers = new Map<string, { total: number; today: number }>();

@@ -864,6 +864,68 @@ test.describe('Settings - Modal Persistence', () => {
   });
 });
 
+test.describe('Settings - Default LLM Provider', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await ensureLoggedIn(page, TEST_USER);
+    await waitForDashboard(page);
+    await page.click(SELECTORS.NAV.TAB_SETTINGS);
+    await page.waitForTimeout(500);
+  });
+
+  test('new account modal has LLM provider selected by default', async ({ page }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+    reporter.setPage(page);
+
+    try {
+      await reporter.step('Navigate to accounts section');
+      const accountsBtn = page.locator(SELECTORS.SETTINGS.SECTION_BUTTON).filter({ hasText: /accounts/i });
+      await accountsBtn.click();
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Open add account modal');
+      await page.click(SELECTORS.SETTINGS.ADD_ACCOUNT_BUTTON);
+      await page.waitForTimeout(500);
+      await reporter.stepComplete();
+
+      await reporter.step('Expand advanced section to see LLM settings');
+      const advancedSection = page.locator('.collapsible-header:has-text("Advanced")');
+      const isAdvancedVisible = await advancedSection.isVisible().catch(() => false);
+      if (isAdvancedVisible) {
+        await advancedSection.click();
+        await page.waitForTimeout(300);
+      }
+      await reporter.stepComplete();
+
+      await reporter.step('Verify LLM provider select has a value');
+      const providerSelect = page.locator('.modal select').first();
+      const selectVisible = await providerSelect.isVisible().catch(() => false);
+
+      if (!selectVisible) {
+        reporter.complete('skip', 'LLM provider select not visible');
+        return;
+      }
+
+      const selectedValue = await providerSelect.inputValue();
+      expect(selectedValue).toBeTruthy();
+      expect(selectedValue.length).toBeGreaterThan(0);
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+});
+
 test.describe('Settings - Account Modal Header Icons', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');

@@ -527,10 +527,13 @@
   function addAccount() {
     resetWizardState();
     editingAccountIndex = null;
+    // Default to first LLM provider if available
+    const defaultProvider = config?.llm_providers?.[0]?.name;
     editingAccount = {
       name: "",
       imap: { host: "", port: 993, tls: "tls", auth: "basic", username: "", password: "" },
       folders: { watch: ["INBOX"] },
+      llm: defaultProvider ? { provider: defaultProvider } : undefined,
     };
   }
 
@@ -540,6 +543,10 @@
     const index = config.accounts.findIndex(a => a.name === account.name);
     editingAccountIndex = index >= 0 ? index : null;
     editingAccount = JSON.parse(JSON.stringify(account));
+    // Set default LLM provider if not configured
+    if (!editingAccount.llm?.provider && config.llm_providers?.length > 0) {
+      editingAccount.llm = { provider: config.llm_providers[0].name };
+    }
     // Auto-test connection for existing accounts
     if (account.name) {
       await testImapConnection();
