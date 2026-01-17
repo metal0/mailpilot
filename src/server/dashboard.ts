@@ -831,7 +831,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         return c.json({ success: false, error: "Prompt is required" }, 400);
       }
 
-      if (!email || !email.from || !email.subject || !email.body) {
+      if (!email.from || !email.subject || !email.body) {
         return c.json({ success: false, error: "Email from, subject, and body are required" }, 400);
       }
 
@@ -847,12 +847,12 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       const request: TestClassificationRequest = {
         prompt,
         email,
-        folderMode: folderMode ? folderMode : "predefined",
-        allowedFolders,
-        existingFolders,
-        allowedActions: allowedActions as TestClassificationRequest["allowedActions"],
+        folderMode: folderMode || "predefined",
         provider,
-        model,
+        ...(allowedFolders && { allowedFolders }),
+        ...(existingFolders && { existingFolders }),
+        ...(allowedActions && { allowedActions: allowedActions as TestClassificationRequest["allowedActions"] }),
+        ...(model && { model }),
       };
 
       const result = await testClassification(request);
@@ -903,12 +903,12 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       const request: RawTestClassificationRequest = {
         prompt,
         rawEmail,
-        folderMode: folderMode ? folderMode : "predefined",
-        allowedFolders,
-        existingFolders,
-        allowedActions: allowedActions as RawTestClassificationRequest["allowedActions"],
+        folderMode: folderMode || "predefined",
         provider,
-        model,
+        ...(allowedFolders && { allowedFolders }),
+        ...(existingFolders && { existingFolders }),
+        ...(allowedActions && { allowedActions: allowedActions as RawTestClassificationRequest["allowedActions"] }),
+        ...(model && { model }),
       };
 
       const result = await testClassificationRaw(request);
@@ -933,7 +933,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
 
       const request: ValidatePromptRequest = {
         prompt: body.prompt || "",
-        allowedActions: body.allowedActions as ValidatePromptRequest["allowedActions"],
+        ...(body.allowedActions && { allowedActions: body.allowedActions as ValidatePromptRequest["allowedActions"] }),
       };
 
       const result = validatePrompt(request);

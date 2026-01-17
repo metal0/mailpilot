@@ -14,14 +14,14 @@ export interface TestClassificationRequest {
     from: string;
     subject: string;
     body: string;
-    attachments?: string[];
+    attachments?: string[] | undefined;
   };
   folderMode: FolderMode;
-  allowedFolders?: string[];
-  existingFolders?: string[];
-  allowedActions?: ActionType[];
+  allowedFolders?: string[] | undefined;
+  existingFolders?: string[] | undefined;
+  allowedActions?: ActionType[] | undefined;
   provider: LlmProviderConfig;
-  model?: string;
+  model?: string | undefined;
 }
 
 export interface TestClassificationResponse {
@@ -39,11 +39,11 @@ export interface RawTestClassificationRequest {
   prompt: string;
   rawEmail: string;
   folderMode: FolderMode;
-  allowedFolders?: string[];
-  existingFolders?: string[];
-  allowedActions?: ActionType[];
+  allowedFolders?: string[] | undefined;
+  existingFolders?: string[] | undefined;
+  allowedActions?: ActionType[] | undefined;
   provider: LlmProviderConfig;
-  model?: string;
+  model?: string | undefined;
 }
 
 export interface ParsedEmailInfo {
@@ -61,7 +61,7 @@ export interface RawTestClassificationResponse extends TestClassificationRespons
 
 export interface ValidatePromptRequest {
   prompt: string;
-  allowedActions?: ActionType[];
+  allowedActions?: ActionType[] | undefined;
 }
 
 export interface ValidationError {
@@ -88,9 +88,9 @@ export interface ValidatePromptResponse {
 function formatAddress(address: AddressObject | AddressObject[] | undefined): string {
   if (!address) return "";
   const addr = Array.isArray(address) ? address[0] : address;
-  if (!addr || !addr.value || !addr.value[0]) return "";
+  if (!addr.value || !addr.value[0]) return "";
   const first = addr.value[0];
-  return first.name ? `${first.name} <${first.address}>` : first.address ?? "";
+  return first.name ? `${first.name} <${first.address}>` : first.address || "";
 }
 
 export async function parseRawEmail(rawEmail: string): Promise<ParsedEmailInfo> {
@@ -100,10 +100,10 @@ export async function parseRawEmail(rawEmail: string): Promise<ParsedEmailInfo> 
   return {
     from: formatAddress(parsed.from),
     to: formatAddress(parsed.to),
-    subject: parsed.subject ?? "(no subject)",
+    subject: parsed.subject || "(no subject)",
     date: parsed.date ? parsed.date.toISOString() : new Date().toISOString(),
-    body: parsed.text ?? htmlText,
-    attachments: (parsed.attachments ?? []).map((a) => ({
+    body: parsed.text || htmlText,
+    attachments: parsed.attachments.map((a) => ({
       filename: a.filename || "unnamed",
       contentType: a.contentType || "application/octet-stream",
       size: a.size || 0,
@@ -121,7 +121,7 @@ export async function testClassification(
     subject: request.email.subject,
     date: new Date().toISOString(),
     body: truncateToTokens(request.email.body, request.provider.max_body_tokens || 4000),
-    attachmentNames: request.email.attachments,
+    ...(request.email.attachments && { attachmentNames: request.email.attachments }),
   };
 
   const allowedActions = request.allowedActions ?? [...DEFAULT_ALLOWED_ACTIONS];
@@ -129,9 +129,9 @@ export async function testClassification(
   const promptOptions: PromptOptions = {
     basePrompt: request.prompt,
     folderMode: request.folderMode,
-    allowedFolders: request.folderMode === "predefined" ? request.allowedFolders : undefined,
-    existingFolders: request.folderMode === "auto_create" ? request.existingFolders : undefined,
     allowedActions,
+    ...(request.folderMode === "predefined" && request.allowedFolders && { allowedFolders: request.allowedFolders }),
+    ...(request.folderMode === "auto_create" && request.existingFolders && { existingFolders: request.existingFolders }),
   };
 
   const fullPrompt = buildPrompt(emailContext, promptOptions);
@@ -193,12 +193,13 @@ export async function testClassificationRaw(
     };
   }
 
+  const attachmentNames = parsed.attachments.map((a) => a.filename);
   const emailContext: EmailContext = {
     from: parsed.from,
     subject: parsed.subject,
     date: parsed.date,
     body: truncateToTokens(parsed.body, request.provider.max_body_tokens || 4000),
-    attachmentNames: parsed.attachments.map((a) => a.filename),
+    ...(attachmentNames.length > 0 && { attachmentNames }),
   };
 
   const allowedActions = request.allowedActions ?? [...DEFAULT_ALLOWED_ACTIONS];
@@ -206,9 +207,9 @@ export async function testClassificationRaw(
   const promptOptions: PromptOptions = {
     basePrompt: request.prompt,
     folderMode: request.folderMode,
-    allowedFolders: request.folderMode === "predefined" ? request.allowedFolders : undefined,
-    existingFolders: request.folderMode === "auto_create" ? request.existingFolders : undefined,
     allowedActions,
+    ...(request.folderMode === "predefined" && request.allowedFolders && { allowedFolders: request.allowedFolders }),
+    ...(request.folderMode === "auto_create" && request.existingFolders && { existingFolders: request.existingFolders }),
   };
 
   const fullPrompt = buildPrompt(emailContext, promptOptions);
@@ -287,9 +288,10 @@ export function validatePrompt(request: ValidatePromptRequest): ValidatePromptRe
 
   if (allowedActions && allowedActions.length > 0) {
     const actionPattern = /\b(move|spam|flag|read|delete|noop)\b/gi;
-    const mentionedActions = [...prompt.matchAll(actionPattern)].map((m) =>
-      m[1].toLowerCase()
-    );
+    const mentionedActions = [...prompt.matchAll(actionPattern)]
+      .map((m) => m[1])
+      .filter((s): s is string => s !== undefined)
+      .map((s) => s.toLowerCase());
     const allowedSet = new Set(allowedActions.map((a) => a.toLowerCase()));
 
     for (const mentioned of mentionedActions) {
