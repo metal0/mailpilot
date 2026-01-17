@@ -72,8 +72,8 @@ export function parseLlmResponse(content: string): ParsedLlmResult {
   if (result.success) {
     return {
       actions: validateActions(result.data.actions),
-      confidence: result.data.confidence,
-      reasoning: result.data.reasoning,
+      ...(result.data.confidence !== undefined && { confidence: result.data.confidence }),
+      ...(result.data.reasoning !== undefined && { reasoning: result.data.reasoning }),
     };
   }
 
@@ -115,8 +115,8 @@ export function parseLlmResponse(content: string): ParsedLlmResult {
     if (validActions.length > 0) {
       return {
         actions: validateActions(validActions),
-        confidence,
-        reasoning,
+        ...(confidence !== undefined && { confidence }),
+        ...(reasoning !== undefined && { reasoning }),
       };
     }
   }
