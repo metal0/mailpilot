@@ -22,6 +22,7 @@
   // Form state
   let prompt = $state("");
   let emailFrom = $state("sender@example.com");
+  let emailTo = $state("recipient@example.com");
   let emailSubject = $state("Test Email Subject");
   let emailBody = $state("This is a test email body.\n\nYou can edit this to test different classification scenarios.");
   let folderMode = $state<"predefined" | "auto_create">("predefined");
@@ -132,6 +133,7 @@ You can paste a real RFC822 email here.`);
           prompt,
           email: {
             from: emailFrom,
+            to: emailTo,
             subject: emailSubject,
             body: emailBody,
           },
@@ -267,6 +269,10 @@ You can paste a real RFC822 email here.`);
             <div class="form-group">
               <label for="email-from">{$t("sandbox.from")}</label>
               <input id="email-from" type="text" bind:value={emailFrom} />
+            </div>
+            <div class="form-group">
+              <label for="email-to">{$t("sandbox.to")}</label>
+              <input id="email-to" type="text" bind:value={emailTo} />
             </div>
             <div class="form-group">
               <label for="email-subject">{$t("sandbox.subject")}</label>

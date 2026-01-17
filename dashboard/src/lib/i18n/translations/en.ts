@@ -543,6 +543,7 @@ const en = {
   "sandbox.rawEmailLabel": "Raw Email (RFC822 format)",
   "sandbox.rawEmailPlaceholder": "Paste a raw email message here...",
   "sandbox.from": "From",
+  "sandbox.to": "To (Recipient)",
   "sandbox.subject": "Subject",
   "sandbox.body": "Body",
   "sandbox.configTitle": "Configuration",

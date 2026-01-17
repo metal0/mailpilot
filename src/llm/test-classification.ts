@@ -12,6 +12,7 @@ export interface TestClassificationRequest {
   prompt: string;
   email: {
     from: string;
+    to: string;
     subject: string;
     body: string;
     attachments?: string[] | undefined;
@@ -119,6 +120,7 @@ export async function testClassification(
 
   const emailContext: EmailContext = {
     from: request.email.from,
+    to: request.email.to,
     subject: request.email.subject,
     date: new Date().toISOString(),
     body: truncateToTokens(request.email.body, request.provider.max_body_tokens || 4000),
@@ -197,6 +199,7 @@ export async function testClassificationRaw(
   const attachmentNames = parsed.attachments.map((a) => a.filename);
   const emailContext: EmailContext = {
     from: parsed.from,
+    to: parsed.to,
     subject: parsed.subject,
     date: parsed.date,
     body: truncateToTokens(parsed.body, request.provider.max_body_tokens || 4000),

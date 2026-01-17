@@ -813,6 +813,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         prompt: string;
         email: {
           from: string;
+          to: string;
           subject: string;
           body: string;
           attachments?: string[];
@@ -831,8 +832,8 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         return c.json({ success: false, error: "Prompt is required" }, 400);
       }
 
-      if (!email.from || !email.subject || !email.body) {
-        return c.json({ success: false, error: "Email from, subject, and body are required" }, 400);
+      if (!email.from || !email.to || !email.subject || !email.body) {
+        return c.json({ success: false, error: "Email from, to, subject, and body are required" }, 400);
       }
 
       if (!providerName) {
