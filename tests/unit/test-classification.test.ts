@@ -160,6 +160,56 @@ describe("validatePrompt", () => {
     expect(result.stats.wordCount).toBe(3);
     expect(result.stats.estimatedTokens).toBe(4);
   });
+
+  it("calculates full prompt token estimate with overhead", () => {
+    const result = validatePrompt({
+      prompt: "Classify this email based on content",
+      folderMode: "predefined",
+      folderCount: 5, // 3 allowed + 2 existing
+      requestConfidence: true,
+      requestReasoning: true,
+    });
+
+    // Full prompt estimate includes:
+    // - Base structure overhead
+    // - Folders sections
+    // - Confidence/reasoning schema
+    // The estimate should be higher than just the prompt tokens
+    expect(result.stats.fullPromptEstimatedTokens).toBeGreaterThan(result.stats.estimatedTokens);
+    expect(result.stats.fullPromptEstimatedTokens).toBeGreaterThan(100); // Should include overhead
+  });
+
+  it("includes folder overhead in full prompt estimate", () => {
+    const fewFolders = validatePrompt({
+      prompt: "Test prompt",
+      folderMode: "predefined",
+      folderCount: 1,
+    });
+    const manyFolders = validatePrompt({
+      prompt: "Test prompt",
+      folderMode: "predefined",
+      folderCount: 10,
+    });
+
+    // More folders = more tokens (each folder entry adds overhead)
+    expect(manyFolders.stats.fullPromptEstimatedTokens).toBeGreaterThan(
+      fewFolders.stats.fullPromptEstimatedTokens ?? 0
+    );
+  });
+
+  it("includes confidence/reasoning overhead in estimate", () => {
+    const basic = validatePrompt({ prompt: "Test prompt" });
+    const withConfidence = validatePrompt({
+      prompt: "Test prompt",
+      requestConfidence: true,
+      requestReasoning: true,
+    });
+
+    // Confidence/reasoning adds schema overhead
+    expect(withConfidence.stats.fullPromptEstimatedTokens).toBeGreaterThan(
+      basic.stats.fullPromptEstimatedTokens ?? 0
+    );
+  });
 });
 
 describe("testClassification", () => {
@@ -315,6 +365,88 @@ describe("testClassification", () => {
 
     expect(result.promptUsed).toContain("report.pdf");
     expect(result.promptUsed).toContain("data.xlsx");
+  });
+
+  it("passes confidence/reasoning options to LLM and returns results", async () => {
+    vi.mocked(classifyEmail).mockResolvedValue({
+      actions: [{ type: "move", folder: "Work" }],
+      confidence: 0.85,
+      reasoning: "This is a work-related email based on the sender domain.",
+    });
+
+    const request: TestClassificationRequest = {
+      prompt: "Classify",
+      email: { from: "a@work.com", to: "c@d.com", subject: "Meeting", body: "Meeting invite" },
+      folderMode: "predefined",
+      allowedFolders: ["Work", "Personal"],
+      provider: mockProvider,
+      requestConfidence: true,
+      requestReasoning: true,
+    };
+
+    const result = await testClassification(request);
+
+    expect(result.success).toBe(true);
+    expect(result.classification?.confidence).toBe(0.85);
+    expect(result.classification?.reasoning).toBe("This is a work-related email based on the sender domain.");
+  });
+
+  it("includes confidence instruction in prompt when requested", async () => {
+    vi.mocked(classifyEmail).mockResolvedValue({ actions: [{ type: "noop" }] });
+
+    const request: TestClassificationRequest = {
+      prompt: "Classify",
+      email: { from: "a@b.com", to: "c@d.com", subject: "S", body: "B" },
+      folderMode: "predefined",
+      provider: mockProvider,
+      requestConfidence: true,
+    };
+
+    const result = await testClassification(request);
+
+    expect(result.promptUsed).toContain("confidence");
+  });
+
+  it("includes reasoning instruction in prompt when requested", async () => {
+    vi.mocked(classifyEmail).mockResolvedValue({ actions: [{ type: "noop" }] });
+
+    const request: TestClassificationRequest = {
+      prompt: "Classify",
+      email: { from: "a@b.com", to: "c@d.com", subject: "S", body: "B" },
+      folderMode: "predefined",
+      provider: mockProvider,
+      requestReasoning: true,
+    };
+
+    const result = await testClassification(request);
+
+    expect(result.promptUsed).toContain("reasoning");
+  });
+
+  it("returns usage info when provided by LLM", async () => {
+    vi.mocked(classifyEmail).mockResolvedValue({
+      actions: [{ type: "noop" }],
+      usage: {
+        promptTokens: 150,
+        completionTokens: 50,
+        totalTokens: 200,
+      },
+    });
+
+    const request: TestClassificationRequest = {
+      prompt: "Classify",
+      email: { from: "a@b.com", to: "c@d.com", subject: "S", body: "B" },
+      folderMode: "predefined",
+      provider: mockProvider,
+    };
+
+    const result = await testClassification(request);
+
+    expect(result.success).toBe(true);
+    expect(result.classification?.usage).toBeDefined();
+    expect(result.classification?.usage?.promptTokens).toBe(150);
+    expect(result.classification?.usage?.completionTokens).toBe(50);
+    expect(result.classification?.usage?.totalTokens).toBe(200);
   });
 });
 
