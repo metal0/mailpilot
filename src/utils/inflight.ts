@@ -45,23 +45,14 @@ class InFlightTracker {
     const startTime = Date.now();
     const checkInterval = 100;
 
-    return new Promise((resolve) => {
-      const check = (): void => {
-        if (this.operations.size === 0) {
-          resolve(true);
-          return;
-        }
+    while (this.operations.size > 0) {
+      if (Date.now() - startTime >= timeoutMs) {
+        return false;
+      }
+      await new Promise((resolve) => setTimeout(resolve, checkInterval));
+    }
 
-        if (Date.now() - startTime >= timeoutMs) {
-          resolve(false);
-          return;
-        }
-
-        setTimeout(check, checkInterval);
-      };
-
-      check();
-    });
+    return true;
   }
 }
 

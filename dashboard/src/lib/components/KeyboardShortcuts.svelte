@@ -33,111 +33,124 @@
     itemCount = 0,
   }: Props = $props();
 
+  function safeCall<T>(fn: (() => T) | undefined): void {
+    if (!fn) return;
+    try {
+      fn();
+    } catch (error) {
+      console.error("Keyboard shortcut handler error:", error);
+    }
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     if (!$shortcutsEnabled) return;
     if (isInputElement(event.target)) return;
 
-    const scope = $currentScope;
+    try {
+      const scope = $currentScope;
 
-    // Tab navigation (1-5)
-    if (!event.ctrlKey && !event.altKey && !event.metaKey) {
-      const num = parseInt(event.key, 10);
-      if (num >= 1 && num <= 5) {
-        event.preventDefault();
-        onTabSwitch?.(num);
-        return;
-      }
-    }
-
-    // Help modal
-    if (matchesShortcut(event, SHORTCUTS.help)) {
-      event.preventDefault();
-      showShortcutsHelp.set(true);
-      return;
-    }
-
-    // Escape - close modal or clear selection
-    if (matchesShortcut(event, SHORTCUTS.escape)) {
-      if ($showShortcutsHelp) {
-        event.preventDefault();
-        showShortcutsHelp.set(false);
-        return;
-      }
-      if ($selectedIndex >= 0) {
-        event.preventDefault();
-        selectedIndex.set(-1);
-        return;
-      }
-      return;
-    }
-
-    // Ctrl+, - Open settings
-    if (matchesShortcut(event, SHORTCUTS.settings)) {
-      event.preventDefault();
-      onTabSwitch?.(4);
-      return;
-    }
-
-    // Scope-specific shortcuts
-    if (scope === "activity" || scope === "logs") {
-      // j/k - List navigation
-      if (matchesShortcut(event, SHORTCUTS.down)) {
-        event.preventDefault();
-        if (itemCount > 0) {
-          selectedIndex.update((i) => Math.min(i + 1, itemCount - 1));
+      // Tab navigation (1-5)
+      if (!event.ctrlKey && !event.altKey && !event.metaKey) {
+        const num = parseInt(event.key, 10);
+        if (num >= 1 && num <= 5) {
+          event.preventDefault();
+          safeCall(() => onTabSwitch?.(num));
+          return;
         }
-        return;
       }
 
-      if (matchesShortcut(event, SHORTCUTS.up)) {
+      // Help modal
+      if (matchesShortcut(event, SHORTCUTS.help)) {
         event.preventDefault();
-        if (itemCount > 0) {
-          selectedIndex.update((i) => Math.max(i - 1, 0));
-        }
+        showShortcutsHelp.set(true);
         return;
       }
 
-      // Enter - Open selected
-      if (matchesShortcut(event, SHORTCUTS.open)) {
+      // Escape - close modal or clear selection
+      if (matchesShortcut(event, SHORTCUTS.escape)) {
+        if ($showShortcutsHelp) {
+          event.preventDefault();
+          showShortcutsHelp.set(false);
+          return;
+        }
         if ($selectedIndex >= 0) {
           event.preventDefault();
-          onOpenSelected?.();
+          selectedIndex.set(-1);
+          return;
         }
         return;
       }
 
-      // f or / - Focus search
-      if (matchesShortcut(event, SHORTCUTS.search) || matchesShortcut(event, SHORTCUTS.searchAlt)) {
+      // Ctrl+, - Open settings
+      if (matchesShortcut(event, SHORTCUTS.settings)) {
         event.preventDefault();
-        onFocusSearch?.();
+        safeCall(() => onTabSwitch?.(4));
         return;
       }
 
-      // p - Toggle streaming
-      if (matchesShortcut(event, SHORTCUTS.toggleStream)) {
-        event.preventDefault();
-        onToggleStream?.();
-        return;
-      }
-
-      // Activity-specific: r and d for dead letters
-      if (scope === "activity") {
-        if (matchesShortcut(event, SHORTCUTS.retry)) {
-          if ($selectedIndex >= 0) {
-            event.preventDefault();
-            onRetry?.();
+      // Scope-specific shortcuts
+      if (scope === "activity" || scope === "logs") {
+        // j/k - List navigation
+        if (matchesShortcut(event, SHORTCUTS.down)) {
+          event.preventDefault();
+          if (itemCount > 0) {
+            selectedIndex.update((i) => Math.min(i + 1, itemCount - 1));
           }
           return;
         }
 
-        if (matchesShortcut(event, SHORTCUTS.dismiss)) {
-          if ($selectedIndex >= 0) {
-            event.preventDefault();
-            onDismiss?.();
+        if (matchesShortcut(event, SHORTCUTS.up)) {
+          event.preventDefault();
+          if (itemCount > 0) {
+            selectedIndex.update((i) => Math.max(i - 1, 0));
           }
           return;
         }
+
+        // Enter - Open selected
+        if (matchesShortcut(event, SHORTCUTS.open)) {
+          if ($selectedIndex >= 0) {
+            event.preventDefault();
+            safeCall(onOpenSelected);
+          }
+          return;
+        }
+
+        // f or / - Focus search
+        if (matchesShortcut(event, SHORTCUTS.search) || matchesShortcut(event, SHORTCUTS.searchAlt)) {
+          event.preventDefault();
+          safeCall(onFocusSearch);
+          return;
+        }
+
+        // p - Toggle streaming
+        if (matchesShortcut(event, SHORTCUTS.toggleStream)) {
+          event.preventDefault();
+          safeCall(onToggleStream);
+          return;
+        }
+
+        // Activity-specific: r and d for dead letters
+        if (scope === "activity") {
+          if (matchesShortcut(event, SHORTCUTS.retry)) {
+            if ($selectedIndex >= 0) {
+              event.preventDefault();
+              safeCall(onRetry);
+            }
+            return;
+          }
+
+          if (matchesShortcut(event, SHORTCUTS.dismiss)) {
+            if ($selectedIndex >= 0) {
+              event.preventDefault();
+              safeCall(onDismiss);
+            }
+            return;
+          }
+        }
       }
+    } catch (error) {
+      console.error("Keyboard shortcut handler error:", error);
     }
   }
 
