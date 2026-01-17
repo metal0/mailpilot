@@ -15,14 +15,16 @@ AI-powered email processing daemon that uses LLM classification to automatically
 
 - **IMAP Support** - Connects to any IMAP server with IDLE push notifications
 - **LLM Classification** - Uses OpenAI-compatible APIs to classify emails
+- **Confidence Scoring** - Optional confidence thresholds to route low-confidence results to manual review
 - **Multiple Actions** - Move to folders, mark as spam, flag, mark read, delete
 - **Multi-Account** - Process multiple email accounts with per-account configuration
 - **Rate Limiting** - Per-provider rate limiting with automatic 429 handling
-- **Web Dashboard** - Modern Svelte SPA with real-time WebSocket updates
+- **Web Dashboard** - Modern Svelte SPA with real-time WebSocket updates and keyboard shortcuts
 - **Attachment Extraction** - Extract text from PDF, DOCX, Excel via Apache Tika
 - **Multimodal Vision** - Send images to vision-capable LLMs for analysis
 - **Antivirus Scanning** - Optional ClamAV integration for malware detection
 - **Webhooks** - Configurable webhooks for events like errors and actions
+- **Graceful Shutdown** - Waits for in-flight operations to complete before exiting
 
 ## Quick Start
 

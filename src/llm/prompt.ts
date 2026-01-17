@@ -1,4 +1,4 @@
-import { RESPONSE_SCHEMA, generateResponseSchema, type ActionType, ALL_ACTION_TYPES } from "./parser.js";
+import { generateResponseSchemaWithConfidence, type ActionType, ALL_ACTION_TYPES } from "./parser.js";
 import type { ExtractedAttachment } from "../attachments/index.js";
 import { formatAttachmentsForPrompt } from "../attachments/index.js";
 
@@ -19,6 +19,10 @@ export interface PromptOptions {
   existingFolders?: string[];
   // Allowed action types for this account. If not specified, all actions are allowed.
   allowedActions?: ActionType[];
+  // Request confidence score from LLM
+  requestConfidence?: boolean;
+  // Request reasoning from LLM
+  requestReasoning?: boolean;
 }
 
 export function buildPrompt(
@@ -65,10 +69,12 @@ export function buildPrompt(
     }
   }
 
-  // Use dynamic schema based on allowed actions
-  const responseSchema = hasActionRestriction
-    ? generateResponseSchema(effectiveAllowedActions)
-    : RESPONSE_SCHEMA;
+  // Use dynamic schema based on allowed actions and confidence settings
+  const responseSchema = generateResponseSchemaWithConfidence(
+    hasActionRestriction ? effectiveAllowedActions : [...ALL_ACTION_TYPES],
+    options.requestConfidence,
+    options.requestReasoning
+  );
 
   parts.push("\n\n## Response Format\n");
   parts.push(
@@ -76,6 +82,13 @@ export function buildPrompt(
       responseSchema +
       "\n```"
   );
+
+  if (options.requestConfidence) {
+    parts.push("\n**Important:** The `confidence` field is REQUIRED. Rate your certainty from 0.0 (completely uncertain) to 1.0 (completely certain).");
+  }
+  if (options.requestReasoning) {
+    parts.push("\n**Important:** The `reasoning` field is REQUIRED. Briefly explain why you chose this classification.");
+  }
 
   parts.push("\n\n---\n\n## Email to Classify\n");
 

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { activitySearchQuery, activitySelectedFilters, selectedAccount, accountList, deadLetters, activity, type AuditEntry, type DeadLetterEntry } from "../stores/data";
+  import { selectedIndex } from "../stores/shortcuts";
   import { t } from "../i18n";
   import * as api from "../api";
   import EmailPreview from "./EmailPreview.svelte";
@@ -405,6 +406,51 @@
       observer.disconnect();
     }
   });
+
+  // Ref to search input for keyboard focus
+  let searchInputRef: HTMLInputElement | null = $state(null);
+
+  // Exported methods for keyboard shortcuts
+  export function toggleStreaming() {
+    handleStreamToggle(!streaming);
+  }
+
+  export function focusSearch() {
+    searchInputRef?.focus();
+  }
+
+  export function retrySelected() {
+    const idx = $selectedIndex;
+    if (idx >= 0 && idx < unifiedEntries.length) {
+      const entry = unifiedEntries[idx];
+      if (entry.type === "error") {
+        openErrorPreview(entry.data);
+      }
+    }
+  }
+
+  export function dismissSelected() {
+    const idx = $selectedIndex;
+    if (idx >= 0 && idx < unifiedEntries.length) {
+      const entry = unifiedEntries[idx];
+      if (entry.type === "error" && (entry.data.retryStatus === "pending" || entry.data.retryStatus === "retrying")) {
+        errorPreviewEntry = entry.data;
+        handleSkipDeadLetter();
+      }
+    }
+  }
+
+  export function openSelected() {
+    const idx = $selectedIndex;
+    if (idx >= 0 && idx < unifiedEntries.length) {
+      const entry = unifiedEntries[idx];
+      if (entry.type === "activity") {
+        openPreview(entry.data);
+      } else {
+        openErrorPreview(entry.data);
+      }
+    }
+  }
 </script>
 
 <div class="card" class:density-compact={density === "compact"} class:density-comfortable={density === "comfortable"}>
@@ -468,6 +514,7 @@
       class="search-input"
       placeholder={$t("activity.searchPlaceholder")}
       bind:value={$activitySearchQuery}
+      bind:this={searchInputRef}
     />
     <select class="filter-select" value={$selectedAccount ?? ""} onchange={(e) => selectedAccount.set(e.currentTarget.value || null)}>
       <option value="">{$t("common.all")} {$t("common.accounts")}</option>
@@ -503,9 +550,9 @@
           </tr>
         </thead>
         <tbody>
-          {#each unifiedEntries as entry}
+          {#each unifiedEntries as entry, idx}
             {#if entry.type === "activity"}
-              <tr>
+              <tr class:selected={$selectedIndex === idx}>
                 <td class="time-cell" title={formatUtcTooltip(entry.data.createdAt)}>{formatTime(entry.data.createdAt)}</td>
                 <td class="account-cell">{entry.data.accountName}</td>
                 <td class="subject-cell">
@@ -532,7 +579,7 @@
                 </td>
               </tr>
             {:else}
-              <tr class="error-row">
+              <tr class="error-row" class:selected={$selectedIndex === idx}>
                 <td class="time-cell" title={formatUtcTooltip(entry.data.createdAt)}>{formatTime(entry.data.createdAt)}</td>
                 <td class="account-cell">{entry.data.accountName}</td>
                 <td class="subject-cell">
@@ -957,6 +1004,16 @@
 
   tbody tr:hover {
     background: var(--bg-tertiary);
+  }
+
+  tbody tr.selected {
+    background: color-mix(in srgb, var(--accent) 15%, var(--bg-secondary));
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  tbody tr.selected:hover {
+    background: color-mix(in srgb, var(--accent) 20%, var(--bg-secondary));
   }
 
   .error-row {

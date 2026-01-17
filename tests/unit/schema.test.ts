@@ -632,4 +632,54 @@ describe("Config Schema", () => {
       expect(configSchema.safeParse({ notifications: { daily_summary_time: "invalid" } }).success).toBe(false);
     });
   });
+
+  describe("confidence config validation", () => {
+    it("applies default values", () => {
+      const result = configSchema.parse({ confidence: {} });
+      expect(result.confidence?.enabled).toBe(false);
+      expect(result.confidence?.minimum_threshold).toBe(0.7);
+      expect(result.confidence?.request_reasoning).toBe(true);
+    });
+
+    it("validates minimum_threshold range", () => {
+      expect(configSchema.safeParse({ confidence: { minimum_threshold: -0.1 } }).success).toBe(false);
+      expect(configSchema.safeParse({ confidence: { minimum_threshold: 1.1 } }).success).toBe(false);
+      expect(configSchema.safeParse({ confidence: { minimum_threshold: 0 } }).success).toBe(true);
+      expect(configSchema.safeParse({ confidence: { minimum_threshold: 1 } }).success).toBe(true);
+      expect(configSchema.safeParse({ confidence: { minimum_threshold: 0.5 } }).success).toBe(true);
+    });
+
+    it("is disabled by default", () => {
+      const result = configSchema.parse({ confidence: {} });
+      expect(result.confidence?.enabled).toBe(false);
+    });
+  });
+
+  describe("shutdown config validation", () => {
+    it("applies default values", () => {
+      const result = configSchema.parse({ shutdown: {} });
+      expect(result.shutdown?.timeout).toBe("30s");
+      expect(result.shutdown?.wait_for_inflight).toBe(true);
+      expect(result.shutdown?.force_after).toBe("25s");
+    });
+
+    it("validates duration format", () => {
+      expect(configSchema.safeParse({ shutdown: { timeout: "invalid" } }).success).toBe(false);
+      expect(configSchema.safeParse({ shutdown: { timeout: "60s" } }).success).toBe(true);
+      expect(configSchema.safeParse({ shutdown: { timeout: "5m" } }).success).toBe(true);
+    });
+
+    it("accepts custom values", () => {
+      const result = configSchema.parse({
+        shutdown: {
+          timeout: "60s",
+          wait_for_inflight: false,
+          force_after: "50s",
+        },
+      });
+      expect(result.shutdown?.timeout).toBe("60s");
+      expect(result.shutdown?.wait_for_inflight).toBe(false);
+      expect(result.shutdown?.force_after).toBe("50s");
+    });
+  });
 });

@@ -26,12 +26,20 @@ const llmActionSchema = z.object({
 
 const llmResponseSchema = z.object({
   actions: z.array(llmActionSchema),
+  confidence: z.number().min(0).max(1).optional(),
+  reasoning: z.string().optional(),
 });
 
 export type LlmAction = z.infer<typeof llmActionSchema>;
 export type LlmResponse = z.infer<typeof llmResponseSchema>;
 
-export function parseLlmResponse(content: string): LlmAction[] {
+export interface ParsedLlmResult {
+  actions: LlmAction[];
+  confidence?: number;
+  reasoning?: string;
+}
+
+export function parseLlmResponse(content: string): ParsedLlmResult {
   let cleaned = content.trim();
 
   const jsonMatch = /```(?:json)?\s*([\s\S]*?)```/.exec(cleaned);
@@ -53,16 +61,34 @@ export function parseLlmResponse(content: string): LlmAction[] {
         parsed = JSON.parse(objectMatch[0]);
       } catch {
         logger.error("Failed to recover JSON from LLM response");
-        return [{ type: "noop", reason: "Failed to parse LLM response" }];
+        return { actions: [{ type: "noop", reason: "Failed to parse LLM response" }] };
       }
     } else {
-      return [{ type: "noop", reason: "No JSON found in LLM response" }];
+      return { actions: [{ type: "noop", reason: "No JSON found in LLM response" }] };
     }
   }
 
   const result = llmResponseSchema.safeParse(parsed);
   if (result.success) {
-    return validateActions(result.data.actions);
+    return {
+      actions: validateActions(result.data.actions),
+      confidence: result.data.confidence,
+      reasoning: result.data.reasoning,
+    };
+  }
+
+  // Try to extract confidence/reasoning even if actions parsing fails partially
+  let confidence: number | undefined;
+  let reasoning: string | undefined;
+
+  if (typeof parsed === "object" && parsed !== null) {
+    const obj = parsed as Record<string, unknown>;
+    if (typeof obj.confidence === "number" && obj.confidence >= 0 && obj.confidence <= 1) {
+      confidence = obj.confidence;
+    }
+    if (typeof obj.reasoning === "string") {
+      reasoning = obj.reasoning;
+    }
   }
 
   if (
@@ -87,14 +113,18 @@ export function parseLlmResponse(content: string): LlmAction[] {
     }
 
     if (validActions.length > 0) {
-      return validateActions(validActions);
+      return {
+        actions: validateActions(validActions),
+        confidence,
+        reasoning,
+      };
     }
   }
 
   logger.warn("No valid actions found in LLM response", {
     parseErrors: result.error.issues,
   });
-  return [{ type: "noop", reason: "No valid actions in LLM response" }];
+  return { actions: [{ type: "noop", reason: "No valid actions in LLM response" }] };
 }
 
 function validateActions(actions: LlmAction[]): LlmAction[] {
@@ -148,6 +178,38 @@ export function generateResponseSchema(allowedActions: ActionType[]): string {
       "reason": "string (optional, for audit log)"
     }
   ]
+}`;
+}
+
+/**
+ * Generate a response schema with optional confidence and reasoning fields
+ */
+export function generateResponseSchemaWithConfidence(
+  allowedActions: ActionType[],
+  includeConfidence?: boolean,
+  includeReasoning?: boolean
+): string {
+  const typeStr = allowedActions.map((a) => `"${a}"`).join(" | ");
+  const extraFields: string[] = [];
+
+  if (includeConfidence) {
+    extraFields.push(`  "confidence": 0.0-1.0 (REQUIRED, your certainty level)`);
+  }
+  if (includeReasoning) {
+    extraFields.push(`  "reasoning": "string (REQUIRED, brief explanation of your classification)"`);
+  }
+
+  const extraFieldsStr = extraFields.length > 0 ? ",\n" + extraFields.join(",\n") : "";
+
+  return `{
+  "actions": [
+    {
+      "type": ${typeStr},
+      "folder": "string (required for move action)",
+      "flags": ["string array (required for flag action, e.g., 'Flagged', 'Seen')"],
+      "reason": "string (optional, for audit log)"
+    }
+  ]${extraFieldsStr}
 }`;
 }
 

@@ -16,7 +16,7 @@ import {
   setLogLevel,
   type LogLevel,
 } from "./utils/logger.js";
-import { setupShutdownHandlers, onShutdown } from "./utils/shutdown.js";
+import { setupShutdownHandlers, onShutdown, configureShutdown } from "./utils/shutdown.js";
 
 const logger = createLogger("main");
 
@@ -38,6 +38,9 @@ async function main(): Promise<void> {
 
   const configPath = process.env["CONFIG_PATH"] ?? "./config.yaml";
   const config = loadConfig(configPath);
+
+  // Configure shutdown with config settings
+  configureShutdown(config.shutdown);
 
   // Store for hot reload
   setConfigPath(configPath);

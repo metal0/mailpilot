@@ -216,6 +216,18 @@ const notificationConfigSchema = z.object({
   }).optional(),
 });
 
+const confidenceConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  minimum_threshold: z.number().min(0).max(1).default(0.7),
+  request_reasoning: z.boolean().default(true),
+});
+
+const shutdownConfigSchema = z.object({
+  timeout: durationSchema.default("30s"),
+  wait_for_inflight: z.boolean().default(true),
+  force_after: durationSchema.default("25s"),
+});
+
 export const configSchema = z.object({
   polling_interval: durationSchema.default("30s"),
   concurrency_limit: z.number().int().positive().default(5),
@@ -233,6 +245,8 @@ export const configSchema = z.object({
   attachments: attachmentsConfigSchema.optional(),
   retry: retryConfigSchema.optional(),
   notifications: notificationConfigSchema.optional(),
+  confidence: confidenceConfigSchema.optional(),
+  shutdown: shutdownConfigSchema.optional(),
   accounts: z.array(accountConfigSchema).default([]),
 });
 
@@ -255,6 +269,8 @@ export type RetryConfig = z.infer<typeof retryConfigSchema>;
 export type NotificationConfig = z.infer<typeof notificationConfigSchema>;
 export type NotificationEvent = z.infer<typeof notificationEventSchema>;
 export type NotificationChannel = z.infer<typeof notificationChannelSchema>;
+export type ConfidenceConfig = z.infer<typeof confidenceConfigSchema>;
+export type ShutdownConfig = z.infer<typeof shutdownConfigSchema>;
 
 export type TlsMode = z.infer<typeof tlsModeSchema>;
 export type AuthType = z.infer<typeof authTypeSchema>;
