@@ -419,6 +419,7 @@ export interface TestClassificationParams {
   allowedActions?: ActionType[];
   providerName: string;
   model?: string;
+  attachmentText?: string;
 }
 
 export interface ClassificationAction {
@@ -510,6 +511,46 @@ export async function validatePrompt(params: ValidatePromptParams): Promise<Vali
     method: "POST",
     body: JSON.stringify(params),
   });
+}
+
+// Attachment extraction (Tika)
+export interface ExtractAttachmentResult {
+  success: boolean;
+  filename?: string;
+  contentType?: string;
+  text?: string;
+  truncated?: boolean;
+  size?: number;
+  error?: string;
+}
+
+export async function extractAttachment(file: File): Promise<ExtractAttachmentResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${BASE_URL}/extract-attachment`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+
+  return response.json();
+}
+
+// Service health status (Tika, ClamAV)
+export interface ServiceStatus {
+  enabled: boolean;
+  healthy: boolean;
+  url?: string;
+}
+
+export interface ServicesStatus {
+  tika: ServiceStatus;
+  clamav: ServiceStatus;
+}
+
+export async function fetchServicesStatus(): Promise<ServicesStatus> {
+  return fetchJson(`${BASE_URL}/services`);
 }
 
 // Export

@@ -4,6 +4,7 @@ import { buildPrompt, truncateToTokens, type EmailContext, type PromptOptions } 
 describe("buildPrompt", () => {
   const baseEmail: EmailContext = {
     from: "sender@example.com",
+    to: "recipient@example.com",
     subject: "Test Email",
     date: "2026-01-14T12:00:00Z",
     body: "This is a test email body.",
@@ -119,9 +120,25 @@ describe("buildPrompt", () => {
       const prompt = buildPrompt(baseEmail, baseOptions);
 
       expect(prompt).toContain("**From:** sender@example.com");
+      expect(prompt).toContain("**To:** recipient@example.com");
       expect(prompt).toContain("**Subject:** Test Email");
       expect(prompt).toContain("**Date:** 2026-01-14T12:00:00Z");
       expect(prompt).toContain("This is a test email body.");
+    });
+
+    it("includes recipient (to) field before subject", () => {
+      const email: EmailContext = {
+        ...baseEmail,
+        to: "myaccount@company.com",
+      };
+
+      const prompt = buildPrompt(email, baseOptions);
+      const fromIndex = prompt.indexOf("**From:**");
+      const toIndex = prompt.indexOf("**To:**");
+      const subjectIndex = prompt.indexOf("**Subject:**");
+
+      expect(toIndex).toBeGreaterThan(fromIndex);
+      expect(toIndex).toBeLessThan(subjectIndex);
     });
 
     it("includes attachment names when present", () => {

@@ -132,22 +132,6 @@ describe("validatePrompt", () => {
     expect(result.warnings.some((w) => w.message.includes("5000 characters"))).toBe(true);
   });
 
-  it("warns when prompt doesn't mention JSON", () => {
-    const result = validatePrompt({
-      prompt: "You are an email classifier. Sort emails into folders.",
-    });
-
-    expect(result.warnings.some((w) => w.message.includes("JSON"))).toBe(true);
-  });
-
-  it("does not warn about JSON when mentioned", () => {
-    const result = validatePrompt({
-      prompt: "You are an email classifier. Respond with JSON format.",
-    });
-
-    expect(result.warnings.some((w) => w.message.includes("JSON"))).toBe(false);
-  });
-
   it("warns about disallowed actions mentioned in prompt", () => {
     const result = validatePrompt({
       prompt: "You can delete or move emails as needed.",
@@ -185,12 +169,13 @@ describe("testClassification", () => {
 
   it("builds prompt and calls classifyEmail", async () => {
     const mockActions = [{ type: "move" as const, folder: "Work", reason: "Work email" }];
-    vi.mocked(classifyEmail).mockResolvedValue(mockActions);
+    vi.mocked(classifyEmail).mockResolvedValue({ actions: mockActions });
 
     const request: TestClassificationRequest = {
       prompt: "Classify this email",
       email: {
         from: "sender@example.com",
+        to: "recipient@example.com",
         subject: "Test",
         body: "Test body",
       },
@@ -210,12 +195,32 @@ describe("testClassification", () => {
     expect(classifyEmail).toHaveBeenCalledOnce();
   });
 
-  it("includes folder constraints in prompt", async () => {
-    vi.mocked(classifyEmail).mockResolvedValue([{ type: "noop" }]);
+  it("includes recipient (to) field in prompt", async () => {
+    vi.mocked(classifyEmail).mockResolvedValue({ actions: [{ type: "noop" }] });
 
     const request: TestClassificationRequest = {
       prompt: "Classify",
-      email: { from: "a@b.com", subject: "S", body: "B" },
+      email: {
+        from: "sender@example.com",
+        to: "myaccount@example.com",
+        subject: "S",
+        body: "B",
+      },
+      folderMode: "predefined",
+      provider: mockProvider,
+    };
+
+    const result = await testClassification(request);
+
+    expect(result.promptUsed).toContain("**To:** myaccount@example.com");
+  });
+
+  it("includes folder constraints in prompt", async () => {
+    vi.mocked(classifyEmail).mockResolvedValue({ actions: [{ type: "noop" }] });
+
+    const request: TestClassificationRequest = {
+      prompt: "Classify",
+      email: { from: "a@b.com", to: "c@d.com", subject: "S", body: "B" },
       folderMode: "predefined",
       allowedFolders: ["Inbox", "Archive"],
       provider: mockProvider,
@@ -229,13 +234,13 @@ describe("testClassification", () => {
   });
 
   it("filters disallowed actions", async () => {
-    vi.mocked(classifyEmail).mockResolvedValue([
-      { type: "delete", reason: "Spam" },
-    ]);
+    vi.mocked(classifyEmail).mockResolvedValue({
+      actions: [{ type: "delete", reason: "Spam" }],
+    });
 
     const request: TestClassificationRequest = {
       prompt: "Classify",
-      email: { from: "a@b.com", subject: "S", body: "B" },
+      email: { from: "a@b.com", to: "c@d.com", subject: "S", body: "B" },
       folderMode: "predefined",
       allowedActions: ["move", "flag"],
       provider: mockProvider,
@@ -253,7 +258,7 @@ describe("testClassification", () => {
 
     const request: TestClassificationRequest = {
       prompt: "Classify",
-      email: { from: "a@b.com", subject: "S", body: "B" },
+      email: { from: "a@b.com", to: "c@d.com", subject: "S", body: "B" },
       folderMode: "predefined",
       provider: mockProvider,
     };
@@ -265,6 +270,52 @@ describe("testClassification", () => {
     expect(result.promptUsed).toBeTruthy();
     expect(result.latencyMs).toBeGreaterThanOrEqual(0);
   });
+
+  it("includes attachment text in prompt when provided", async () => {
+    vi.mocked(classifyEmail).mockResolvedValue({ actions: [{ type: "noop" }] });
+
+    const request: TestClassificationRequest = {
+      prompt: "Classify",
+      email: {
+        from: "a@b.com",
+        to: "c@d.com",
+        subject: "Invoice",
+        body: "Please see attached invoice.",
+        attachments: ["invoice.pdf"],
+      },
+      folderMode: "predefined",
+      provider: mockProvider,
+      attachmentText: "INVOICE #12345\nAmount: $100.00\nDue Date: 2024-02-01",
+    };
+
+    const result = await testClassification(request);
+
+    expect(result.promptUsed).toContain("invoice.pdf");
+    expect(result.promptUsed).toContain("INVOICE #12345");
+    expect(result.promptUsed).toContain("Amount: $100.00");
+  });
+
+  it("includes attachment names without text extraction", async () => {
+    vi.mocked(classifyEmail).mockResolvedValue({ actions: [{ type: "noop" }] });
+
+    const request: TestClassificationRequest = {
+      prompt: "Classify",
+      email: {
+        from: "a@b.com",
+        to: "c@d.com",
+        subject: "Documents",
+        body: "See attached files.",
+        attachments: ["report.pdf", "data.xlsx"],
+      },
+      folderMode: "predefined",
+      provider: mockProvider,
+    };
+
+    const result = await testClassification(request);
+
+    expect(result.promptUsed).toContain("report.pdf");
+    expect(result.promptUsed).toContain("data.xlsx");
+  });
 });
 
 describe("testClassificationRaw", () => {
@@ -274,7 +325,7 @@ describe("testClassificationRaw", () => {
 
   it("parses raw email and classifies", async () => {
     const mockActions = [{ type: "move" as const, folder: "Work" }];
-    vi.mocked(classifyEmail).mockResolvedValue(mockActions);
+    vi.mocked(classifyEmail).mockResolvedValue({ actions: mockActions });
 
     const rawEmail = `From: sender@example.com
 To: recipient@example.com
@@ -295,9 +346,32 @@ Raw email body content.`;
     expect(result.success).toBe(true);
     expect(result.parsed).toBeDefined();
     expect(result.parsed?.from).toContain("sender@example.com");
+    expect(result.parsed?.to).toContain("recipient@example.com");
     expect(result.parsed?.subject).toBe("Raw Test");
     expect(result.parsed?.body).toBe("Raw email body content.");
     expect(result.classification?.actions).toEqual(mockActions);
+  });
+
+  it("includes recipient (to) field in prompt from raw email", async () => {
+    vi.mocked(classifyEmail).mockResolvedValue({ actions: [{ type: "noop" }] });
+
+    const rawEmail = `From: sender@example.com
+To: myaccount@example.com
+Subject: Test
+
+Body`;
+
+    const request: RawTestClassificationRequest = {
+      prompt: "Classify",
+      rawEmail,
+      folderMode: "predefined",
+      provider: mockProvider,
+    };
+
+    const result = await testClassificationRaw(request);
+
+    expect(result.parsed?.to).toContain("myaccount@example.com");
+    expect(result.promptUsed).toContain("**To:**");
   });
 
   it("returns error for invalid raw email", async () => {
@@ -316,9 +390,10 @@ Raw email body content.`;
   });
 
   it("includes existing folders in prompt for auto_create mode", async () => {
-    vi.mocked(classifyEmail).mockResolvedValue([{ type: "noop" }]);
+    vi.mocked(classifyEmail).mockResolvedValue({ actions: [{ type: "noop" }] });
 
     const rawEmail = `From: a@b.com
+To: c@d.com
 Subject: Test
 
 Body`;

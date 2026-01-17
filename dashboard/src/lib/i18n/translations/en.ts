@@ -574,6 +574,13 @@ const en = {
   "sandbox.tokens": "tokens",
   "sandbox.expand": "Expand",
   "sandbox.collapse": "Collapse",
+  "sandbox.uploadFile": "Upload File",
+  "sandbox.uploadAttachment": "Upload attachment for text extraction",
+  "sandbox.tikaNotEnabled": "Attachment extraction is not enabled in configuration",
+  "sandbox.tikaNotHealthy": "Tika service is not healthy",
+  "sandbox.uploadFailed": "Failed to extract text from attachment",
+  "sandbox.truncated": "Truncated",
+  "sandbox.removeAttachment": "Remove attachment",
 } as const;
 
 export default en;

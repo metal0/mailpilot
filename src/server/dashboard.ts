@@ -949,6 +949,64 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     }
   });
 
+  // Extract text from uploaded file using Tika (for sandbox testing)
+  router.post("/api/extract-attachment", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
+    try {
+      const currentConfig = getCurrentConfig();
+
+      if (!currentConfig?.attachments?.enabled) {
+        return c.json({
+          success: false,
+          error: "Attachment extraction is not enabled. Configure attachments.enabled in config.",
+        }, 400);
+      }
+
+      const tikaClient = createTikaClient(currentConfig.attachments);
+      const isHealthy = await tikaClient.isHealthy();
+
+      if (!isHealthy) {
+        return c.json({
+          success: false,
+          error: "Tika service is not available. Check if Tika is running.",
+        }, 503);
+      }
+
+      const formData = await c.req.formData();
+      const file = formData.get("file");
+
+      if (!file || !(file instanceof File)) {
+        return c.json({
+          success: false,
+          error: "No file uploaded",
+        }, 400);
+      }
+
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const result = await tikaClient.extractText(buffer, file.name);
+
+      if (result.error) {
+        return c.json({
+          success: false,
+          error: result.error,
+        }, 500);
+      }
+
+      return c.json({
+        success: true,
+        filename: file.name,
+        contentType: result.contentType,
+        text: result.text,
+        truncated: result.truncated,
+        size: buffer.length,
+      });
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
+  });
+
   // Test Webhook connectivity
   router.post("/api/test-webhook", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
     try {

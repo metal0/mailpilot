@@ -23,6 +23,7 @@ export interface TestClassificationRequest {
   allowedActions?: ActionType[] | undefined;
   provider: LlmProviderConfig;
   model?: string | undefined;
+  attachmentText?: string | undefined;
 }
 
 export interface TestClassificationResponse {
@@ -125,6 +126,16 @@ export async function testClassification(
     date: new Date().toISOString(),
     body: truncateToTokens(request.email.body, request.provider.max_body_tokens || 4000),
     ...(request.email.attachments && { attachmentNames: request.email.attachments }),
+    ...(request.attachmentText && {
+      extractedAttachments: [
+        {
+          filename: request.email.attachments?.[0] || "attachment.txt",
+          mimeType: "text/plain",
+          text: request.attachmentText,
+          truncated: false,
+        },
+      ],
+    }),
   };
 
   const allowedActions = request.allowedActions ?? [...DEFAULT_ALLOWED_ACTIONS];

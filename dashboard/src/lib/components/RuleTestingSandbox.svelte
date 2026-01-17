@@ -49,6 +49,14 @@ You can paste a real RFC822 email here.`);
   let testing = $state(false);
   let validating = $state(false);
 
+  // Attachment upload (Tika)
+  let tikaEnabled = $state(false);
+  let tikaHealthy = $state(false);
+  let uploadedAttachment = $state<{ filename: string; text: string; truncated: boolean; size: number } | null>(null);
+  let uploading = $state(false);
+  let uploadError = $state<string | null>(null);
+  let fileInputRef: HTMLInputElement | null = $state(null);
+
   // Tabs
   let activeResultTab = $state<"actions" | "prompt" | "raw">("actions");
 
@@ -75,6 +83,54 @@ You can paste a real RFC822 email here.`);
     } finally {
       loading = false;
     }
+  }
+
+  async function checkTikaStatus() {
+    try {
+      const services = await api.fetchServicesStatus();
+      tikaEnabled = services.tika.enabled;
+      tikaHealthy = services.tika.healthy;
+    } catch {
+      tikaEnabled = false;
+      tikaHealthy = false;
+    }
+  }
+
+  async function handleFileUpload(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    try {
+      uploading = true;
+      uploadError = null;
+      const result = await api.extractAttachment(file);
+
+      if (result.success && result.text) {
+        uploadedAttachment = {
+          filename: result.filename || file.name,
+          text: result.text,
+          truncated: result.truncated || false,
+          size: result.size || file.size,
+        };
+      } else {
+        uploadError = result.error || $t("sandbox.uploadFailed");
+      }
+    } catch (e) {
+      uploadError = e instanceof Error ? e.message : String(e);
+    } finally {
+      uploading = false;
+      if (input) input.value = "";
+    }
+  }
+
+  function triggerFileUpload() {
+    fileInputRef?.click();
+  }
+
+  function removeAttachment() {
+    uploadedAttachment = null;
+    uploadError = null;
   }
 
   async function runValidation() {
@@ -136,6 +192,7 @@ You can paste a real RFC822 email here.`);
             to: emailTo,
             subject: emailSubject,
             body: emailBody,
+            attachments: uploadedAttachment ? [uploadedAttachment.filename] : undefined,
           },
           folderMode,
           allowedFolders: folderMode === "predefined" ? foldersArray : undefined,
@@ -143,6 +200,7 @@ You can paste a real RFC822 email here.`);
           allowedActions,
           providerName: selectedProvider,
           model: selectedModel || undefined,
+          attachmentText: uploadedAttachment?.text,
         });
       }
 
@@ -214,6 +272,7 @@ You can paste a real RFC822 email here.`);
 
   onMount(() => {
     loadConfig();
+    checkTikaStatus();
   });
 </script>
 
@@ -249,10 +308,38 @@ You can paste a real RFC822 email here.`);
       <div class="panel email-panel">
         <div class="panel-header">
           <h3>{$t("sandbox.emailTitle")}</h3>
-          <label class="toggle-raw">
-            <input type="checkbox" bind:checked={useRawEmail} />
-            <span>{$t("sandbox.rawEmailMode")}</span>
-          </label>
+          <div class="header-controls">
+            {#if !useRawEmail}
+              <button
+                type="button"
+                class="upload-btn"
+                class:unavailable={!tikaEnabled || !tikaHealthy}
+                onclick={triggerFileUpload}
+                disabled={uploading || !tikaEnabled || !tikaHealthy}
+                title={!tikaEnabled ? $t("sandbox.tikaNotEnabled") : !tikaHealthy ? $t("sandbox.tikaNotHealthy") : $t("sandbox.uploadAttachment")}
+              >
+                {#if uploading}
+                  <span class="spinner-tiny"></span>
+                {:else}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                  </svg>
+                {/if}
+                <span>{$t("sandbox.uploadFile")}</span>
+              </button>
+              <input
+                type="file"
+                bind:this={fileInputRef}
+                onchange={handleFileUpload}
+                style="display: none"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.rtf,.odt,.ods,.ppt,.pptx,.html,.xml,.json,.csv"
+              />
+            {/if}
+            <label class="toggle-raw">
+              <input type="checkbox" bind:checked={useRawEmail} />
+              <span>{$t("sandbox.rawEmailMode")}</span>
+            </label>
+          </div>
         </div>
         <div class="panel-content">
           {#if useRawEmail}
@@ -287,6 +374,35 @@ You can paste a real RFC822 email here.`);
                 rows="8"
               ></textarea>
             </div>
+
+            {#if uploadedAttachment}
+              <div class="attachment-preview">
+                <div class="attachment-header">
+                  <div class="attachment-info">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                    </svg>
+                    <span class="attachment-name">{uploadedAttachment.filename}</span>
+                    <span class="attachment-size">({Math.round(uploadedAttachment.size / 1024)}KB)</span>
+                    {#if uploadedAttachment.truncated}
+                      <span class="attachment-truncated">{$t("sandbox.truncated")}</span>
+                    {/if}
+                  </div>
+                  <button type="button" class="remove-attachment" onclick={removeAttachment} title={$t("sandbox.removeAttachment")}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+                <div class="attachment-text">
+                  <pre>{uploadedAttachment.text.slice(0, 500)}{uploadedAttachment.text.length > 500 ? '...' : ''}</pre>
+                </div>
+              </div>
+            {/if}
+
+            {#if uploadError}
+              <div class="upload-error">{uploadError}</div>
+            {/if}
           {/if}
         </div>
       </div>
@@ -528,6 +644,55 @@ You can paste a real RFC822 email here.`);
     padding: 0;
   }
 
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .upload-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm, 0.25rem);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .upload-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .upload-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .upload-btn.unavailable {
+    opacity: 0.4;
+    border-style: dashed;
+  }
+
+  .upload-btn.unavailable:hover {
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+  }
+
+  .spinner-tiny {
+    width: 0.75rem;
+    height: 0.75rem;
+    border: 1.5px solid var(--border-color);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
   .toggle-raw {
     display: flex;
     align-items: center;
@@ -589,6 +754,94 @@ You can paste a real RFC822 email here.`);
 
   .raw-email-input {
     min-height: 300px;
+  }
+
+  .attachment-preview {
+    margin-top: 0.75rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md, 0.375rem);
+    overflow: hidden;
+  }
+
+  .attachment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .attachment-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+  }
+
+  .attachment-name {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .attachment-size {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+  }
+
+  .attachment-truncated {
+    padding: 0.125rem 0.375rem;
+    background: rgba(245, 158, 11, 0.1);
+    border-radius: var(--radius-sm, 0.25rem);
+    color: var(--warning);
+    font-size: 0.6875rem;
+    font-weight: 500;
+  }
+
+  .remove-attachment {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-sm, 0.25rem);
+    transition: all 0.15s ease;
+  }
+
+  .remove-attachment:hover {
+    color: var(--error);
+    background: rgba(239, 68, 68, 0.1);
+  }
+
+  .attachment-text {
+    padding: 0.5rem 0.75rem;
+    max-height: 100px;
+    overflow-y: auto;
+  }
+
+  .attachment-text pre {
+    margin: 0;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .upload-error {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--error);
+    border-radius: var(--radius-md, 0.375rem);
+    color: var(--error);
+    font-size: 0.8125rem;
   }
 
   .radio-group {
