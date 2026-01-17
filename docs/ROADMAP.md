@@ -559,6 +559,195 @@ broadcastActivity(entry);
 
 ---
 
+## 17. Keyboard Shortcuts
+
+### Overview
+Add keyboard navigation to the dashboard for power users. Quick navigation between tabs, actions on lists, and global shortcuts.
+
+### Frontend Changes
+
+**New file: `dashboard/src/lib/stores/shortcuts.ts`**
+```typescript
+interface ShortcutConfig {
+  key: string;
+  ctrl?: boolean;
+  shift?: boolean;
+  alt?: boolean;
+  action: () => void;
+  description: string;
+  scope: 'global' | 'activity' | 'logs' | 'settings';
+}
+```
+
+**New component: `KeyboardShortcuts.svelte`**
+- Global keydown listener (attached to window)
+- Shortcut help modal (triggered by `?`)
+- Scope-aware shortcuts (different shortcuts active per tab)
+
+**Shortcuts to implement:**
+
+| Key | Action | Scope |
+|-----|--------|-------|
+| `1-5` | Switch tabs (Overview, Activity, Logs, Settings, Debug) | Global |
+| `?` | Show shortcuts help modal | Global |
+| `Escape` | Close any open modal | Global |
+| `j/k` | Navigate up/down in list | Activity, Logs |
+| `Enter` | Open selected item details | Activity, Logs |
+| `r` | Retry selected dead letter | Activity (dead letters) |
+| `d` | Dismiss selected dead letter | Activity (dead letters) |
+| `f` | Focus search/filter input | Activity, Logs |
+| `/` | Focus search/filter input (alternative) | Activity, Logs |
+| `p` | Toggle streaming pause/resume | Activity, Logs |
+| `Ctrl+,` | Open settings | Global |
+
+**Integration points:**
+- `Dashboard.svelte` - Global shortcuts, tab switching
+- `ActivityLog.svelte` - List navigation, retry/dismiss actions
+- `LogViewer.svelte` - List navigation, filtering
+- `App.svelte` - Mount global listener
+
+**User settings (localStorage):**
+- `shortcuts.enabled` - Toggle shortcuts on/off
+
+---
+
+## 18. Classification Confidence Scores
+
+### Overview
+Request confidence percentage from LLM. Route low-confidence classifications to dead letter queue for manual review instead of auto-executing potentially wrong actions.
+
+### Backend Changes
+
+**Schema update (`src/config/schema.ts`):**
+```yaml
+confidence:
+  enabled: true                    # Enable confidence scoring
+  minimum_threshold: 0.7           # Below this → dead letter
+  request_reasoning: true          # Ask LLM for reasoning (optional)
+```
+
+**LLM response schema update (`src/llm/parser.ts`):**
+```typescript
+const llmResponseSchema = z.object({
+  actions: z.array(llmActionSchema),
+  confidence: z.number().min(0).max(1).optional(),
+  reasoning: z.string().optional(),
+});
+```
+
+**Prompt update (`src/llm/prompt.ts`):**
+- Add confidence request to prompt template:
+  ```
+  Include a "confidence" field (0.0 to 1.0) indicating how certain you are.
+  Include a "reasoning" field briefly explaining your classification.
+  ```
+
+**Worker update (`src/processor/worker.ts`):**
+```typescript
+// After classifyEmail()
+if (confidenceConfig.enabled && response.confidence !== undefined) {
+  if (response.confidence < confidenceConfig.minimum_threshold) {
+    addToDeadLetter(messageId, accountName, folder, uid,
+      `Low confidence: ${(response.confidence * 100).toFixed(0)}%`);
+    return false; // Don't execute actions
+  }
+}
+```
+
+**Audit log update (`src/storage/audit.ts`):**
+- Add `confidence` column to audit entries
+- Store reasoning if available
+
+### Frontend Changes
+
+**Activity log enhancements:**
+- Show confidence badge on each entry (color-coded: green >80%, yellow 50-80%, red <50%)
+- Show reasoning in expandable details
+- Filter by confidence range
+
+**Dead letter UI:**
+- Show confidence score for low-confidence entries
+- "Low confidence" as a distinct error type/category
+
+**Settings:**
+- Confidence threshold slider (0-100%)
+- Toggle confidence scoring on/off
+- Toggle reasoning requests
+
+---
+
+## 19. Graceful Shutdown Improvements
+
+### Overview
+Current shutdown has 5-second timeout. Improve to track in-flight operations and wait for completion (with configurable timeout).
+
+### Backend Changes
+
+**New file: `src/utils/inflight.ts`**
+```typescript
+class InFlightTracker {
+  private operations = new Map<string, { startedAt: Date; description: string }>();
+
+  start(id: string, description: string): void;
+  complete(id: string): void;
+  getActive(): { id: string; description: string; duration: number }[];
+  waitForAll(timeoutMs: number): Promise<boolean>;
+}
+
+export const inflightTracker = new InFlightTracker();
+```
+
+**Worker integration (`src/processor/worker.ts`):**
+```typescript
+// In processMessage()
+const opId = `${accountName}:${messageId}`;
+inflightTracker.start(opId, `Processing ${messageId}`);
+try {
+  // ... existing processing logic
+} finally {
+  inflightTracker.complete(opId);
+}
+```
+
+**Shutdown update (`src/utils/shutdown.ts`):**
+```typescript
+async function executeShutdown(signal: string): Promise<void> {
+  // Wait for in-flight operations
+  const active = inflightTracker.getActive();
+  if (active.length > 0) {
+    logger.info(`Waiting for ${active.length} in-flight operations to complete`);
+    const completed = await inflightTracker.waitForAll(shutdownTimeoutMs);
+    if (!completed) {
+      logger.warn("Some operations did not complete before timeout", {
+        remaining: inflightTracker.getActive().map(op => op.description),
+      });
+    }
+  }
+  // ... continue with handler execution
+}
+```
+
+**Config schema update:**
+```yaml
+shutdown:
+  timeout: "30s"              # Total shutdown timeout
+  wait_for_inflight: true     # Wait for in-flight operations
+  force_after: "25s"          # Force shutdown after this duration
+```
+
+**WebSocket notification:**
+- Broadcast shutdown warning to dashboard
+- Show countdown/status in UI
+
+### Frontend Changes
+
+**ConnectionBlocker enhancement:**
+- Show "Server shutting down" state
+- Display in-flight operation count if available
+- Auto-reconnect after server restart
+
+---
+
 ## Implementation Priority
 
 | Feature | Complexity | Impact | Priority | Status |
@@ -568,6 +757,9 @@ broadcastActivity(entry);
 | Streaming Toggle | Medium | High | P1 | ✅ Complete |
 | 4. Smart Retry | Medium | High | P2 | ✅ Complete |
 | 7. Notifications | Medium | Medium | P2 | ✅ Complete |
+| 17. Keyboard Shortcuts | Medium | Medium | P2 | |
+| 18. Confidence Scores | Medium | High | P2 | |
+| 19. Graceful Shutdown | Low | Medium | P2 | |
 | 14. Config Editor | Medium | Medium | P3 | |
 | 9. Rule Sandbox | High | Medium | P3 | |
 | 1. OAuth UI | High | High | P4 | |
