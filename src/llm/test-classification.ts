@@ -130,8 +130,11 @@ export async function testClassification(
       extractedAttachments: [
         {
           filename: request.email.attachments?.[0] || "attachment.txt",
-          mimeType: "text/plain",
+          contentType: "text/plain",
+          size: request.attachmentText.length,
           text: request.attachmentText,
+          imageBase64: null,
+          error: null,
           truncated: false,
         },
       ],
