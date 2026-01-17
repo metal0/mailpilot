@@ -13,19 +13,16 @@ AI-powered email processing daemon that uses LLM classification to automatically
 
 ## Features
 
-- **IMAP Support** - Connects to any IMAP server with IDLE push notifications
-- **LLM Classification** - Uses OpenAI-compatible APIs to classify emails
-- **Confidence Scoring** - Optional confidence thresholds to route low-confidence results to manual review
-- **Multiple Actions** - Move to folders, mark as spam, flag, mark read, delete
-- **Multi-Account** - Process multiple email accounts with per-account configuration
-- **Rate Limiting** - Per-provider rate limiting with automatic 429 handling
-- **Web Dashboard** - Modern Svelte SPA with real-time WebSocket updates and keyboard shortcuts
-- **Rule Testing Sandbox** - Test classification prompts against sample emails before deploying
-- **Attachment Extraction** - Extract text from PDF, DOCX, Excel via Apache Tika
-- **Multimodal Vision** - Send images to vision-capable LLMs for analysis
-- **Antivirus Scanning** - Optional ClamAV integration for malware detection
-- **Webhooks** - Configurable webhooks for events like errors and actions
-- **Graceful Shutdown** - Waits for in-flight operations to complete before exiting
+- **Smart LLM Classification** - Uses any OpenAI-compatible API (OpenAI, Anthropic, Ollama, Azure, etc.) with confidence scoring, multi-action support, and vision capabilities for image analysis
+- **Powerful Email Actions** - Move to folders, mark as spam, flag, mark read, delete — multiple actions per email with automatic folder creation
+- **Multi-Account Management** - Process unlimited email accounts with per-account LLM providers, models, and classification rules
+- **Real-Time Dashboard** - Modern web interface with live updates, activity logs, and provider health monitoring
+- **Rule Testing Sandbox** - Test your classification prompts against sample emails before deploying to production
+- **Attachment Intelligence** - Extract and analyze text from PDFs, Word docs, and spreadsheets via Apache Tika
+- **Dead Letter Queue** - Failed classifications automatically queued for manual review with one-click retry
+- **Privacy-First Design** - Email content never stored or logged; only message IDs and action records persisted
+- **Works With Any IMAP Server** - Gmail, Outlook, FastMail, self-hosted — any provider with IMAP support
+- **Antivirus Integration** - Optional ClamAV scanning to quarantine or flag suspicious attachments
 
 ## Quick Start
 
