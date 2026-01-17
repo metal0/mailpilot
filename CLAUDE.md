@@ -47,6 +47,54 @@ See `docs/e2e-testing.md` for full testing documentation.
 
 This protects against accidental pushes to production branches and gives the user control over what goes to remote.
 
+### Package Lock Files (NEVER EDIT MANUALLY)
+
+**NEVER manually edit `pnpm-lock.yaml` or any lock file.** Always use package manager commands:
+
+```bash
+# Add a dependency
+pnpm add <package>              # Add to root
+pnpm add -D <package>           # Add as devDependency
+cd dashboard && pnpm add <pkg>  # Add to dashboard workspace
+
+# Remove a dependency
+pnpm remove <package>
+
+# Update dependencies
+pnpm update <package>
+
+# Regenerate lock file
+pnpm install
+```
+
+Manual edits to lock files cause:
+- Broken dependency resolution
+- CI failures with "broken lockfile" errors
+- Inconsistent builds across environments
+
+If the lock file gets corrupted, regenerate it with `pnpm install --no-frozen-lockfile`.
+
+### Test CI Locally Before Pushing (MANDATORY)
+
+**ALWAYS run the full CI check locally before pushing:**
+
+```bash
+pnpm install --frozen-lockfile  # Verify lockfile is valid
+pnpm lint                       # Run linter
+pnpm typecheck                  # Run TypeScript checks
+pnpm build                      # Build backend + dashboard
+pnpm test                       # Run all tests
+```
+
+**All commands must pass before pushing.** If any fail, fix the issues locally first.
+
+Common CI failures and fixes:
+- `ERR_PNPM_OUTDATED_LOCKFILE` → Run `pnpm install` to update lockfile
+- `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY` → Run `pnpm install` to regenerate
+- Lint errors → Fix the code issues reported
+- Type errors → Fix TypeScript type issues
+- Build errors → Check for missing imports/dependencies
+
 ### Feature Branch Workflow (REQUIRED)
 
 **All new feature implementations MUST follow this workflow:**

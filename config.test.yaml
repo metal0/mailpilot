@@ -2,7 +2,7 @@
 # Only starts the dashboard server without connecting to IMAP
 
 dry_run: true
-polling_interval: 1h
+# Note: polling_interval is now per-account (not global)
 
 server:
   port: 8085

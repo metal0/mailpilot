@@ -22,6 +22,11 @@ interface ChatCompletionResponse {
       content: string;
     };
   }>;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
 }
 
 export interface LlmRequestOptions {
@@ -129,9 +134,21 @@ export async function classifyEmail(
   logger.debug("Received response from LLM", {
     provider: provider.name,
     responseLength: content.length,
+    usage: response.usage,
   });
 
-  return parseLlmResponse(content);
+  const result = parseLlmResponse(content);
+
+  // Add usage info if provided by the LLM
+  if (response.usage) {
+    result.usage = {
+      promptTokens: response.usage.prompt_tokens,
+      completionTokens: response.usage.completion_tokens,
+      totalTokens: response.usage.total_tokens,
+    };
+  }
+
+  return result;
 }
 
 function buildHeaders(provider: LlmProviderConfig): Record<string, string> {

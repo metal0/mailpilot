@@ -403,6 +403,174 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+// Rule Testing Sandbox
+export interface TestClassificationParams {
+  prompt: string;
+  email: {
+    from: string;
+    to: string;
+    subject: string;
+    body: string;
+    attachments?: string[];
+  };
+  folderMode: "predefined" | "auto_create";
+  allowedFolders?: string[];
+  existingFolders?: string[];
+  allowedActions?: ActionType[];
+  providerName: string;
+  model?: string;
+  attachmentText?: string;
+  requestConfidence?: boolean;
+  requestReasoning?: boolean;
+}
+
+export interface ClassificationAction {
+  type: ActionType;
+  folder?: string;
+  flags?: string[];
+  reason?: string;
+}
+
+export interface LlmUsageInfo {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface TestClassificationResult {
+  success: boolean;
+  classification?: {
+    actions: ClassificationAction[];
+    rawResponse: string;
+    confidence?: number;
+    reasoning?: string;
+    usage?: LlmUsageInfo;
+  };
+  error?: string;
+  promptUsed: string;
+  latencyMs: number;
+}
+
+export async function testClassification(params: TestClassificationParams): Promise<TestClassificationResult> {
+  return fetchJson(`${BASE_URL}/test-classification`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+// Raw email classification
+export interface RawTestClassificationParams {
+  prompt: string;
+  rawEmail: string;
+  folderMode: "predefined" | "auto_create";
+  allowedFolders?: string[];
+  existingFolders?: string[];
+  allowedActions?: ActionType[];
+  providerName: string;
+  model?: string;
+  requestConfidence?: boolean;
+  requestReasoning?: boolean;
+}
+
+export interface ParsedEmailInfo {
+  from: string;
+  to: string;
+  subject: string;
+  date: string;
+  body: string;
+  attachments: { filename: string; contentType: string; size: number }[];
+}
+
+export interface RawTestClassificationResult extends TestClassificationResult {
+  parsed?: ParsedEmailInfo;
+}
+
+export async function testClassificationRaw(params: RawTestClassificationParams): Promise<RawTestClassificationResult> {
+  return fetchJson(`${BASE_URL}/test-classification/raw`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+// Prompt validation
+export interface ValidatePromptParams {
+  prompt: string;
+  allowedActions?: ActionType[];
+  folderMode?: "predefined" | "auto_create";
+  folderCount?: number;
+  requestConfidence?: boolean;
+  requestReasoning?: boolean;
+}
+
+export interface ValidationError {
+  line?: number;
+  message: string;
+}
+
+export interface ValidationWarning {
+  line?: number;
+  message: string;
+}
+
+export interface ValidatePromptResult {
+  valid: boolean;
+  errors: ValidationError[];
+  warnings: ValidationWarning[];
+  stats: {
+    charCount: number;
+    wordCount: number;
+    estimatedTokens: number;
+    fullPromptEstimatedTokens: number;
+  };
+}
+
+export async function validatePrompt(params: ValidatePromptParams): Promise<ValidatePromptResult> {
+  return fetchJson(`${BASE_URL}/validate-prompt`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+// Attachment extraction (Tika)
+export interface ExtractAttachmentResult {
+  success: boolean;
+  filename?: string;
+  contentType?: string;
+  text?: string;
+  truncated?: boolean;
+  size?: number;
+  error?: string;
+}
+
+export async function extractAttachment(file: File): Promise<ExtractAttachmentResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${BASE_URL}/extract-attachment`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+
+  return response.json();
+}
+
+// Service health status (Tika, ClamAV)
+export interface ServiceStatus {
+  enabled: boolean;
+  healthy: boolean;
+  url?: string;
+}
+
+export interface ServicesStatus {
+  tika: ServiceStatus;
+  clamav: ServiceStatus;
+}
+
+export async function fetchServicesStatus(): Promise<ServicesStatus> {
+  return fetchJson(`${BASE_URL}/services`);
+}
+
 // Export
 export function exportCsvUrl(params: ActivityParams = {}): string {
   const searchParams = new URLSearchParams();

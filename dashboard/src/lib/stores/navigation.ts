@@ -1,6 +1,6 @@
 import { writable } from "svelte/store";
 
-export type Tab = "overview" | "activity" | "logs" | "settings" | "debug";
+export type Tab = "overview" | "activity" | "logs" | "settings" | "sandbox" | "debug";
 
 export interface NavigationState {
   tab: Tab;

@@ -162,6 +162,7 @@ export async function processMessage(
 
     const emailContext: EmailContext = {
       from: email.from,
+      to: account.imap.username,
       subject: email.subject,
       date: email.date,
       body: truncatedBody,

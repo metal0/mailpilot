@@ -29,6 +29,32 @@ This document describes how Mailpilot uses AI/LLM services for email classificat
 
 **This is MANDATORY and cannot be skipped.** See `docs/e2e-testing.md` for full details.
 
+### Package Lock Files (NEVER EDIT MANUALLY)
+
+**NEVER manually edit `pnpm-lock.yaml`.** Always use pnpm commands:
+
+```bash
+pnpm add <package>              # Add dependency
+pnpm add -D <package>           # Add devDependency
+pnpm remove <package>           # Remove dependency
+pnpm install                    # Regenerate lock file
+```
+
+Manual edits cause broken dependency resolution and CI failures.
+
+### Test CI Locally Before Pushing (MANDATORY)
+
+**ALWAYS run the full CI check locally before pushing:**
+
+```bash
+pnpm install --frozen-lockfile  # Verify lockfile is valid
+pnpm lint && pnpm typecheck && pnpm build && pnpm test
+```
+
+All commands must pass before pushing. Common fixes:
+- `ERR_PNPM_OUTDATED_LOCKFILE` → Run `pnpm install` to update lockfile
+- Lint/Type errors → Fix the code issues reported
+
 ### Related Documentation
 
 | Document | Purpose |

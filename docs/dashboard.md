@@ -142,6 +142,38 @@ Real-time system logs with:
 - **Search**: Search through log messages
 - **Auto-scroll**: Automatically scroll to latest entries
 
+### Account Settings
+
+#### Polling Interval
+
+The `polling_interval` setting is configured per-account and controls how often Mailpilot checks for new emails when IMAP IDLE is not supported:
+
+- **Default**: `60s` (60 seconds)
+- **Format**: Duration string (e.g., `30s`, `5m`, `1h`)
+- **Auto-lock**: If the IMAP server supports IDLE (instant notifications), the polling interval is automatically locked and ignored
+
+When adding or editing an account, the polling interval is shown in the "Connection Settings" section. After running a connection test, if IDLE is detected, the field is locked with an "IDLE enabled" badge indicating that the server supports real-time notifications.
+
+### Rule Testing Sandbox
+
+Test classification prompts against sample emails before deploying to production:
+
+- **Prompt Editor**: CodeMirror-based editor with syntax highlighting for action keywords
+- **Sample Email Entry**: Enter test emails manually (from, subject, body) or paste raw RFC822 content
+- **Configuration Options**:
+  - Select LLM provider and model
+  - Choose folder mode (predefined or auto-create)
+  - Configure allowed folders
+  - Toggle allowed actions (move, spam, flag, read, delete)
+- **Results Display**:
+  - View classified actions with folder destinations
+  - See the full prompt sent to the LLM
+  - View raw LLM response for debugging
+  - Latency measurement for performance tuning
+- **Prompt Validation**: Real-time validation with character count and token estimates
+
+Navigate to the Sandbox tab to test prompts without affecting your live email processing.
+
 ### Debug Page
 
 Detailed system information for troubleshooting:
@@ -329,6 +361,9 @@ When the dashboard is enabled but no account exists:
 | `/api/probe-imap` | POST | Session/Key | `write:accounts` | Probe IMAP server capabilities |
 | `/api/test-imap` | POST | Session/Key | `write:accounts` | Test IMAP connection |
 | `/api/test-llm` | POST | Session/Key | `write:accounts` | Test LLM provider connectivity |
+| `/api/test-classification` | POST | Session/Key | `write:accounts` | Test email classification sandbox |
+| `/api/test-classification/raw` | POST | Session/Key | `write:accounts` | Test classification with raw RFC822 email |
+| `/api/validate-prompt` | POST | Session/Key | `read:activity` | Validate classification prompt |
 | `/api/imap-folders` | POST | Session/Key | `write:accounts` | List folders from IMAP server |
 
 ### Query Parameters

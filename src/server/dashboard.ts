@@ -29,6 +29,14 @@ import { getAccountStatuses, getUptime, getVersion } from "./status.js";
 import { broadcastStats } from "./websocket.js";
 import { getDetailedProviderStats, getAllProviders, updateProviderHealth } from "../llm/providers.js";
 import { testConnection as testLlmConnection } from "../llm/client.js";
+import {
+  testClassification,
+  testClassificationRaw,
+  validatePrompt,
+  type TestClassificationRequest,
+  type RawTestClassificationRequest,
+  type ValidatePromptRequest,
+} from "../llm/test-classification.js";
 import { getLogsPaginated, type LogLevel, type LogsFilter, createLogger } from "../utils/logger.js";
 
 const logger = createLogger("dashboard");
@@ -789,6 +797,223 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       return c.json({
         success,
         error: success ? undefined : "Failed to connect to LLM provider. Check your API key and URL.",
+      });
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
+  });
+
+  // Test classification sandbox - structured email
+  router.post("/api/test-classification", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
+    try {
+      const body = await c.req.json<{
+        prompt: string;
+        email: {
+          from: string;
+          to: string;
+          subject: string;
+          body: string;
+          attachments?: string[];
+        };
+        folderMode: "predefined" | "auto_create";
+        allowedFolders?: string[];
+        existingFolders?: string[];
+        allowedActions?: string[];
+        providerName: string;
+        model?: string;
+        requestConfidence?: boolean;
+        requestReasoning?: boolean;
+      }>();
+
+      const { prompt, email, folderMode, allowedFolders, existingFolders, allowedActions, providerName, model, requestConfidence, requestReasoning } = body;
+
+      if (!prompt || !prompt.trim()) {
+        return c.json({ success: false, error: "Prompt is required" }, 400);
+      }
+
+      if (!email.from || !email.to || !email.subject || !email.body) {
+        return c.json({ success: false, error: "Email from, to, subject, and body are required" }, 400);
+      }
+
+      if (!providerName) {
+        return c.json({ success: false, error: "Provider name is required" }, 400);
+      }
+
+      const provider = getAllProviders().find((p) => p.name === providerName);
+      if (!provider) {
+        return c.json({ success: false, error: `Provider "${providerName}" not found` }, 404);
+      }
+
+      const request: TestClassificationRequest = {
+        prompt,
+        email,
+        folderMode,
+        provider,
+        ...(allowedFolders && { allowedFolders }),
+        ...(existingFolders && { existingFolders }),
+        ...(allowedActions && { allowedActions: allowedActions as TestClassificationRequest["allowedActions"] }),
+        ...(model && { model }),
+        ...(requestConfidence !== undefined && { requestConfidence }),
+        ...(requestReasoning !== undefined && { requestReasoning }),
+      };
+
+      const result = await testClassification(request);
+      return c.json(result);
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        promptUsed: "",
+        latencyMs: 0,
+      }, 500);
+    }
+  });
+
+  // Test classification sandbox - raw RFC822 email
+  router.post("/api/test-classification/raw", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
+    try {
+      const body = await c.req.json<{
+        prompt: string;
+        rawEmail: string;
+        folderMode: "predefined" | "auto_create";
+        allowedFolders?: string[];
+        existingFolders?: string[];
+        allowedActions?: string[];
+        providerName: string;
+        model?: string;
+        requestConfidence?: boolean;
+        requestReasoning?: boolean;
+      }>();
+
+      const { prompt, rawEmail, folderMode, allowedFolders, existingFolders, allowedActions, providerName, model, requestConfidence, requestReasoning } = body;
+
+      if (!prompt || !prompt.trim()) {
+        return c.json({ success: false, error: "Prompt is required" }, 400);
+      }
+
+      if (!rawEmail || !rawEmail.trim()) {
+        return c.json({ success: false, error: "Raw email content is required" }, 400);
+      }
+
+      if (!providerName) {
+        return c.json({ success: false, error: "Provider name is required" }, 400);
+      }
+
+      const provider = getAllProviders().find((p) => p.name === providerName);
+      if (!provider) {
+        return c.json({ success: false, error: `Provider "${providerName}" not found` }, 404);
+      }
+
+      const request: RawTestClassificationRequest = {
+        prompt,
+        rawEmail,
+        folderMode,
+        provider,
+        ...(allowedFolders && { allowedFolders }),
+        ...(existingFolders && { existingFolders }),
+        ...(allowedActions && { allowedActions: allowedActions as RawTestClassificationRequest["allowedActions"] }),
+        ...(model && { model }),
+        ...(requestConfidence !== undefined && { requestConfidence }),
+        ...(requestReasoning !== undefined && { requestReasoning }),
+      };
+
+      const result = await testClassificationRaw(request);
+      return c.json(result);
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        promptUsed: "",
+        latencyMs: 0,
+      }, 500);
+    }
+  });
+
+  // Validate prompt
+  router.post("/api/validate-prompt", requireAuthOrApiKeyWithDryRun("read:activity"), async (c) => {
+    try {
+      const body = await c.req.json<{
+        prompt: string;
+        allowedActions?: string[];
+        folderMode?: string;
+        folderCount?: number;
+        requestConfidence?: boolean;
+        requestReasoning?: boolean;
+      }>();
+
+      const request: ValidatePromptRequest = {
+        prompt: body.prompt || "",
+        ...(body.allowedActions && { allowedActions: body.allowedActions as ValidatePromptRequest["allowedActions"] }),
+        ...(body.folderMode && { folderMode: body.folderMode as ValidatePromptRequest["folderMode"] }),
+        ...(body.folderCount !== undefined && { folderCount: body.folderCount }),
+        ...(body.requestConfidence !== undefined && { requestConfidence: body.requestConfidence }),
+        ...(body.requestReasoning !== undefined && { requestReasoning: body.requestReasoning }),
+      };
+
+      const result = validatePrompt(request);
+      return c.json(result);
+    } catch (error) {
+      return c.json({
+        valid: false,
+        errors: [{ message: error instanceof Error ? error.message : String(error) }],
+        warnings: [],
+        stats: { charCount: 0, wordCount: 0, estimatedTokens: 0 },
+      }, 500);
+    }
+  });
+
+  // Extract text from uploaded file using Tika (for sandbox testing)
+  router.post("/api/extract-attachment", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
+    try {
+      const currentConfig = getCurrentConfig();
+
+      if (!currentConfig?.attachments?.enabled) {
+        return c.json({
+          success: false,
+          error: "Attachment extraction is not enabled. Configure attachments.enabled in config.",
+        }, 400);
+      }
+
+      const tikaClient = createTikaClient(currentConfig.attachments);
+      const isHealthy = await tikaClient.isHealthy();
+
+      if (!isHealthy) {
+        return c.json({
+          success: false,
+          error: "Tika service is not available. Check if Tika is running.",
+        }, 503);
+      }
+
+      const formData = await c.req.formData();
+      const file = formData.get("file");
+
+      if (!file || !(file instanceof File)) {
+        return c.json({
+          success: false,
+          error: "No file uploaded",
+        }, 400);
+      }
+
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const result = await tikaClient.extractText(buffer, file.name);
+
+      if (result.error) {
+        return c.json({
+          success: false,
+          error: result.error,
+        }, 500);
+      }
+
+      return c.json({
+        success: true,
+        filename: file.name,
+        contentType: result.contentType,
+        text: result.text,
+        truncated: result.truncated,
+        size: buffer.length,
       });
     } catch (error) {
       return c.json({

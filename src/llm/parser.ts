@@ -33,10 +33,17 @@ const llmResponseSchema = z.object({
 export type LlmAction = z.infer<typeof llmActionSchema>;
 export type LlmResponse = z.infer<typeof llmResponseSchema>;
 
+export interface LlmUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 export interface ParsedLlmResult {
   actions: LlmAction[];
   confidence?: number;
   reasoning?: string;
+  usage?: LlmUsage;
 }
 
 export function parseLlmResponse(content: string): ParsedLlmResult {

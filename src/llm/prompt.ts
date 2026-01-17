@@ -4,6 +4,7 @@ import { formatAttachmentsForPrompt } from "../attachments/index.js";
 
 export interface EmailContext {
   from: string;
+  to: string;
   subject: string;
   date: string;
   body: string;
@@ -93,6 +94,7 @@ export function buildPrompt(
   parts.push("\n\n---\n\n## Email to Classify\n");
 
   parts.push(`**From:** ${email.from}`);
+  parts.push(`**To:** ${email.to}`);
   parts.push(`**Subject:** ${email.subject}`);
   parts.push(`**Date:** ${email.date}`);
 

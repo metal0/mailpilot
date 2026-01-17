@@ -66,7 +66,10 @@ async function main(): Promise<void> {
   });
 
   registerProviders(config.llm_providers);
-  await startHealthChecks();
+  // Start health checks in background - don't block startup
+  startHealthChecks().catch((err: unknown) => {
+    logger.error("Initial health check failed", { error: err instanceof Error ? err.message : String(err) });
+  });
 
   onShutdown(() => {
     stopHealthChecks();
