@@ -938,11 +938,19 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       const body = await c.req.json<{
         prompt: string;
         allowedActions?: string[];
+        folderMode?: string;
+        folderCount?: number;
+        requestConfidence?: boolean;
+        requestReasoning?: boolean;
       }>();
 
       const request: ValidatePromptRequest = {
         prompt: body.prompt || "",
         ...(body.allowedActions && { allowedActions: body.allowedActions as ValidatePromptRequest["allowedActions"] }),
+        ...(body.folderMode && { folderMode: body.folderMode as ValidatePromptRequest["folderMode"] }),
+        ...(body.folderCount !== undefined && { folderCount: body.folderCount }),
+        ...(body.requestConfidence !== undefined && { requestConfidence: body.requestConfidence }),
+        ...(body.requestReasoning !== undefined && { requestReasoning: body.requestReasoning }),
       };
 
       const result = validatePrompt(request);

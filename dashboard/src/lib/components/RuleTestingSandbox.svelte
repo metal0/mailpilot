@@ -51,6 +51,7 @@
   let validation = $state<ValidatePromptResult | null>(null);
   let testing = $state(false);
   let validating = $state(false);
+  let validationTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Tika status
   let tikaEnabled = $state(false);
@@ -87,6 +88,8 @@
   // Save state to store when component unmounts
   onDestroy(() => {
     unsubscribe();
+    // Clear validation timeout to prevent memory leaks
+    if (validationTimeout) clearTimeout(validationTimeout);
     sandboxState.set({
       prompt,
       emailFrom,
@@ -209,6 +212,12 @@
       });
     } catch (e) {
       console.error("Validation failed:", e);
+      validation = {
+        valid: false,
+        errors: [{ message: "Validation service unavailable" }],
+        warnings: [],
+        stats: { charCount: 0, wordCount: 0, estimatedTokens: 0, fullPromptEstimatedTokens: 0 },
+      };
     } finally {
       validating = false;
     }
@@ -331,9 +340,16 @@
     }
   });
 
-  // Debounce validation
-  let validationTimeout: ReturnType<typeof setTimeout> | null = null;
+  // Debounce validation - read reactive values synchronously to establish dependencies
   $effect(() => {
+    // Read reactive values to track them as dependencies (Svelte 5 requirement)
+    const _prompt = prompt;
+    const _actions = allowedActions;
+    const _folderMode = folderMode;
+    const _allowedFolders = allowedFolders;
+    const _existingFolders = existingFolders;
+    void (_prompt, _actions, _folderMode, _allowedFolders, _existingFolders);
+
     if (validationTimeout) clearTimeout(validationTimeout);
     validationTimeout = setTimeout(() => {
       runValidation();

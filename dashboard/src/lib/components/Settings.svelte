@@ -1794,21 +1794,20 @@
                       </button>
                     </div>
 
-                    <div class="side-modal-content">
+                    <div class="side-modal-content" onclick={() => { showWatchFolderDropdown = false; showAllowedFolderDropdown = false; }}>
                       <div class="form-group">
                         <label>
                           <span class="label-text">{$t("settings.accounts.watchFolders")} <span class="help-icon" title={helpTexts["folders.watch"]}>?</span></span>
                           {#if availableFolders.length > 0}
-                            <div class="multi-select-dropdown">
-                              <button type="button" class="dropdown-trigger" onclick={() => showWatchFolderDropdown = !showWatchFolderDropdown}>
+                            <div class="multi-select-dropdown" onclick={(e) => e.stopPropagation()}>
+                              <button type="button" class="dropdown-trigger" onclick={() => { showAllowedFolderDropdown = false; showWatchFolderDropdown = !showWatchFolderDropdown; }}>
                                 {(editingAccount.folders?.watch ?? ["INBOX"]).join(", ") || "Select folders"}
                                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                                   <polyline points="6 9 12 15 18 9"/>
                                 </svg>
                               </button>
                               {#if showWatchFolderDropdown}
-                                <Backdrop onclose={() => showWatchFolderDropdown = false} zIndex={150} />
-                                <div class="dropdown-menu" onclick={(e) => e.stopPropagation()}>
+                                <div class="dropdown-menu">
                                   {#each availableFolders as folder}
                                     <label class="dropdown-item">
                                       <input
@@ -1844,7 +1843,7 @@
                         </label>
                       </div>
 
-                      <div class="form-group">
+                      <div class="form-group" onclick={(e) => e.stopPropagation()}>
                         <label>
                           <span class="label-text">{$t("settings.accounts.folderMode")} <span class="help-icon" title={helpTexts["folders.mode"]}>?</span></span>
                           <select
@@ -1865,8 +1864,8 @@
                           <label>
                             <span class="label-text">{$t("settings.accounts.allowedFolders")} <span class="help-icon" title={helpTexts["folders.allowed"]}>?</span></span>
                             {#if availableFolders.length > 0}
-                              <div class="multi-select-dropdown">
-                                <button type="button" class="dropdown-trigger" onclick={() => showAllowedFolderDropdown = !showAllowedFolderDropdown}>
+                              <div class="multi-select-dropdown" onclick={(e) => e.stopPropagation()}>
+                                <button type="button" class="dropdown-trigger" onclick={() => { showWatchFolderDropdown = false; showAllowedFolderDropdown = !showAllowedFolderDropdown; }}>
                                   {(editingAccount.folders?.allowed ?? []).length > 0
                                     ? (editingAccount.folders?.allowed ?? []).join(", ")
                                     : "All folders (auto-discover)"}
@@ -1875,8 +1874,7 @@
                                   </svg>
                                 </button>
                                 {#if showAllowedFolderDropdown}
-                                  <Backdrop onclose={() => showAllowedFolderDropdown = false} zIndex={150} />
-                                  <div class="dropdown-menu" onclick={(e) => e.stopPropagation()}>
+                                  <div class="dropdown-menu">
                                     {#each availableFolders as folder}
                                       <label class="dropdown-item">
                                         <input
@@ -3226,8 +3224,8 @@
     padding: 1.5rem;
     width: 100%;
     max-width: 600px;
-    min-height: 580px;
-    max-height: 90vh;
+    height: 85vh;
+    max-height: 700px;
     overflow-y: auto;
   }
 
