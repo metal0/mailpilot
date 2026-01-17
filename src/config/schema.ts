@@ -82,6 +82,12 @@ const accountConfigSchema = z.object({
   allowed_actions: z.array(actionTypeSchema).optional(),
   // Per-account minimum confidence threshold. Overrides global confidence.minimum_threshold.
   minimum_confidence: z.number().min(0).max(1).optional(),
+  // Per-account polling interval. Used when IMAP IDLE is not supported.
+  // Default is 60s if not specified. Set to null/undefined to use IDLE only (if supported).
+  polling_interval: durationSchema.optional(),
+  // Whether IMAP IDLE is supported for this account. Set automatically during connection test.
+  // When true, polling_interval is ignored and IMAP IDLE is used instead.
+  idle_supported: z.boolean().optional(),
 });
 
 const llmProviderSchema = z.object({
@@ -230,8 +236,12 @@ const shutdownConfigSchema = z.object({
   force_after: durationSchema.default("25s"),
 });
 
+// Default polling interval used when account doesn't specify one (60 seconds)
+export const DEFAULT_POLLING_INTERVAL = "60s";
+
 export const configSchema = z.object({
-  polling_interval: durationSchema.default("30s"),
+  // polling_interval moved to per-account setting. Use account.polling_interval instead.
+  // Global default is 60s, hardcoded in DEFAULT_POLLING_INTERVAL.
   concurrency_limit: z.number().int().positive().default(5),
   dry_run: z.boolean().default(false),
   add_processing_headers: z.boolean().default(false),

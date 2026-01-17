@@ -1,5 +1,5 @@
 import type { LlmProviderConfig, ActionType, FolderMode } from "../config/schema.js";
-import { DEFAULT_ALLOWED_ACTIONS } from "../config/schema.js";
+import { DEFAULT_ALLOWED_ACTIONS, ALL_ACTION_TYPES } from "../config/schema.js";
 import { classifyEmail } from "./client.js";
 import { buildPrompt, truncateToTokens, type EmailContext, type PromptOptions } from "./prompt.js";
 import { filterDisallowedActions, type LlmAction } from "./parser.js";
@@ -24,6 +24,14 @@ export interface TestClassificationRequest {
   provider: LlmProviderConfig;
   model?: string | undefined;
   attachmentText?: string | undefined;
+  requestConfidence?: boolean | undefined;
+  requestReasoning?: boolean | undefined;
+}
+
+export interface LlmUsageInfo {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
 }
 
 export interface TestClassificationResponse {
@@ -31,6 +39,9 @@ export interface TestClassificationResponse {
   classification?: {
     actions: LlmAction[];
     rawResponse: string;
+    confidence?: number;
+    reasoning?: string;
+    usage?: LlmUsageInfo;
   };
   error?: string;
   promptUsed: string;
@@ -46,6 +57,8 @@ export interface RawTestClassificationRequest {
   allowedActions?: ActionType[] | undefined;
   provider: LlmProviderConfig;
   model?: string | undefined;
+  requestConfidence?: boolean | undefined;
+  requestReasoning?: boolean | undefined;
 }
 
 export interface ParsedEmailInfo {
@@ -64,6 +77,10 @@ export interface RawTestClassificationResponse extends TestClassificationRespons
 export interface ValidatePromptRequest {
   prompt: string;
   allowedActions?: ActionType[] | undefined;
+  folderMode?: FolderMode | undefined;
+  folderCount?: number | undefined;
+  requestConfidence?: boolean | undefined;
+  requestReasoning?: boolean | undefined;
 }
 
 export interface ValidationError {
@@ -84,6 +101,7 @@ export interface ValidatePromptResponse {
     charCount: number;
     wordCount: number;
     estimatedTokens: number;
+    fullPromptEstimatedTokens: number;
   };
 }
 
@@ -149,6 +167,8 @@ export async function testClassification(
     allowedActions,
     ...(request.folderMode === "predefined" && request.allowedFolders && { allowedFolders: request.allowedFolders }),
     ...(request.folderMode === "auto_create" && request.existingFolders && { existingFolders: request.existingFolders }),
+    ...(request.requestConfidence !== undefined && { requestConfidence: request.requestConfidence }),
+    ...(request.requestReasoning !== undefined && { requestReasoning: request.requestReasoning }),
   };
 
   const fullPrompt = buildPrompt(emailContext, promptOptions);
@@ -170,12 +190,21 @@ export async function testClassification(
 
     const filteredActions = filterDisallowedActions(result.actions, allowedActions);
 
+    const classificationResult: TestClassificationResponse["classification"] = {
+      actions: filteredActions,
+      rawResponse: JSON.stringify({
+        actions: filteredActions,
+        ...(result.confidence !== undefined && { confidence: result.confidence }),
+        ...(result.reasoning && { reasoning: result.reasoning }),
+      }, null, 2),
+      ...(result.confidence !== undefined && { confidence: result.confidence }),
+      ...(result.reasoning && { reasoning: result.reasoning }),
+      ...(result.usage && { usage: result.usage }),
+    };
+
     return {
       success: true,
-      classification: {
-        actions: filteredActions,
-        rawResponse: JSON.stringify({ actions: filteredActions }, null, 2),
-      },
+      classification: classificationResult,
       promptUsed: fullPrompt,
       latencyMs: Date.now() - startTime,
     };
@@ -228,6 +257,8 @@ export async function testClassificationRaw(
     allowedActions,
     ...(request.folderMode === "predefined" && request.allowedFolders && { allowedFolders: request.allowedFolders }),
     ...(request.folderMode === "auto_create" && request.existingFolders && { existingFolders: request.existingFolders }),
+    ...(request.requestConfidence !== undefined && { requestConfidence: request.requestConfidence }),
+    ...(request.requestReasoning !== undefined && { requestReasoning: request.requestReasoning }),
   };
 
   const fullPrompt = buildPrompt(emailContext, promptOptions);
@@ -251,12 +282,21 @@ export async function testClassificationRaw(
 
     const filteredActions = filterDisallowedActions(result.actions, allowedActions);
 
+    const classificationResult: TestClassificationResponse["classification"] = {
+      actions: filteredActions,
+      rawResponse: JSON.stringify({
+        actions: filteredActions,
+        ...(result.confidence !== undefined && { confidence: result.confidence }),
+        ...(result.reasoning && { reasoning: result.reasoning }),
+      }, null, 2),
+      ...(result.confidence !== undefined && { confidence: result.confidence }),
+      ...(result.reasoning && { reasoning: result.reasoning }),
+      ...(result.usage && { usage: result.usage }),
+    };
+
     return {
       success: true,
-      classification: {
-        actions: filteredActions,
-        rawResponse: JSON.stringify({ actions: filteredActions }, null, 2),
-      },
+      classification: classificationResult,
       parsed,
       promptUsed: fullPrompt,
       latencyMs: Date.now() - startTime,
@@ -278,14 +318,55 @@ export async function testClassificationRaw(
 
 const PROMPT_CHAR_LIMIT = 4000;
 
+// Estimated overhead tokens for auto-injected prompt parts
+const ESTIMATED_OVERHEAD = {
+  BASE_STRUCTURE: 150,        // Section headers, separators, formatting
+  FOLDERS_HEADER: 30,         // "## Allowed/Existing Folders" section header
+  FOLDER_ENTRY: 5,            // ~5 tokens per folder name
+  ACTIONS_SECTION: 80,        // "## Allowed Actions" + list + restrictions
+  RESPONSE_SCHEMA_BASE: 200,  // JSON schema structure
+  CONFIDENCE_SCHEMA: 50,      // confidence field in schema + explanation
+  REASONING_SCHEMA: 50,       // reasoning field in schema + explanation
+  EMAIL_HEADERS: 30,          // From, To, Subject, Date labels
+  EMAIL_BODY_OVERHEAD: 20,    // Body label and formatting
+};
+
 export function validatePrompt(request: ValidatePromptRequest): ValidatePromptResponse {
-  const { prompt, allowedActions } = request;
+  const { prompt, allowedActions, folderMode, folderCount, requestConfidence, requestReasoning } = request;
   const errors: ValidationError[] = [];
   const warnings: ValidationWarning[] = [];
 
   const charCount = prompt.length;
   const wordCount = prompt.split(/\s+/).filter(Boolean).length;
   const estimatedTokens = Math.ceil(charCount / 4);
+
+  // Calculate full prompt estimated tokens including auto-injected content
+  let fullPromptOverhead = ESTIMATED_OVERHEAD.BASE_STRUCTURE;
+
+  // Add folders overhead
+  if (folderMode && folderCount && folderCount > 0) {
+    fullPromptOverhead += ESTIMATED_OVERHEAD.FOLDERS_HEADER + (folderCount * ESTIMATED_OVERHEAD.FOLDER_ENTRY);
+  }
+
+  // Add actions section if restricted
+  const effectiveActions = allowedActions ?? [...DEFAULT_ALLOWED_ACTIONS];
+  if (effectiveActions.length < ALL_ACTION_TYPES.length) {
+    fullPromptOverhead += ESTIMATED_OVERHEAD.ACTIONS_SECTION;
+  }
+
+  // Add response schema
+  fullPromptOverhead += ESTIMATED_OVERHEAD.RESPONSE_SCHEMA_BASE;
+  if (requestConfidence) {
+    fullPromptOverhead += ESTIMATED_OVERHEAD.CONFIDENCE_SCHEMA;
+  }
+  if (requestReasoning) {
+    fullPromptOverhead += ESTIMATED_OVERHEAD.REASONING_SCHEMA;
+  }
+
+  // Add email structure overhead
+  fullPromptOverhead += ESTIMATED_OVERHEAD.EMAIL_HEADERS + ESTIMATED_OVERHEAD.EMAIL_BODY_OVERHEAD;
+
+  const fullPromptEstimatedTokens = estimatedTokens + fullPromptOverhead;
 
   if (!prompt.trim()) {
     errors.push({ message: "Prompt cannot be empty" });
@@ -322,6 +403,7 @@ export function validatePrompt(request: ValidatePromptRequest): ValidatePromptRe
       charCount,
       wordCount,
       estimatedTokens,
+      fullPromptEstimatedTokens,
     },
   };
 }

@@ -179,26 +179,10 @@ describe("Config Schema", () => {
 
     it("applies default values", () => {
       const result = configSchema.parse({});
-      expect(result.polling_interval).toBe("30s");
+      // polling_interval is now per-account (removed from global config)
       expect(result.concurrency_limit).toBe(5);
       expect(result.dry_run).toBe(false);
       expect(result.accounts).toEqual([]);
-    });
-
-    it("validates polling_interval format", () => {
-      const validIntervals = ["30s", "5m", "1h", "24h", "7d", "2w", "1y"];
-      for (const interval of validIntervals) {
-        const result = configSchema.safeParse({ polling_interval: interval });
-        expect(result.success).toBe(true);
-      }
-    });
-
-    it("rejects invalid polling_interval", () => {
-      const invalidIntervals = ["30", "5 minutes", "1hour", "invalid"];
-      for (const interval of invalidIntervals) {
-        const result = configSchema.safeParse({ polling_interval: interval });
-        expect(result.success).toBe(false);
-      }
     });
 
     it("validates concurrency_limit is positive", () => {
@@ -315,6 +299,37 @@ describe("Config Schema", () => {
         accounts: [{ ...minimalAccount, allowed_actions: ["move", "invalid"] }],
       });
       expect(result.success).toBe(false);
+    });
+
+    it("accepts per-account polling_interval", () => {
+      const validIntervals = ["30s", "5m", "1h", "24h", "7d", "2w", "1y"];
+      for (const interval of validIntervals) {
+        const result = configSchema.safeParse({
+          accounts: [{ ...minimalAccount, polling_interval: interval }],
+        });
+        expect(result.success).toBe(true);
+      }
+    });
+
+    it("rejects invalid account polling_interval", () => {
+      const invalidIntervals = ["30", "5 minutes", "1hour", "invalid"];
+      for (const interval of invalidIntervals) {
+        const result = configSchema.safeParse({
+          accounts: [{ ...minimalAccount, polling_interval: interval }],
+        });
+        expect(result.success).toBe(false);
+      }
+    });
+
+    it("accepts idle_supported flag", () => {
+      const result = configSchema.safeParse({
+        accounts: [{ ...minimalAccount, idle_supported: true }],
+      });
+      expect(result.success).toBe(true);
+      const result2 = configSchema.safeParse({
+        accounts: [{ ...minimalAccount, idle_supported: false }],
+      });
+      expect(result2.success).toBe(true);
     });
   });
 

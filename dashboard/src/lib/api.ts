@@ -420,6 +420,8 @@ export interface TestClassificationParams {
   providerName: string;
   model?: string;
   attachmentText?: string;
+  requestConfidence?: boolean;
+  requestReasoning?: boolean;
 }
 
 export interface ClassificationAction {
@@ -429,11 +431,20 @@ export interface ClassificationAction {
   reason?: string;
 }
 
+export interface LlmUsageInfo {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 export interface TestClassificationResult {
   success: boolean;
   classification?: {
     actions: ClassificationAction[];
     rawResponse: string;
+    confidence?: number;
+    reasoning?: string;
+    usage?: LlmUsageInfo;
   };
   error?: string;
   promptUsed: string;
@@ -457,6 +468,8 @@ export interface RawTestClassificationParams {
   allowedActions?: ActionType[];
   providerName: string;
   model?: string;
+  requestConfidence?: boolean;
+  requestReasoning?: boolean;
 }
 
 export interface ParsedEmailInfo {
@@ -483,6 +496,10 @@ export async function testClassificationRaw(params: RawTestClassificationParams)
 export interface ValidatePromptParams {
   prompt: string;
   allowedActions?: ActionType[];
+  folderMode?: "predefined" | "auto_create";
+  folderCount?: number;
+  requestConfidence?: boolean;
+  requestReasoning?: boolean;
 }
 
 export interface ValidationError {
@@ -503,6 +520,7 @@ export interface ValidatePromptResult {
     charCount: number;
     wordCount: number;
     estimatedTokens: number;
+    fullPromptEstimatedTokens: number;
   };
 }
 

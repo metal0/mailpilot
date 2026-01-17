@@ -2,9 +2,9 @@
 # Copy to config.yaml and customize for your setup
 
 # Global settings
-polling_interval: 30s     # used when IDLE not supported
 concurrency_limit: 5      # emails processed in parallel per account
 dry_run: false            # log actions without executing
+# Note: polling_interval is now per-account (see accounts section)
 
 # Backlog handling on startup
 backlog:
@@ -115,3 +115,7 @@ accounts:
     # Optional prompt override for this account
     # prompt_override: |
     #   Custom classification rules for this account...
+
+    # Polling interval (only used if IMAP IDLE is not supported)
+    # Default is 60s if not specified
+    # polling_interval: 60s

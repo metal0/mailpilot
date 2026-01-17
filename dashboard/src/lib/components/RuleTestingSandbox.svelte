@@ -1,47 +1,50 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import * as api from "../api";
   import type { ActionType, TestClassificationResult, ValidatePromptResult } from "../api";
   import { t } from "../i18n";
   import PromptEditor from "./PromptEditor.svelte";
+  import { sandboxState, type SandboxState } from "../stores/sandbox";
 
   interface LlmProvider {
     name: string;
     default_model?: string;
   }
 
+  interface ConfidenceConfig {
+    enabled?: boolean;
+    request_reasoning?: boolean;
+  }
+
   interface Config {
     llm_providers: LlmProvider[];
     default_prompt?: string;
+    confidence?: ConfidenceConfig;
   }
 
   let config: Config | null = $state(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
 
-  // Form state
+  // Form state - initialized from store
   let prompt = $state("");
-  let emailFrom = $state("sender@example.com");
-  let emailTo = $state("recipient@example.com");
-  let emailSubject = $state("Test Email Subject");
-  let emailBody = $state("This is a test email body.\n\nYou can edit this to test different classification scenarios.");
+  let emailFrom = $state("");
+  let emailTo = $state("");
+  let emailSubject = $state("");
+  let emailBody = $state("");
   let folderMode = $state<"predefined" | "auto_create">("predefined");
-  let allowedFolders = $state("INBOX, Work, Personal, Finance, Archive");
-  let existingFolders = $state("INBOX, Sent, Drafts, Trash");
+  let allowedFolders = $state("");
+  let existingFolders = $state("");
   let selectedProvider = $state("");
   let selectedModel = $state("");
-  let allowedActions = $state<ActionType[]>(["move", "spam", "flag", "read"]);
+  let allowedActions = $state<ActionType[]>([]);
 
   // Raw email mode
   let useRawEmail = $state(false);
-  let rawEmail = $state(`From: sender@example.com
-To: recipient@example.com
-Subject: Test Email
-Date: Mon, 15 Jan 2024 10:30:00 +0000
-Content-Type: text/plain; charset="UTF-8"
+  let rawEmail = $state("");
 
-This is the email body content.
-You can paste a real RFC822 email here.`);
+  // Attachment upload (Tika)
+  let uploadedAttachment = $state<{ filename: string; text: string; truncated: boolean; size: number } | null>(null);
 
   // Results
   let testResult = $state<TestClassificationResult | null>(null);
@@ -49,16 +52,58 @@ You can paste a real RFC822 email here.`);
   let testing = $state(false);
   let validating = $state(false);
 
-  // Attachment upload (Tika)
+  // Tika status
   let tikaEnabled = $state(false);
   let tikaHealthy = $state(false);
-  let uploadedAttachment = $state<{ filename: string; text: string; truncated: boolean; size: number } | null>(null);
   let uploading = $state(false);
   let uploadError = $state<string | null>(null);
   let fileInputRef: HTMLInputElement | null = $state(null);
 
   // Tabs
   let activeResultTab = $state<"actions" | "prompt" | "raw">("actions");
+
+  // Initialize state from store
+  let storeInitialized = false;
+  const unsubscribe = sandboxState.subscribe((state) => {
+    if (!storeInitialized) {
+      prompt = state.prompt;
+      emailFrom = state.emailFrom;
+      emailTo = state.emailTo;
+      emailSubject = state.emailSubject;
+      emailBody = state.emailBody;
+      useRawEmail = state.useRawEmail;
+      rawEmail = state.rawEmail;
+      folderMode = state.folderMode;
+      allowedFolders = state.allowedFolders;
+      existingFolders = state.existingFolders;
+      selectedProvider = state.selectedProvider;
+      selectedModel = state.selectedModel;
+      allowedActions = [...state.allowedActions];
+      uploadedAttachment = state.uploadedAttachment;
+      storeInitialized = true;
+    }
+  });
+
+  // Save state to store when component unmounts
+  onDestroy(() => {
+    unsubscribe();
+    sandboxState.set({
+      prompt,
+      emailFrom,
+      emailTo,
+      emailSubject,
+      emailBody,
+      useRawEmail,
+      rawEmail,
+      folderMode,
+      allowedFolders,
+      existingFolders,
+      selectedProvider,
+      selectedModel,
+      allowedActions,
+      uploadedAttachment,
+    });
+  });
 
   // Note: 'noop' is excluded since it's always allowed by the backend
   const allActionTypes: ActionType[] = ["move", "spam", "flag", "read", "delete"];
@@ -70,11 +115,13 @@ You can paste a real RFC822 email here.`);
       const result = await api.fetchConfig();
       config = result.config as Config;
 
-      if (config?.default_prompt) {
+      // Only set prompt from config if store has empty prompt (first load)
+      if (config?.default_prompt && !prompt) {
         prompt = config.default_prompt;
       }
 
-      if (config?.llm_providers?.length > 0) {
+      // Only set provider if store has empty provider (first load)
+      if (config?.llm_providers?.length > 0 && !selectedProvider) {
         selectedProvider = config.llm_providers[0].name;
         selectedModel = config.llm_providers[0].default_model || "";
       }
@@ -141,9 +188,24 @@ You can paste a real RFC822 email here.`);
 
     try {
       validating = true;
+
+      // Calculate folder count for token estimation
+      const foldersArray = (folderMode === "predefined" ? allowedFolders : existingFolders)
+        .split(",")
+        .map((f) => f.trim())
+        .filter(Boolean);
+
+      // Get confidence settings from config
+      const requestConfidence = config?.confidence?.enabled ?? false;
+      const requestReasoning = config?.confidence?.request_reasoning ?? true;
+
       validation = await api.validatePrompt({
         prompt,
         allowedActions,
+        folderMode,
+        folderCount: foldersArray.length,
+        requestConfidence,
+        requestReasoning: requestConfidence && requestReasoning,
       });
     } catch (e) {
       console.error("Validation failed:", e);
@@ -173,6 +235,10 @@ You can paste a real RFC822 email here.`);
         .map((f) => f.trim())
         .filter(Boolean);
 
+      // Pass confidence settings from config
+      const requestConfidence = config?.confidence?.enabled ?? false;
+      const requestReasoning = config?.confidence?.request_reasoning ?? true;
+
       if (useRawEmail) {
         testResult = await api.testClassificationRaw({
           prompt,
@@ -183,6 +249,8 @@ You can paste a real RFC822 email here.`);
           allowedActions,
           providerName: selectedProvider,
           model: selectedModel || undefined,
+          requestConfidence,
+          requestReasoning: requestConfidence && requestReasoning,
         });
       } else {
         testResult = await api.testClassification({
@@ -201,6 +269,8 @@ You can paste a real RFC822 email here.`);
           providerName: selectedProvider,
           model: selectedModel || undefined,
           attachmentText: uploadedAttachment?.text,
+          requestConfidence,
+          requestReasoning: requestConfidence && requestReasoning,
         });
       }
 
@@ -335,10 +405,18 @@ You can paste a real RFC822 email here.`);
                 accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.rtf,.odt,.ods,.ppt,.pptx,.html,.xml,.json,.csv"
               />
             {/if}
-            <label class="toggle-raw">
-              <input type="checkbox" bind:checked={useRawEmail} />
-              <span>{$t("sandbox.rawEmailMode")}</span>
-            </label>
+            <button
+              type="button"
+              class="toggle-raw-btn"
+              class:active={useRawEmail}
+              onclick={() => (useRawEmail = !useRawEmail)}
+              title={useRawEmail ? $t("sandbox.formMode") : $t("sandbox.rawEmailMode")}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="16 18 22 12 16 6"/>
+                <polyline points="8 6 2 12 8 18"/>
+              </svg>
+            </button>
           </div>
         </div>
         <div class="panel-content">
@@ -534,6 +612,24 @@ You can paste a real RFC822 email here.`);
 
         <div class="results-content">
           {#if activeResultTab === "actions" && testResult.classification}
+            {#if testResult.classification.confidence !== undefined || testResult.classification.reasoning}
+              <div class="confidence-section">
+                {#if testResult.classification.confidence !== undefined}
+                  <div class="confidence-score">
+                    <span class="confidence-label">{$t("sandbox.confidence")}</span>
+                    <span class="confidence-value" class:high={testResult.classification.confidence >= 0.8} class:medium={testResult.classification.confidence >= 0.5 && testResult.classification.confidence < 0.8} class:low={testResult.classification.confidence < 0.5}>
+                      {Math.round(testResult.classification.confidence * 100)}%
+                    </span>
+                  </div>
+                {/if}
+                {#if testResult.classification.reasoning}
+                  <div class="reasoning">
+                    <span class="reasoning-label">{$t("sandbox.reasoning")}</span>
+                    <span class="reasoning-text">{testResult.classification.reasoning}</span>
+                  </div>
+                {/if}
+              </div>
+            {/if}
             <div class="actions-list">
               {#each testResult.classification.actions as action}
                 <div class="action-card" style="--action-color: {getActionColor(action.type)}">
@@ -555,6 +651,22 @@ You can paste a real RFC822 email here.`);
           {:else if activeResultTab === "prompt"}
             <pre class="prompt-preview">{testResult.promptUsed}</pre>
           {:else if activeResultTab === "raw"}
+            {#if testResult.classification?.usage}
+              <div class="usage-info">
+                <span class="usage-item">
+                  <span class="usage-label">{$t("sandbox.promptTokens")}</span>
+                  <span class="usage-value">{testResult.classification.usage.promptTokens.toLocaleString()}</span>
+                </span>
+                <span class="usage-item">
+                  <span class="usage-label">{$t("sandbox.completionTokens")}</span>
+                  <span class="usage-value">{testResult.classification.usage.completionTokens.toLocaleString()}</span>
+                </span>
+                <span class="usage-item">
+                  <span class="usage-label">{$t("sandbox.totalTokens")}</span>
+                  <span class="usage-value">{testResult.classification.usage.totalTokens.toLocaleString()}</span>
+                </span>
+              </div>
+            {/if}
             <pre class="raw-response">{testResult.classification?.rawResponse || $t("sandbox.noResponse")}</pre>
           {/if}
         </div>
@@ -693,17 +805,35 @@ You can paste a real RFC822 email here.`);
     animation: spin 0.8s linear infinite;
   }
 
-  .toggle-raw {
-    display: flex;
+  .toggle-raw-btn {
+    display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    font-size: 0.8125rem;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm, 0.25rem);
     color: var(--text-secondary);
     cursor: pointer;
+    transition: all 0.15s ease;
   }
 
-  .toggle-raw input {
-    cursor: pointer;
+  .toggle-raw-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .toggle-raw-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  .toggle-raw-btn svg {
+    width: 14px;
+    height: 14px;
   }
 
   .form-group {
@@ -1035,6 +1165,62 @@ You can paste a real RFC822 email here.`);
     overflow-y: auto;
   }
 
+  .confidence-section {
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md, 0.375rem);
+    border: 1px solid var(--border-color);
+  }
+
+  .confidence-score {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .confidence-label,
+  .reasoning-label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .confidence-value {
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--radius-sm, 0.25rem);
+  }
+
+  .confidence-value.high {
+    background: var(--success-muted, rgba(34, 197, 94, 0.15));
+    color: var(--success);
+  }
+
+  .confidence-value.medium {
+    background: var(--warning-muted, rgba(234, 179, 8, 0.15));
+    color: var(--warning);
+  }
+
+  .confidence-value.low {
+    background: var(--error-muted, rgba(239, 68, 68, 0.15));
+    color: var(--error);
+  }
+
+  .reasoning {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .reasoning-text {
+    font-size: 0.8125rem;
+    color: var(--text-primary);
+    line-height: 1.5;
+  }
+
   .actions-list {
     display: flex;
     flex-direction: column;
@@ -1074,6 +1260,36 @@ You can paste a real RFC822 email here.`);
     font-size: 0.8125rem;
     color: var(--text-secondary);
     line-height: 1.5;
+  }
+
+  .usage-info {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md, 0.375rem);
+    border: 1px solid var(--border-color);
+  }
+
+  .usage-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .usage-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .usage-value {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: var(--font-mono, monospace);
   }
 
   .prompt-preview,

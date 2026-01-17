@@ -8,7 +8,7 @@
   import Backdrop from "./Backdrop.svelte";
 
   interface Config {
-    polling_interval?: string;
+    // polling_interval moved to per-account setting (Account.polling_interval)
     concurrency_limit?: number;
     dry_run?: boolean;
     add_processing_headers?: boolean;
@@ -46,6 +46,8 @@
     prompt_file?: string;
     allowed_actions?: string[];
     minimum_confidence?: number;
+    polling_interval?: string;
+    idle_supported?: boolean;
   }
 
   interface ImapConfig {
@@ -192,7 +194,6 @@
       let count = 0;
 
       // Compare top-level simple fields
-      if (config.polling_interval !== original.polling_interval) count++;
       if (config.concurrency_limit !== original.concurrency_limit) count++;
       if (config.dry_run !== original.dry_run) count++;
       if (config.add_processing_headers !== original.add_processing_headers) count++;
@@ -288,7 +289,6 @@
   const sectionIds = ["global", "accounts", "providers", "apikeys", "modules"] as const;
 
   const helpTexts: Record<string, string> = {
-    polling_interval: "How often to check for new emails when IDLE is not supported (e.g., 30s, 5m)",
     concurrency_limit: "Maximum number of emails to process simultaneously",
     dry_run: "When enabled, emails are classified but no actions are taken. Dashboard auth is also disabled.",
     add_processing_headers: "Add X-Mailpilot headers to processed emails",
@@ -304,6 +304,7 @@
     "folders.allowed": "Folders LLM can move emails to. Leave empty to auto-discover all existing folders via IMAP",
     prompt_override: "Overrides the global default prompt",
     "account.minimum_confidence": "Minimum confidence threshold for this account. Classifications below this go to dead letter queue.",
+    "account.polling_interval": "How often to check for new emails when IMAP IDLE is not supported (e.g., 30s, 5m, 1h). Default is 60 seconds.",
     "llm.provider": "Which LLM provider to use for this account",
     "llm.model": "Model to use (overrides provider default)",
     "provider.api_url": "API endpoint URL for the LLM provider",
@@ -972,6 +973,9 @@
         if (result.folders && result.folders.length > 0) {
           availableFolders = result.folders;
         }
+        // Check if IDLE is supported and update account setting
+        const supportsIdle = result.capabilities?.includes("IDLE") ?? false;
+        editingAccount!.idle_supported = supportsIdle;
       }
     } catch (e) {
       testResult = { success: false, error: e instanceof Error ? e.message : "Test failed" };
@@ -1072,16 +1076,6 @@
         {#if activeSection === "global"}
           <section class="config-section">
             <h3>{$t("settings.general")}</h3>
-
-            <div class="form-group">
-              <label>
-                <span class="label-text">
-                  {$t("settings.global.pollingInterval")}
-                  <span class="help-icon" title={helpTexts.polling_interval}>?</span>
-                </span>
-                <input type="text" bind:value={config.polling_interval} placeholder="30s" />
-              </label>
-            </div>
 
             <div class="form-group">
               <label>
@@ -1605,6 +1599,43 @@
                             </label>
                           </div>
                         {/if}
+
+                        <h4>{$t("settings.accounts.connectionSettings")}</h4>
+                        <div class="form-group">
+                          <label>
+                            <span class="label-text">
+                              {$t("settings.accounts.pollingInterval")}
+                              <span class="help-icon" title={helpTexts["account.polling_interval"]}>?</span>
+                            </span>
+                            {#if editingAccount.idle_supported}
+                              <div class="locked-field">
+                                <input
+                                  type="text"
+                                  value={editingAccount.polling_interval ?? "60s"}
+                                  disabled
+                                />
+                                <span class="locked-badge">
+                                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                    <path d="M7 11V7a5 5 0 0110 0v4"/>
+                                  </svg>
+                                  {$t("settings.accounts.idleSupported")}
+                                </span>
+                              </div>
+                              <span class="field-hint field-hint-info">{$t("settings.accounts.idleSupportedHint")}</span>
+                            {:else}
+                              <input
+                                type="text"
+                                value={editingAccount.polling_interval ?? "60s"}
+                                oninput={(e) => {
+                                  editingAccount!.polling_interval = (e.target as HTMLInputElement).value || undefined;
+                                }}
+                                placeholder="60s"
+                              />
+                              <span class="field-hint">{$t("settings.accounts.pollingIntervalHint")}</span>
+                            {/if}
+                          </label>
+                        </div>
                       </div><!-- end collapsible-content -->
                     {/if}
                   </div><!-- end collapsible-section -->
@@ -3054,6 +3085,39 @@
     margin-top: 0.25rem;
     font-size: 0.75rem;
     color: var(--text-secondary);
+  }
+
+  .field-hint-info {
+    color: var(--info, #3b82f6);
+  }
+
+  .locked-field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .locked-field input {
+    flex: 1;
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .locked-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    background: var(--info, #3b82f6);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 500;
+    border-radius: 0.25rem;
+    white-space: nowrap;
+  }
+
+  .locked-badge svg {
+    opacity: 0.9;
   }
 
   .items-list {

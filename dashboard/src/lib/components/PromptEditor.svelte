@@ -36,6 +36,7 @@
   const charCount = $derived(value.length);
   const wordCount = $derived(value.split(/\s+/).filter(Boolean).length);
   const estimatedTokens = $derived(Math.ceil(charCount / 4));
+  const fullPromptTokens = $derived(validation?.stats?.fullPromptEstimatedTokens ?? estimatedTokens);
   const isOverLimit = $derived(charCount > 4000);
 
   const actionKeywords = ["move", "spam", "flag", "read", "delete", "noop"];
@@ -175,7 +176,7 @@
       <span class="separator">|</span>
       <span>{wordCount} {$t("sandbox.words")}</span>
       <span class="separator">|</span>
-      <span>~{estimatedTokens} {$t("sandbox.tokens")}</span>
+      <span title="{$t('sandbox.fullPromptTokens')}">~{fullPromptTokens} {$t("sandbox.tokens")}</span>
     </div>
     <button
       type="button"

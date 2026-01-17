@@ -824,9 +824,11 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         allowedActions?: string[];
         providerName: string;
         model?: string;
+        requestConfidence?: boolean;
+        requestReasoning?: boolean;
       }>();
 
-      const { prompt, email, folderMode, allowedFolders, existingFolders, allowedActions, providerName, model } = body;
+      const { prompt, email, folderMode, allowedFolders, existingFolders, allowedActions, providerName, model, requestConfidence, requestReasoning } = body;
 
       if (!prompt || !prompt.trim()) {
         return c.json({ success: false, error: "Prompt is required" }, 400);
@@ -854,6 +856,8 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         ...(existingFolders && { existingFolders }),
         ...(allowedActions && { allowedActions: allowedActions as TestClassificationRequest["allowedActions"] }),
         ...(model && { model }),
+        ...(requestConfidence !== undefined && { requestConfidence }),
+        ...(requestReasoning !== undefined && { requestReasoning }),
       };
 
       const result = await testClassification(request);
@@ -880,9 +884,11 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         allowedActions?: string[];
         providerName: string;
         model?: string;
+        requestConfidence?: boolean;
+        requestReasoning?: boolean;
       }>();
 
-      const { prompt, rawEmail, folderMode, allowedFolders, existingFolders, allowedActions, providerName, model } = body;
+      const { prompt, rawEmail, folderMode, allowedFolders, existingFolders, allowedActions, providerName, model, requestConfidence, requestReasoning } = body;
 
       if (!prompt || !prompt.trim()) {
         return c.json({ success: false, error: "Prompt is required" }, 400);
@@ -910,6 +916,8 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         ...(existingFolders && { existingFolders }),
         ...(allowedActions && { allowedActions: allowedActions as RawTestClassificationRequest["allowedActions"] }),
         ...(model && { model }),
+        ...(requestConfidence !== undefined && { requestConfidence }),
+        ...(requestReasoning !== undefined && { requestReasoning }),
       };
 
       const result = await testClassificationRaw(request);

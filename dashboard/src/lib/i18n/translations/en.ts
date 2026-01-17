@@ -318,6 +318,11 @@ const en = {
   "settings.accounts.leaveEmptyForDefault": "Leave empty to use the default prompt",
   "settings.accounts.minimumConfidence": "Minimum Confidence Threshold",
   "settings.accounts.minimumConfidenceHint": "Classifications below this threshold go to dead letter queue (requires confidence scoring enabled globally)",
+  "settings.accounts.connectionSettings": "Connection Settings",
+  "settings.accounts.pollingInterval": "Polling Interval",
+  "settings.accounts.pollingIntervalHint": "How often to check for new emails when IMAP IDLE is not supported (e.g., 30s, 5m). Default: 60s",
+  "settings.accounts.idleSupported": "IDLE enabled",
+  "settings.accounts.idleSupportedHint": "This server supports IMAP IDLE for instant email notifications. Polling interval is not used.",
   "settings.accounts.autoDiscoverNote": "All existing folders will be auto-discovered via IMAP",
   "settings.accounts.saveAccount": "Save Account",
   "settings.accounts.removeConfirm": "Remove account \"{name}\"? This cannot be undone.",
@@ -581,6 +586,13 @@ const en = {
   "sandbox.uploadFailed": "Failed to extract text from attachment",
   "sandbox.truncated": "Truncated",
   "sandbox.removeAttachment": "Remove attachment",
+  "sandbox.formMode": "Switch to form view",
+  "sandbox.confidence": "Confidence",
+  "sandbox.reasoning": "Reasoning",
+  "sandbox.fullPromptTokens": "Estimated tokens for full prompt including auto-injected content",
+  "sandbox.promptTokens": "Prompt",
+  "sandbox.completionTokens": "Completion",
+  "sandbox.totalTokens": "Total",
 } as const;
 
 export default en;

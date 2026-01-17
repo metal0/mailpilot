@@ -10,9 +10,9 @@ import type { Config, AccountConfig, LlmProviderConfig, BacklogConfig } from "..
 type ValidationFn = (config: Config) => void;
 
 // Minimal valid config factory
+// Note: polling_interval is now per-account, not global
 function createMinimalConfig(overrides: Partial<Config> = {}): Config {
   return {
-    polling_interval: "30s",
     concurrency_limit: 5,
     dry_run: false,
     add_processing_headers: false,

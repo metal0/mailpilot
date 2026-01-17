@@ -1,4 +1,5 @@
 import type { Config, AccountConfig } from "../config/schema.js";
+import { DEFAULT_POLLING_INTERVAL } from "../config/schema.js";
 import { loadConfig } from "../config/loader.js";
 import { createImapClient, type ImapClient } from "../imap/client.js";
 import { startIdleLoop, stopIdleLoop } from "../imap/idle.js";
@@ -91,8 +92,11 @@ export async function startAccount(
 }
 
 function startWatching(ctx: AccountContext): void {
-  const { account, imapClient, config } = ctx;
+  const { account, imapClient } = ctx;
   const log = logger.child(account.name);
+
+  // Use per-account polling interval, falling back to hardcoded default (60s)
+  const pollingInterval = account.polling_interval ?? DEFAULT_POLLING_INTERVAL;
 
   const watchFolders = account.folders?.watch ?? ["INBOX"];
   for (const folder of watchFolders) {
@@ -100,7 +104,7 @@ function startWatching(ctx: AccountContext): void {
     void startIdleLoop({
       client: imapClient.client,
       mailbox: folder,
-      pollingInterval: config.polling_interval,
+      pollingInterval,
       supportsIdle: imapClient.providerInfo.supportsIdle,
       loopKey,
       onNewMail: (count) => {
