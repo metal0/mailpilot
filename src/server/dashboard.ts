@@ -192,6 +192,47 @@ const LLM_PRESETS: LlmPreset[] = [
   },
 ];
 
+/**
+ * SSRF protection: Block requests to private/local addresses.
+ * This prevents the webhook test endpoint from being abused to probe internal networks.
+ */
+function isPrivateOrLocalUrl(url: string): boolean {
+  const parsed = new URL(url);
+  const hostname = parsed.hostname.toLowerCase();
+
+  // Block localhost variants
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]") {
+    return true;
+  }
+
+  // Block cloud metadata endpoints (AWS, GCP, Azure)
+  if (hostname === "169.254.169.254" || hostname === "metadata.google.internal") {
+    return true;
+  }
+
+  // Block private IP ranges (RFC 1918)
+  const ipMatch = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (ipMatch) {
+    const octets = ipMatch.slice(1).map(Number);
+    const a = octets[0];
+    const b = octets[1];
+    if (a === 10) return true;  // 10.0.0.0/8
+    if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;  // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;  // 192.168.0.0/16
+    if (a === 0) return true;  // 0.0.0.0/8
+  }
+
+  // Block link-local addresses
+  if (hostname.startsWith("169.254.")) return true;
+
+  // Block IPv6 private/local ranges
+  if (hostname.startsWith("fe80:") || hostname.startsWith("[fe80:")) return true;  // Link-local
+  if (hostname.startsWith("fc") || hostname.startsWith("[fc")) return true;  // Unique local
+  if (hostname.startsWith("fd") || hostname.startsWith("[fd")) return true;  // Unique local
+
+  return false;
+}
+
 interface PortProbeResult {
   port: number;
   tls: "tls" | "starttls" | "none";
@@ -748,6 +789,81 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         success,
         error: success ? undefined : "Failed to connect to LLM provider. Check your API key and URL.",
       });
+    } catch (error) {
+      return c.json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }, 500);
+    }
+  });
+
+  // Test Webhook connectivity
+  router.post("/api/test-webhook", requireAuthOrApiKeyWithDryRun("write:accounts"), async (c) => {
+    try {
+      const body = await c.req.json<{
+        url: string;
+        headers?: Record<string, string>;
+      }>();
+
+      const { url, headers } = body;
+
+      if (!url) {
+        return c.json({ success: false, error: "URL is required" });
+      }
+
+      // Validate URL format
+      try {
+        new URL(url);
+      } catch {
+        return c.json({ success: false, error: "Invalid URL format" });
+      }
+
+      // SSRF protection: Block requests to private/local addresses
+      if (isPrivateOrLocalUrl(url)) {
+        return c.json({ success: false, error: "Cannot test webhooks to private or local addresses" });
+      }
+
+      // Send a test POST request to the webhook URL
+      const controller = new AbortController();
+      const timeout = setTimeout(() => {
+        controller.abort();
+      }, 10000); // 10 second timeout
+
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": "Mailpilot/webhook-test",
+            ...headers,
+          },
+          body: JSON.stringify({
+            event: "test",
+            timestamp: new Date().toISOString(),
+            message: "This is a test webhook from Mailpilot",
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        // Accept 2xx and 3xx status codes as success
+        if (response.status >= 200 && response.status < 400) {
+          return c.json({ success: true, statusCode: response.status });
+        } else {
+          return c.json({
+            success: false,
+            error: `Server returned status ${response.status}`,
+            statusCode: response.status,
+          });
+        }
+      } catch (fetchError) {
+        clearTimeout(timeout);
+        if (fetchError instanceof Error && fetchError.name === "AbortError") {
+          return c.json({ success: false, error: "Request timed out (10s)" });
+        }
+        throw fetchError;
+      }
     } catch (error) {
       return c.json({
         success: false,

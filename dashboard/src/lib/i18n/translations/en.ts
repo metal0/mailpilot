@@ -199,7 +199,6 @@ const en = {
   "settings.accounts.allowedActionsHelp": "Select which action types the LLM can use for this account. Delete is disabled by default for safety.",
   "settings.accounts.deleteWarning": "Warning: Delete action is enabled. Emails may be permanently deleted.",
   "settings.accounts.promptOverride": "Prompt Override",
-  "settings.accounts.promptOverrideHelp": "Custom classification prompt for this account (overrides global default)",
   "settings.accounts.oauth2": "OAuth2 Settings",
   "settings.accounts.clientId": "Client ID",
   "settings.accounts.clientSecret": "Client Secret",
@@ -220,6 +219,8 @@ const en = {
   "settings.providers.defaultModelHelp": "Default model to use (e.g., gpt-4o, claude-3-5-sonnet)",
   "settings.providers.maxBodyTokens": "Max Body Tokens",
   "settings.providers.maxBodyTokensHelp": "Maximum tokens for email body",
+  "settings.providers.maxThreadTokens": "Max Thread Tokens",
+  "settings.providers.maxThreadTokensHelp": "Maximum tokens for email thread context",
   "settings.providers.supportsVision": "Supports Vision",
   "settings.providers.supportsVisionHelp": "Provider supports image analysis",
   "settings.providers.testConnection": "Test Connection",
@@ -276,6 +277,7 @@ const en = {
   "settings.savedNeedsRestart": "Configuration saved. Restart the server for port change to take effect.",
   "settings.saveError": "Failed to save configuration",
   "settings.loadError": "Failed to load config",
+  "settings.requiredField": "This field is required to save changes",
 
   // Settings - Navigation Sections
   "settings.sections.global": "Global Settings",
@@ -316,6 +318,28 @@ const en = {
   "settings.accounts.saveAccount": "Save Account",
   "settings.accounts.removeConfirm": "Remove account \"{name}\"? This cannot be undone.",
   "settings.accounts.model": "Model",
+  "settings.accounts.processExisting": "Process existing emails",
+  "settings.accounts.advancedSection": "Advanced Settings",
+  "settings.accounts.testToUnlock": "Test connection to unlock",
+
+  // Settings - Account Webhooks
+  "settings.accounts.webhooksSection": "Webhooks",
+  "settings.accounts.addWebhook": "Add Webhook",
+  "settings.accounts.webhookUrl": "Webhook URL",
+  "settings.accounts.webhookEvents": "Events",
+  "settings.accounts.testWebhook": "Test Webhook",
+  "settings.accounts.testingWebhook": "Testing...",
+  "settings.accounts.webhookTestSuccess": "Webhook reachable",
+  "settings.accounts.webhookTestFailed": "Webhook test failed",
+  "settings.accounts.testWebhookFirst": "Test webhook before saving",
+  "settings.accounts.saveWebhook": "Save Webhook",
+  "settings.accounts.noWebhooks": "No webhooks configured",
+  "settings.accounts.webhookEvent.startup": "Startup",
+  "settings.accounts.webhookEvent.shutdown": "Shutdown",
+  "settings.accounts.webhookEvent.error": "Error",
+  "settings.accounts.webhookEvent.action_taken": "Action Taken",
+  "settings.accounts.webhookEvent.connection_lost": "Connection Lost",
+  "settings.accounts.webhookEvent.connection_restored": "Connection Restored",
 
   // Settings - Provider Modal
   "settings.providers.newProvider": "New Provider",

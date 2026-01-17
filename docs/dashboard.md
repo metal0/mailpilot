@@ -75,6 +75,9 @@ Edit all settings through the UI without manually editing YAML:
 - Edit configuration with helpful tooltips
 - Validate changes before applying
 - **Unsaved Changes Indicator**: Shows how many settings have been modified with a visual badge next to the save button. The save button is disabled until changes are made.
+- **Auto-Save Modal Changes**: When editing accounts, providers, or API keys in modal dialogs, changes are automatically saved to pending settings in real-time. If you accidentally close the modal (clicking outside or pressing Escape), your changes are preserved and will appear in the pending changes list.
+- **Side Modals**: Account configuration uses side modals for folders and webhooks, accessible via icon buttons in the modal header. These require a successful connection test before they can be accessed.
+- **Allowed Actions Dropdown**: Configure which actions the LLM can take per account using the shield icon dropdown in the modal header.
 - **Live Config Reload**: Apply changes without restarting Mailpilot
 
 ### Raw YAML Editor
@@ -322,6 +325,11 @@ When the dashboard is enabled but no account exists:
 | `/api/accounts/:name/resume` | POST | Session/Key | `write:accounts` | Resume account |
 | `/api/accounts/:name/reconnect` | POST | Session/Key | `write:accounts` | Reconnect IMAP |
 | `/api/accounts/:name/process` | POST | Session/Key | `write:accounts` | Trigger processing |
+| `/api/test-webhook` | POST | Session/Key | `write:accounts` | Test webhook URL connectivity |
+| `/api/probe-imap` | POST | Session/Key | `write:accounts` | Probe IMAP server capabilities |
+| `/api/test-imap` | POST | Session/Key | `write:accounts` | Test IMAP connection |
+| `/api/test-llm` | POST | Session/Key | `write:accounts` | Test LLM provider connectivity |
+| `/api/imap-folders` | POST | Session/Key | `write:accounts` | List folders from IMAP server |
 
 ### Query Parameters
 
@@ -341,6 +349,58 @@ When the dashboard is enabled but no account exists:
 - `level` - Minimum log level (debug/info/warn/error)
 - `accountName` - Filter by account context
 - `search` - Search log messages
+
+## Webhook Testing Endpoint
+
+The `/api/test-webhook` endpoint allows testing webhook URLs before saving them to configuration.
+
+### Request
+
+```bash
+curl -X POST -H "Authorization: Bearer mp_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://hooks.example.com/webhook", "headers": {"X-Custom": "value"}}' \
+  http://localhost:8080/api/test-webhook
+```
+
+**Body parameters:**
+- `url` (required) - The webhook URL to test
+- `headers` (optional) - Custom headers to include in the test request
+
+### Response
+
+**Success (2xx/3xx from target):**
+```json
+{"success": true, "statusCode": 200}
+```
+
+**Failure (4xx/5xx from target):**
+```json
+{"success": false, "error": "Server returned status 404", "statusCode": 404}
+```
+
+**Timeout:**
+```json
+{"success": false, "error": "Request timed out (10s)"}
+```
+
+### Security: SSRF Protection
+
+To prevent Server-Side Request Forgery (SSRF) attacks, this endpoint blocks requests to:
+
+- **Localhost/loopback**: `localhost`, `127.0.0.1`, `::1`
+- **Cloud metadata endpoints**: `169.254.169.254`, `metadata.google.internal`
+- **Private IP ranges (RFC 1918)**:
+  - `10.0.0.0/8`
+  - `172.16.0.0/12`
+  - `192.168.0.0/16`
+- **Link-local addresses**: `169.254.x.x`, `fe80::`
+- **IPv6 unique local**: `fc00::/7`
+
+Attempting to test a blocked URL returns:
+```json
+{"success": false, "error": "Cannot test webhooks to private or local addresses"}
+```
 
 ## Troubleshooting
 

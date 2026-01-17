@@ -30,6 +30,9 @@
     default_model?: string;
     headers?: Record<string, string>;
     rate_limit?: number;
+    max_body_tokens?: number;
+    max_thread_tokens?: number;
+    supports_vision?: boolean;
   }
 
   interface Account {
@@ -40,6 +43,7 @@
     webhooks?: Webhook[];
     prompt_override?: string;
     prompt_file?: string;
+    allowed_actions?: string[];
   }
 
   interface ImapConfig {
@@ -121,6 +125,59 @@
     settingsHasChanges.set(hasChanges());
   });
 
+  // Real-time sync: editing modal changes immediately persist to config
+  // This prevents data loss if user accidentally closes the modal
+  $effect(() => {
+    if (!config || !editingAccount) return;
+    const account = editingAccount;
+    const index = editingAccountIndex;
+
+    if (index !== null && index >= 0 && index < config.accounts.length) {
+      config.accounts[index] = JSON.parse(JSON.stringify(account));
+    } else if (index === null && account.name) {
+      const existingIdx = config.accounts.findIndex(a => a.name === account.name);
+      if (existingIdx === -1) {
+        config.accounts = [...config.accounts, JSON.parse(JSON.stringify(account))];
+        editingAccountIndex = config.accounts.length - 1;
+      }
+    }
+  });
+
+  $effect(() => {
+    if (!config || !editingProvider) return;
+    const provider = editingProvider;
+    const index = editingProviderIndex;
+
+    if (index !== null && index >= 0 && index < config.llm_providers.length) {
+      config.llm_providers[index] = JSON.parse(JSON.stringify(provider));
+    } else if (index === null && provider.name) {
+      const existingIdx = config.llm_providers.findIndex(p => p.name === provider.name);
+      if (existingIdx === -1) {
+        config.llm_providers = [...config.llm_providers, JSON.parse(JSON.stringify(provider))];
+        editingProviderIndex = config.llm_providers.length - 1;
+      }
+    }
+  });
+
+  $effect(() => {
+    if (!config || !editingApiKey) return;
+    const apiKey = editingApiKey;
+    const index = editingApiKeyIndex;
+
+    config.dashboard = config.dashboard ?? { api_keys: [] };
+    config.dashboard.api_keys = config.dashboard.api_keys ?? [];
+
+    if (index !== null && index >= 0 && index < config.dashboard.api_keys.length) {
+      config.dashboard.api_keys[index] = JSON.parse(JSON.stringify(apiKey));
+    } else if (index === null && apiKey.name) {
+      const existingIdx = config.dashboard.api_keys.findIndex(k => k.name === apiKey.name);
+      if (existingIdx === -1) {
+        config.dashboard.api_keys = [...config.dashboard.api_keys, JSON.parse(JSON.stringify(apiKey))];
+        editingApiKeyIndex = config.dashboard.api_keys.length - 1;
+      }
+    }
+  });
+
   const changeCount = $derived(() => {
     if (!config || !originalConfig) return 0;
     try {
@@ -157,9 +214,11 @@
   let yamlContent = $state("");
   let yamlLoading = $state(false);
 
-  // Editing state
+  // Editing state - track both the item and its index for real-time syncing
   let editingAccount = $state<Account | null>(null);
+  let editingAccountIndex = $state<number | null>(null);
   let editingProvider = $state<LlmProvider | null>(null);
+  let editingProviderIndex = $state<number | null>(null);
   let editingApiKey = $state<ApiKey | null>(null);
   let editingApiKeyIndex = $state<number | null>(null);
   let showApiKey = $state<string | null>(null);
@@ -184,10 +243,23 @@
   let showWatchFolderDropdown = $state(false);
   let showAllowedFolderDropdown = $state(false);
 
-  // Action types state
+  // Action types state (noop filtered out - always allowed by backend)
   let availableActionTypes = $state<api.ActionType[]>([]);
   let defaultAllowedActions = $state<api.ActionType[]>([]);
   let showAllowedActionsDropdown = $state(false);
+
+  // Advanced section state
+  let showAdvancedSection = $state(false);
+
+  // Side modals state
+  let showWebhooksModal = $state(false);
+  let showFoldersModal = $state(false);
+  let editingWebhookIndex = $state<number | null>(null);
+  let editingWebhook = $state<Webhook | null>(null);
+  let testingWebhook = $state(false);
+  let webhookTestResult = $state<{ success: boolean; error?: string } | null>(null);
+  let webhookTested = $state(false);
+  const webhookEventOptions = ["startup", "shutdown", "error", "action_taken", "connection_lost", "connection_restored"] as const;
 
   // LLM provider wizard state
   let llmPresets = $state<api.LlmPreset[]>([]);
@@ -222,13 +294,20 @@
     "folders.watch": "Folders to monitor for new emails (comma-separated)",
     "folders.mode": "Predefined: only allow moves to specified folders. Auto-create: create folders as needed",
     "folders.allowed": "Folders LLM can move emails to. Leave empty to auto-discover all existing folders via IMAP",
-    prompt_override: "Custom classification prompt for this account (overrides global default)",
+    prompt_override: "Overrides the global default prompt",
     "llm.provider": "Which LLM provider to use for this account",
     "llm.model": "Model to use (overrides provider default)",
     "provider.api_url": "API endpoint URL for the LLM provider",
     "provider.api_key": "API key for authentication",
     "provider.default_model": "Default model to use (e.g., gpt-4o, claude-3-5-sonnet)",
     "provider.rate_limit": "Maximum requests per minute",
+    "provider.max_body_tokens": "Maximum tokens for email body content (default: 4000)",
+    "provider.max_thread_tokens": "Maximum tokens for email thread context (default: 2000)",
+    "provider.supports_vision": "Enable if this provider supports vision/image analysis (e.g., GPT-4o, Claude 3)",
+    "webhook.url": "URL to send webhook notifications to",
+    "webhook.events": "Events that trigger this webhook",
+    "webhook.headers": "Custom HTTP headers to include in webhook requests",
+    process_existing: "Process existing emails in watched folders when adding this account",
     "attachments.enabled": "Enable attachment text extraction via Apache Tika",
     "attachments.tika_url": "URL of the Tika server (e.g., http://tika:9998)",
     "attachments.max_size_mb": "Maximum attachment size to process (MB)",
@@ -265,15 +344,15 @@
     } catch {
       // Presets are optional, ignore errors
     }
-    // Load action types
+    // Load action types (filter out 'noop' - always allowed by backend)
     try {
       const actionTypesResult = await api.fetchActionTypes();
-      availableActionTypes = actionTypesResult.actionTypes;
-      defaultAllowedActions = actionTypesResult.defaultAllowed;
+      availableActionTypes = actionTypesResult.actionTypes.filter(a => a !== "noop");
+      defaultAllowedActions = actionTypesResult.defaultAllowed.filter(a => a !== "noop");
     } catch {
       // Use fallback defaults if fetch fails
-      availableActionTypes = ["move", "spam", "flag", "read", "delete", "noop"];
-      defaultAllowedActions = ["move", "spam", "flag", "read", "noop"];
+      availableActionTypes = ["move", "spam", "flag", "read", "delete"];
+      defaultAllowedActions = ["move", "spam", "flag", "read"];
     }
     // Poll service status every 30 seconds
     serviceCheckInterval = setInterval(checkServices, 30000);
@@ -437,40 +516,139 @@
     showPresetDropdown = false;
     portLocked = false;
     connectionFieldsLocked = true;
+    showAdvancedSection = false;
+    editingWebhookIndex = null;
+    editingWebhook = null;
+    testingWebhook = false;
+    webhookTestResult = null;
+    webhookTested = false;
   }
 
   function addAccount() {
     resetWizardState();
+    editingAccountIndex = null;
+    // Default to first LLM provider if available
+    const defaultProvider = config?.llm_providers?.[0]?.name;
     editingAccount = {
       name: "",
       imap: { host: "", port: 993, tls: "tls", auth: "basic", username: "", password: "" },
       folders: { watch: ["INBOX"] },
+      llm: defaultProvider ? { provider: defaultProvider } : undefined,
     };
   }
 
-  function editAccount(account: Account) {
+  async function editAccount(account: Account) {
+    if (!config) return;
     resetWizardState();
+    const index = config.accounts.findIndex(a => a.name === account.name);
+    editingAccountIndex = index >= 0 ? index : null;
     editingAccount = JSON.parse(JSON.stringify(account));
-    // If editing existing account, assume it's already been tested
+    // Set default LLM provider if not configured
+    if (!editingAccount.llm?.provider && config.llm_providers?.length > 0) {
+      editingAccount.llm = { provider: config.llm_providers[0].name };
+    }
+    // Auto-test connection for existing accounts
     if (account.name) {
-      connectionTested = true;
-      wizardState = "connected";
-      connectionFieldsLocked = false; // Unlock for existing accounts
+      await testImapConnection();
+      // If test fails, apply same locks as new account with failed test
+      if (!connectionTested) {
+        connectionFieldsLocked = false;
+        wizardState = "idle";
+      }
     }
   }
 
-  function saveAccount() {
-    if (!config || !editingAccount) return;
-
-    const existingIndex = config.accounts.findIndex(a => a.name === editingAccount!.name);
-    if (existingIndex >= 0) {
-      config.accounts[existingIndex] = editingAccount;
-    } else {
-      config.accounts.push(editingAccount);
-    }
-    config = { ...config };
+  function closeAccountModal() {
     editingAccount = null;
+    editingAccountIndex = null;
+    showWebhooksModal = false;
+    showFoldersModal = false;
+    editingWebhook = null;
+    editingWebhookIndex = null;
     resetWizardState();
+  }
+
+  function saveAccount() {
+    // With real-time syncing, changes are already in config
+    // This function now just closes the modal
+    closeAccountModal();
+  }
+
+  // Webhook management functions
+  function addWebhook() {
+    editingWebhook = {
+      url: "",
+      events: ["action_taken"],
+      headers: {},
+    };
+    editingWebhookIndex = null;
+    webhookTested = false;
+    webhookTestResult = null;
+  }
+
+  function editWebhook(webhook: Webhook, index: number) {
+    editingWebhook = JSON.parse(JSON.stringify(webhook));
+    editingWebhookIndex = index;
+    webhookTested = true; // Existing webhooks are assumed tested
+    webhookTestResult = null;
+  }
+
+  function saveWebhook() {
+    if (!editingAccount || !editingWebhook) return;
+
+    editingAccount.webhooks = editingAccount.webhooks ?? [];
+    if (editingWebhookIndex !== null) {
+      editingAccount.webhooks[editingWebhookIndex] = editingWebhook;
+    } else {
+      editingAccount.webhooks.push(editingWebhook);
+    }
+    editingWebhook = null;
+    editingWebhookIndex = null;
+    webhookTested = false;
+    webhookTestResult = null;
+  }
+
+  function removeWebhook(index: number) {
+    if (!editingAccount?.webhooks) return;
+    editingAccount.webhooks.splice(index, 1);
+    editingAccount = { ...editingAccount };
+  }
+
+  async function testWebhookConnection() {
+    if (!editingWebhook?.url) return;
+
+    testingWebhook = true;
+    webhookTestResult = null;
+
+    try {
+      const result = await api.testWebhook({
+        url: editingWebhook.url,
+        headers: editingWebhook.headers,
+      });
+
+      webhookTestResult = result;
+      webhookTested = result.success;
+    } catch (err) {
+      webhookTestResult = {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+      webhookTested = false;
+    } finally {
+      testingWebhook = false;
+    }
+  }
+
+  function toggleWebhookEvent(event: string) {
+    if (!editingWebhook) return;
+    const idx = editingWebhook.events.indexOf(event);
+    if (idx >= 0) {
+      editingWebhook.events = editingWebhook.events.filter(e => e !== event);
+    } else {
+      editingWebhook.events = [...editingWebhook.events, event];
+    }
+    webhookTested = false;
+    webhookTestResult = null;
   }
 
   async function probeImapServer() {
@@ -578,6 +756,7 @@
   }
 
   function addProvider() {
+    editingProviderIndex = null;
     editingProvider = {
       name: "",
       api_url: "https://api.openai.com/v1/chat/completions",
@@ -589,26 +768,28 @@
     showLlmPresetDropdown = false;
   }
 
-  function editProvider(provider: LlmProvider) {
+  async function editProvider(provider: LlmProvider) {
+    if (!config) return;
+    const index = config.llm_providers.findIndex(p => p.name === provider.name);
+    editingProviderIndex = index >= 0 ? index : null;
     editingProvider = JSON.parse(JSON.stringify(provider));
-    llmConnectionTested = true; // Existing providers are assumed to have been tested
     llmTestResult = null;
     showLlmPresetDropdown = false;
+    // Auto-test connection for existing providers
+    await testLlmProviderConnection();
+  }
+
+  function closeProviderModal() {
+    editingProvider = null;
+    editingProviderIndex = null;
+    llmConnectionTested = false;
+    llmTestResult = null;
   }
 
   function saveProvider() {
-    if (!config || !editingProvider) return;
-
-    const existingIndex = config.llm_providers.findIndex(p => p.name === editingProvider!.name);
-    if (existingIndex >= 0) {
-      config.llm_providers[existingIndex] = editingProvider;
-    } else {
-      config.llm_providers.push(editingProvider);
-    }
-    config = { ...config };
-    editingProvider = null;
-    llmConnectionTested = false;
-    llmTestResult = null;
+    // With real-time syncing, changes are already in config
+    // This function now just closes the modal
+    closeProviderModal();
   }
 
   function selectLlmPreset(preset: api.LlmPreset) {
@@ -668,33 +849,28 @@
   }
 
   function addApiKey() {
+    editingApiKeyIndex = null;
     editingApiKey = {
       name: "",
       key: generateApiKey(),
       permissions: ["read:stats"],
     };
-    editingApiKeyIndex = null;
   }
 
   function editApiKey(apiKey: ApiKey, index: number) {
-    editingApiKey = JSON.parse(JSON.stringify(apiKey));
     editingApiKeyIndex = index;
+    editingApiKey = JSON.parse(JSON.stringify(apiKey));
+  }
+
+  function closeApiKeyModal() {
+    editingApiKey = null;
+    editingApiKeyIndex = null;
   }
 
   function saveApiKey() {
-    if (!config || !editingApiKey) return;
-
-    config.dashboard = config.dashboard ?? { api_keys: [] };
-    config.dashboard.api_keys = config.dashboard.api_keys ?? [];
-
-    if (editingApiKeyIndex !== null) {
-      config.dashboard.api_keys[editingApiKeyIndex] = editingApiKey;
-    } else {
-      config.dashboard.api_keys.push(editingApiKey);
-    }
-    config = { ...config };
-    editingApiKey = null;
-    editingApiKeyIndex = null;
+    // With real-time syncing, changes are already in config
+    // This function now just closes the modal
+    closeApiKeyModal();
   }
 
   function removeApiKey(index: number) {
@@ -1003,23 +1179,117 @@
             {#if editingAccount}
               <div
                 class="modal-overlay"
-                onclick={() => editingAccount = null}
-                onkeydown={(e) => e.key === "Escape" && (editingAccount = null)}
+                onclick={closeAccountModal}
+                onkeydown={(e) => e.key === "Escape" && closeAccountModal()}
                 role="presentation"
               >
-                <div
-                  class="modal"
-                  onclick={(e) => e.stopPropagation()}
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby="account-modal-title"
-                >
-                  <h3 id="account-modal-title">{editingAccount.name ? $t("settings.accounts.editAccountTitle", { name: editingAccount.name }) : $t("settings.accounts.newAccount")}</h3>
+                <div class="modal-with-side" onclick={(e) => e.stopPropagation()}>
+                  <div
+                    class="modal"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="account-modal-title"
+                  >
+                    <div class="modal-header-row">
+                      <h3 id="account-modal-title">{editingAccount.name ? $t("settings.accounts.editAccountTitle", { name: editingAccount.name }) : $t("settings.accounts.newAccount")}</h3>
+                      <div class="modal-header-actions">
+                        <!-- Allowed Actions Dropdown -->
+                        <div class="header-dropdown-wrapper">
+                          <button
+                            type="button"
+                            class="btn btn-icon header-action-btn"
+                            class:has-items={(editingAccount.allowed_actions ?? defaultAllowedActions).length > 0}
+                            disabled={!connectionTested}
+                            title={connectionTested ? ($t("settings.accounts.allowedActions") ?? "Allowed Actions") : $t("settings.accounts.testToUnlock")}
+                            onclick={() => showAllowedActionsDropdown = !showAllowedActionsDropdown}
+                          >
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                              <polyline points="9 12 11 14 15 10"/>
+                            </svg>
+                            {#if (editingAccount.allowed_actions ?? defaultAllowedActions).length > 0}
+                              <span class="header-badge">{(editingAccount.allowed_actions ?? defaultAllowedActions).length}</span>
+                            {/if}
+                          </button>
+                          {#if showAllowedActionsDropdown && connectionTested}
+                            <Backdrop onclose={() => showAllowedActionsDropdown = false} zIndex={150} />
+                            <div class="header-dropdown-menu">
+                              <div class="dropdown-actions">
+                                <button type="button" class="dropdown-action-btn" onclick={() => {
+                                  editingAccount!.allowed_actions = [...availableActionTypes];
+                                }}>All</button>
+                                <button type="button" class="dropdown-action-btn" onclick={() => {
+                                  editingAccount!.allowed_actions = [...defaultAllowedActions];
+                                }}>Default</button>
+                                <button type="button" class="dropdown-action-btn" onclick={() => {
+                                  editingAccount!.allowed_actions = [];
+                                }}>None</button>
+                              </div>
+                              {#each availableActionTypes as actionType}
+                                <label class="dropdown-item" class:action-delete={actionType === "delete"}>
+                                  <input
+                                    type="checkbox"
+                                    checked={(editingAccount.allowed_actions ?? defaultAllowedActions).includes(actionType)}
+                                    onchange={() => {
+                                      const current = editingAccount!.allowed_actions ?? [...defaultAllowedActions];
+                                      if (current.includes(actionType)) {
+                                        editingAccount!.allowed_actions = current.filter(a => a !== actionType);
+                                      } else {
+                                        editingAccount!.allowed_actions = [...current, actionType];
+                                      }
+                                    }}
+                                  />
+                                  <span class="action-type-label">{actionType}</span>
+                                  {#if actionType === "delete"}
+                                    <span class="action-warning">⚠️</span>
+                                  {/if}
+                                </label>
+                              {/each}
+                            </div>
+                          {/if}
+                        </div>
 
-                  <div class="form-group">
+                        <!-- Folders Button -->
+                        <button
+                          type="button"
+                          class="btn btn-icon header-action-btn"
+                          class:has-items={(editingAccount.folders?.watch?.length ?? 1) > 1 || (editingAccount.folders?.allowed?.length ?? 0) > 0}
+                          disabled={!connectionTested}
+                          title={connectionTested ? ($t("settings.accounts.foldersSection") ?? "Folders") : $t("settings.accounts.testToUnlock")}
+                          onclick={() => showFoldersModal = !showFoldersModal}
+                        >
+                          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                          </svg>
+                        </button>
+
+                        <!-- Webhooks Button -->
+                        <button
+                          type="button"
+                          class="btn btn-icon header-action-btn"
+                          class:has-items={(editingAccount.webhooks?.length ?? 0) > 0}
+                          disabled={!connectionTested}
+                          title={connectionTested ? $t("settings.accounts.webhooksSection") : $t("settings.accounts.testToUnlock")}
+                          onclick={() => showWebhooksModal = !showWebhooksModal}
+                        >
+                          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                          </svg>
+                          {#if (editingAccount.webhooks?.length ?? 0) > 0}
+                            <span class="header-badge">{editingAccount.webhooks?.length}</span>
+                          {/if}
+                        </button>
+                      </div>
+                    </div>
+
+                  <div class="form-group" class:field-required={!editingAccount.name}>
                     <label>
-                      <span class="label-text">{$t("settings.accounts.name")}</span>
-                      <input type="text" bind:value={editingAccount.name} placeholder="personal-gmail" />
+                      <span class="label-text">{$t("settings.accounts.name")} <span class="required-asterisk">*</span></span>
+                      <input type="text" bind:value={editingAccount.name} placeholder="personal-gmail" required />
+                      {#if !editingAccount.name}
+                        <span class="required-hint">{$t("settings.requiredField")}</span>
+                      {/if}
                     </label>
                   </div>
 
@@ -1142,32 +1412,41 @@
                     </div>
                   </div>
 
-                  <div class="form-group">
-                    <label>
-                      <span class="label-text">{$t("settings.accounts.user")} <span class="help-icon" title={helpTexts["imap.username"]}>?</span></span>
-                      <input type="text" bind:value={editingAccount.imap.username} placeholder="user@gmail.com" />
-                    </label>
-                  </div>
-
                   {#if editingAccount.imap.auth === "basic"}
-                    <div class="form-group">
-                      <label>
-                        <span class="label-text">{$t("settings.accounts.password")} <span class="help-icon" title={helpTexts["imap.password"]}>?</span></span>
-                        <input type="password" bind:value={editingAccount.imap.password} placeholder={$t("settings.accounts.passwordHelp")} />
-                      </label>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label>
+                          <span class="label-text">{$t("settings.accounts.user")} <span class="help-icon" title={helpTexts["imap.username"]}>?</span></span>
+                          <input type="text" bind:value={editingAccount.imap.username} placeholder="user@gmail.com" />
+                        </label>
+                      </div>
+                      <div class="form-group">
+                        <label>
+                          <span class="label-text">{$t("settings.accounts.password")} <span class="help-icon" title={helpTexts["imap.password"]}>?</span></span>
+                          <input type="password" bind:value={editingAccount.imap.password} placeholder={$t("settings.accounts.passwordHelp")} />
+                        </label>
+                      </div>
                     </div>
                   {:else}
                     <div class="form-group">
                       <label>
-                        <span class="label-text">{$t("settings.accounts.clientId")}</span>
-                        <input type="text" bind:value={editingAccount.imap.oauth_client_id} />
+                        <span class="label-text">{$t("settings.accounts.user")} <span class="help-icon" title={helpTexts["imap.username"]}>?</span></span>
+                        <input type="text" bind:value={editingAccount.imap.username} placeholder="user@gmail.com" />
                       </label>
                     </div>
-                    <div class="form-group">
-                      <label>
-                        <span class="label-text">{$t("settings.accounts.clientSecret")}</span>
-                        <input type="password" bind:value={editingAccount.imap.oauth_client_secret} />
-                      </label>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label>
+                          <span class="label-text">{$t("settings.accounts.clientId")}</span>
+                          <input type="text" bind:value={editingAccount.imap.oauth_client_id} />
+                        </label>
+                      </div>
+                      <div class="form-group">
+                        <label>
+                          <span class="label-text">{$t("settings.accounts.clientSecret")}</span>
+                          <input type="password" bind:value={editingAccount.imap.oauth_client_secret} />
+                        </label>
+                      </div>
                     </div>
                     <div class="form-group">
                       <label>
@@ -1213,66 +1492,287 @@
                     {/if}
                   </div>
 
-                  <div class="wizard-section" class:section-locked={!connectionTested}>
-                    {#if !connectionTested}
-                      <div class="section-lock-overlay">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                          <path d="M7 11V7a5 5 0 0110 0v4"/>
-                        </svg>
-                        <span>Test connection to unlock</span>
-                      </div>
-                    {/if}
-                    <h4>{$t("settings.accounts.foldersSection")}</h4>
-                    <div class="form-group">
-                      <label>
-                        <span class="label-text">{$t("settings.accounts.watchFolders")} <span class="help-icon" title={helpTexts["folders.watch"]}>?</span></span>
-                        {#if availableFolders.length > 0}
-                          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                          <div class="multi-select-dropdown">
-                            <button type="button" class="dropdown-trigger" onclick={() => showWatchFolderDropdown = !showWatchFolderDropdown}>
-                              {(editingAccount.folders?.watch ?? ["INBOX"]).join(", ") || "Select folders"}
-                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="6 9 12 15 18 9"/>
-                              </svg>
-                            </button>
-                            {#if showWatchFolderDropdown}
-                              <div class="dropdown-menu" onclick={(e) => e.stopPropagation()}>
-                                {#each availableFolders as folder}
-                                  <label class="dropdown-item">
-                                    <input
-                                      type="checkbox"
-                                      checked={(editingAccount.folders?.watch ?? ["INBOX"]).includes(folder)}
-                                      onchange={() => {
-                                        editingAccount!.folders ??= {};
-                                        const current = editingAccount!.folders.watch ?? ["INBOX"];
-                                        if (current.includes(folder)) {
-                                          editingAccount!.folders.watch = current.filter(f => f !== folder);
-                                        } else {
-                                          editingAccount!.folders.watch = [...current, folder];
-                                        }
-                                      }}
-                                    />
-                                    <span>{folder}</span>
-                                  </label>
+                  <div class="collapsible-section" class:section-locked={!connectionTested}>
+                    <button
+                      type="button"
+                      class="collapsible-header"
+                      disabled={!connectionTested}
+                      onclick={() => connectionTested && (showAdvancedSection = !showAdvancedSection)}
+                    >
+                      <span class="collapsible-title">
+                        {#if !connectionTested}
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                            <path d="M7 11V7a5 5 0 0110 0v4"/>
+                          </svg>
+                        {:else}
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" class:rotated={showAdvancedSection}>
+                            <polyline points="9 18 15 12 9 6"/>
+                          </svg>
+                        {/if}
+                        {$t("settings.accounts.advancedSection")}
+                      </span>
+                      {#if !connectionTested}
+                        <span class="locked-hint">{$t("settings.accounts.testToUnlock")}</span>
+                      {/if}
+                    </button>
+
+                    {#if showAdvancedSection && connectionTested}
+                      <div class="collapsible-content">
+                        <h4>{$t("settings.accounts.llmSettings")}</h4>
+                        <div class="form-row">
+                          <div class="form-group">
+                            <label>
+                              <span class="label-text">{$t("settings.accounts.provider")} <span class="help-icon" title={helpTexts["llm.provider"]}>?</span></span>
+                              <select
+                                value={editingAccount.llm?.provider ?? ""}
+                                onchange={(e) => {
+                                  editingAccount!.llm = editingAccount!.llm ?? {};
+                                  editingAccount!.llm.provider = (e.target as HTMLSelectElement).value || undefined;
+                                }}
+                              >
+                                {#each config?.llm_providers ?? [] as provider}
+                                  <option value={provider.name}>{provider.name}</option>
                                 {/each}
-                              </div>
+                              </select>
+                            </label>
+                          </div>
+                          <div class="form-group">
+                            <label>
+                              <span class="label-text">{$t("settings.accounts.model")} <span class="help-icon" title={helpTexts["llm.model"]}>?</span></span>
+                              <input
+                                type="text"
+                                value={editingAccount.llm?.model ?? ""}
+                                oninput={(e) => {
+                                  editingAccount!.llm = editingAccount!.llm ?? {};
+                                  editingAccount!.llm.model = (e.target as HTMLInputElement).value || undefined;
+                                }}
+                                placeholder={$t("settings.accounts.useProviderDefault")}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                        <div class="form-group">
+                          <label>
+                            <span class="label-text">{$t("settings.accounts.promptOverride")} <span class="help-icon" title={helpTexts.prompt_override}>?</span></span>
+                            <textarea
+                              value={editingAccount.prompt_override ?? ""}
+                              oninput={(e) => {
+                                editingAccount!.prompt_override = (e.target as HTMLTextAreaElement).value || undefined;
+                              }}
+                              rows="4"
+                              placeholder={$t("settings.accounts.leaveEmptyForDefault")}
+                            ></textarea>
+                          </label>
+                        </div>
+                      </div><!-- end collapsible-content -->
+                    {/if}
+                  </div><!-- end collapsible-section -->
+
+                    <div class="modal-actions">
+                      <button class="btn btn-secondary" onclick={closeAccountModal}>{$t("common.close")}</button>
+                    </div>
+                  </div>
+
+                  <!-- Webhooks Side Modal -->
+                  {#if showWebhooksModal}
+                  <div
+                    class="side-modal"
+                    onclick={(e) => e.stopPropagation()}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="webhooks-modal-title"
+                  >
+                    <div class="side-modal-header">
+                      <h4 id="webhooks-modal-title">{$t("settings.accounts.webhooksSection")}</h4>
+                      <button type="button" class="btn btn-icon btn-sm" onclick={() => showWebhooksModal = false}>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    </div>
+
+                    <div class="side-modal-content">
+                      <button type="button" class="btn btn-secondary btn-sm" onclick={addWebhook}>
+                        + {$t("settings.accounts.addWebhook")}
+                      </button>
+
+                      {#if editingWebhook}
+                        <div class="webhook-editor">
+                          <div class="form-group">
+                            <label>
+                              <span class="label-text">{$t("settings.accounts.webhookUrl")}</span>
+                              <input
+                                type="url"
+                                bind:value={editingWebhook.url}
+                                placeholder="https://example.com/webhook"
+                                oninput={() => { webhookTested = false; webhookTestResult = null; }}
+                              />
+                            </label>
+                          </div>
+
+                          <div class="form-group">
+                            <span class="label-text">{$t("settings.accounts.webhookEvents")}</span>
+                            <div class="checkbox-group vertical">
+                              {#each webhookEventOptions as event}
+                                <label class="checkbox-inline">
+                                  <input
+                                    type="checkbox"
+                                    checked={editingWebhook.events.includes(event)}
+                                    onchange={() => toggleWebhookEvent(event)}
+                                  />
+                                  <span>{$t(`settings.accounts.webhookEvent.${event}`)}</span>
+                                </label>
+                              {/each}
+                            </div>
+                          </div>
+
+                          <div class="connection-test-section">
+                            <button
+                              type="button"
+                              class="btn btn-secondary btn-sm"
+                              onclick={testWebhookConnection}
+                              disabled={testingWebhook || !editingWebhook.url || editingWebhook.events.length === 0}
+                            >
+                              {#if testingWebhook}
+                                <span class="spinner-inline"></span>
+                                {$t("settings.accounts.testingWebhook")}
+                              {:else}
+                                {$t("settings.accounts.testWebhook")}
+                              {/if}
+                            </button>
+                            {#if webhookTestResult}
+                              <span class="test-result" class:success={webhookTestResult.success} class:error={!webhookTestResult.success}>
+                                {#if webhookTestResult.success}
+                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                  </svg>
+                                  {$t("settings.accounts.webhookTestSuccess")}
+                                {:else}
+                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="15" y1="9" x2="9" y2="15"/>
+                                    <line x1="9" y1="9" x2="15" y2="15"/>
+                                  </svg>
+                                  {webhookTestResult.error ?? $t("settings.accounts.webhookTestFailed")}
+                                {/if}
+                              </span>
                             {/if}
                           </div>
-                        {:else}
-                          <input
-                            type="text"
-                            value={editingAccount.folders?.watch?.join(", ") ?? "INBOX"}
-                            oninput={(e) => {
-                              editingAccount!.folders ??= {};
-                              editingAccount!.folders.watch = (e.target as HTMLInputElement).value.split(",").map(s => s.trim()).filter(Boolean);
-                            }}
-                            placeholder="INBOX, Work"
-                          />
-                        {/if}
-                      </label>
+
+                          <div class="webhook-actions">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick={() => { editingWebhook = null; editingWebhookIndex = null; }}>
+                              {$t("common.cancel")}
+                            </button>
+                            <button
+                              type="button"
+                              class="btn btn-primary btn-sm"
+                              onclick={saveWebhook}
+                              disabled={!webhookTested || !editingWebhook.url || editingWebhook.events.length === 0}
+                              title={!webhookTested ? $t("settings.accounts.testWebhookFirst") : ""}
+                            >
+                              {$t("settings.accounts.saveWebhook")}
+                            </button>
+                          </div>
+                        </div>
+                      {/if}
+
+                      {#if (editingAccount.webhooks?.length ?? 0) > 0}
+                        <div class="webhooks-list">
+                          {#each editingAccount.webhooks ?? [] as webhook, idx}
+                            <div class="webhook-item">
+                              <div class="webhook-info">
+                                <span class="webhook-url">{webhook.url}</span>
+                                <span class="webhook-events">{webhook.events.join(", ")}</span>
+                              </div>
+                              <div class="webhook-item-actions">
+                                <button type="button" class="btn btn-sm" onclick={() => editWebhook(webhook, idx)}>
+                                  {$t("common.edit")}
+                                </button>
+                                <button type="button" class="btn btn-sm btn-danger" onclick={() => removeWebhook(idx)}>
+                                  {$t("common.remove")}
+                                </button>
+                              </div>
+                            </div>
+                          {/each}
+                        </div>
+                      {:else if !editingWebhook}
+                        <p class="empty-note">{$t("settings.accounts.noWebhooks")}</p>
+                      {/if}
                     </div>
-                    <div class="form-row">
+                  </div>
+                  {/if}
+
+                  <!-- Folders Side Modal -->
+                  {#if showFoldersModal}
+                  <div
+                    class="side-modal"
+                    onclick={(e) => e.stopPropagation()}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="folders-modal-title"
+                  >
+                    <div class="side-modal-header">
+                      <h4 id="folders-modal-title">{$t("settings.accounts.foldersSection")}</h4>
+                      <button type="button" class="btn btn-icon btn-sm" onclick={() => showFoldersModal = false}>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    </div>
+
+                    <div class="side-modal-content">
+                      <div class="form-group">
+                        <label>
+                          <span class="label-text">{$t("settings.accounts.watchFolders")} <span class="help-icon" title={helpTexts["folders.watch"]}>?</span></span>
+                          {#if availableFolders.length > 0}
+                            <div class="multi-select-dropdown">
+                              <button type="button" class="dropdown-trigger" onclick={() => showWatchFolderDropdown = !showWatchFolderDropdown}>
+                                {(editingAccount.folders?.watch ?? ["INBOX"]).join(", ") || "Select folders"}
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                  <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                              </button>
+                              {#if showWatchFolderDropdown}
+                                <Backdrop onclose={() => showWatchFolderDropdown = false} zIndex={150} />
+                                <div class="dropdown-menu" onclick={(e) => e.stopPropagation()}>
+                                  {#each availableFolders as folder}
+                                    <label class="dropdown-item">
+                                      <input
+                                        type="checkbox"
+                                        checked={(editingAccount.folders?.watch ?? ["INBOX"]).includes(folder)}
+                                        onchange={() => {
+                                          editingAccount!.folders ??= {};
+                                          const current = editingAccount!.folders.watch ?? ["INBOX"];
+                                          if (current.includes(folder)) {
+                                            editingAccount!.folders.watch = current.filter(f => f !== folder);
+                                          } else {
+                                            editingAccount!.folders.watch = [...current, folder];
+                                          }
+                                        }}
+                                      />
+                                      <span>{folder}</span>
+                                    </label>
+                                  {/each}
+                                </div>
+                              {/if}
+                            </div>
+                          {:else}
+                            <input
+                              type="text"
+                              value={editingAccount.folders?.watch?.join(", ") ?? "INBOX"}
+                              oninput={(e) => {
+                                editingAccount!.folders ??= {};
+                                editingAccount!.folders.watch = (e.target as HTMLInputElement).value.split(",").map(s => s.trim()).filter(Boolean);
+                              }}
+                              placeholder="INBOX, Work"
+                            />
+                          {/if}
+                        </label>
+                      </div>
+
                       <div class="form-group">
                         <label>
                           <span class="label-text">{$t("settings.accounts.folderMode")} <span class="help-icon" title={helpTexts["folders.mode"]}>?</span></span>
@@ -1288,12 +1788,12 @@
                           </select>
                         </label>
                       </div>
+
                       {#if (editingAccount.folders?.mode ?? "predefined") === "predefined"}
                         <div class="form-group">
                           <label>
                             <span class="label-text">{$t("settings.accounts.allowedFolders")} <span class="help-icon" title={helpTexts["folders.allowed"]}>?</span></span>
                             {#if availableFolders.length > 0}
-                              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
                               <div class="multi-select-dropdown">
                                 <button type="button" class="dropdown-trigger" onclick={() => showAllowedFolderDropdown = !showAllowedFolderDropdown}>
                                   {(editingAccount.folders?.allowed ?? []).length > 0
@@ -1304,6 +1804,7 @@
                                   </svg>
                                 </button>
                                 {#if showAllowedFolderDropdown}
+                                  <Backdrop onclose={() => showAllowedFolderDropdown = false} zIndex={150} />
                                   <div class="dropdown-menu" onclick={(e) => e.stopPropagation()}>
                                     {#each availableFolders as folder}
                                       <label class="dropdown-item">
@@ -1345,129 +1846,8 @@
                         </div>
                       {/if}
                     </div>
-
-                    <h4>{$t("settings.accounts.allowedActions") ?? "Allowed Actions"}</h4>
-                    <div class="form-row">
-                      <div class="form-group form-group-full">
-                        <label>
-                          <span class="label-text">{$t("settings.accounts.allowedActionsLabel") ?? "Action Types"} <span class="help-icon" title={helpTexts["allowed_actions"] ?? "Select which action types the LLM can use for this account. Delete is disabled by default for safety."}>?</span></span>
-                          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                          <div class="multi-select-dropdown">
-                            <button type="button" class="dropdown-trigger" onclick={() => showAllowedActionsDropdown = !showAllowedActionsDropdown}>
-                              {#if (editingAccount.allowed_actions ?? defaultAllowedActions).length === availableActionTypes.length}
-                                All actions
-                              {:else if (editingAccount.allowed_actions ?? defaultAllowedActions).length === 0}
-                                No actions (noop only)
-                              {:else}
-                                {(editingAccount.allowed_actions ?? defaultAllowedActions).join(", ")}
-                              {/if}
-                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="6 9 12 15 18 9"/>
-                              </svg>
-                            </button>
-                            {#if showAllowedActionsDropdown}
-                              <div class="dropdown-menu" onclick={(e) => e.stopPropagation()}>
-                                <div class="dropdown-actions">
-                                  <button type="button" class="dropdown-action-btn" onclick={() => {
-                                    editingAccount!.allowed_actions = [...availableActionTypes];
-                                  }}>All</button>
-                                  <button type="button" class="dropdown-action-btn" onclick={() => {
-                                    editingAccount!.allowed_actions = [...defaultAllowedActions];
-                                  }}>Default</button>
-                                  <button type="button" class="dropdown-action-btn" onclick={() => {
-                                    editingAccount!.allowed_actions = ["noop"];
-                                  }}>None</button>
-                                </div>
-                                {#each availableActionTypes as actionType}
-                                  <label class="dropdown-item" class:action-delete={actionType === "delete"}>
-                                    <input
-                                      type="checkbox"
-                                      checked={(editingAccount.allowed_actions ?? defaultAllowedActions).includes(actionType)}
-                                      onchange={() => {
-                                        const current = editingAccount!.allowed_actions ?? [...defaultAllowedActions];
-                                        if (current.includes(actionType)) {
-                                          editingAccount!.allowed_actions = current.filter(a => a !== actionType);
-                                        } else {
-                                          editingAccount!.allowed_actions = [...current, actionType];
-                                        }
-                                      }}
-                                    />
-                                    <span class="action-type-label">{actionType}</span>
-                                    {#if actionType === "delete"}
-                                      <span class="action-warning">⚠️</span>
-                                    {/if}
-                                  </label>
-                                {/each}
-                              </div>
-                            {/if}
-                          </div>
-                        </label>
-                        {#if (editingAccount.allowed_actions ?? defaultAllowedActions).includes("delete")}
-                          <div class="warning-note">{$t("settings.accounts.deleteWarning") ?? "Warning: Delete action is enabled. Emails may be permanently deleted."}</div>
-                        {/if}
-                      </div>
-                    </div>
-
-                    <h4>{$t("settings.accounts.llmSettings")}</h4>
-                  <div class="form-row">
-                    <div class="form-group">
-                      <label>
-                        <span class="label-text">{$t("settings.accounts.provider")} <span class="help-icon" title={helpTexts["llm.provider"]}>?</span></span>
-                        <select
-                          value={editingAccount.llm?.provider ?? ""}
-                          onchange={(e) => {
-                            editingAccount!.llm = editingAccount!.llm ?? {};
-                            editingAccount!.llm.provider = (e.target as HTMLSelectElement).value || undefined;
-                          }}
-                        >
-                          {#each config?.llm_providers ?? [] as provider}
-                            <option value={provider.name}>{provider.name}</option>
-                          {/each}
-                        </select>
-                      </label>
-                    </div>
-                    <div class="form-group">
-                      <label>
-                        <span class="label-text">{$t("settings.accounts.model")} <span class="help-icon" title={helpTexts["llm.model"]}>?</span></span>
-                        <input
-                          type="text"
-                          value={editingAccount.llm?.model ?? ""}
-                          oninput={(e) => {
-                            editingAccount!.llm = editingAccount!.llm ?? {};
-                            editingAccount!.llm.model = (e.target as HTMLInputElement).value || undefined;
-                          }}
-                          placeholder={$t("settings.accounts.useProviderDefault")}
-                        />
-                      </label>
-                    </div>
                   </div>
-                  <div class="form-group">
-                    <label>
-                      <span class="label-text">{$t("settings.accounts.promptOverride")} <span class="help-icon" title={helpTexts.prompt_override}>?</span></span>
-                      <textarea
-                        value={editingAccount.prompt_override ?? ""}
-                        oninput={(e) => {
-                          editingAccount!.prompt_override = (e.target as HTMLTextAreaElement).value || undefined;
-                        }}
-                        rows="4"
-                        placeholder={$t("settings.accounts.leaveEmptyForDefault")}
-                      ></textarea>
-                    </label>
-                    <p class="help-text">{$t("settings.accounts.promptOverrideHelp")}</p>
-                  </div>
-                  </div><!-- end wizard-section -->
-
-                  <div class="modal-actions">
-                    <button class="btn btn-secondary" onclick={() => editingAccount = null}>{$t("common.cancel")}</button>
-                    <button
-                      class="btn btn-primary"
-                      onclick={saveAccount}
-                      disabled={!connectionTested && !editingAccount.name}
-                      title={!connectionTested && !editingAccount.name ? "Test connection first" : ""}
-                    >
-                      {$t("settings.accounts.saveAccount")}
-                    </button>
-                  </div>
+                  {/if}
                 </div>
               </div>
             {/if}
@@ -1498,8 +1878,8 @@
             {#if editingProvider}
               <div
                 class="modal-overlay"
-                onclick={() => editingProvider = null}
-                onkeydown={(e) => e.key === "Escape" && (editingProvider = null)}
+                onclick={closeProviderModal}
+                onkeydown={(e) => e.key === "Escape" && closeProviderModal()}
                 role="presentation"
               >
                 <div
@@ -1544,15 +1924,19 @@
                     </div>
                   {/if}
 
-                  <div class="form-group">
+                  <div class="form-group" class:field-required={!editingProvider.name}>
                     <label>
-                      <span class="label-text">{$t("settings.providers.name")}</span>
+                      <span class="label-text">{$t("settings.providers.name")} <span class="required-asterisk">*</span></span>
                       <input
                         type="text"
                         bind:value={editingProvider.name}
                         placeholder="openai"
+                        required
                         oninput={() => { llmConnectionTested = false; llmTestResult = null; }}
                       />
+                      {#if !editingProvider.name}
+                        <span class="required-hint">{$t("settings.requiredField")}</span>
+                      {/if}
                     </label>
                   </div>
 
@@ -1600,6 +1984,31 @@
                     </div>
                   </div>
 
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>
+                        <span class="label-text">{$t("settings.providers.maxBodyTokens")} <span class="help-icon" title={helpTexts["provider.max_body_tokens"]}>?</span></span>
+                        <input type="number" bind:value={editingProvider.max_body_tokens} placeholder="4000" />
+                      </label>
+                    </div>
+                    <div class="form-group">
+                      <label>
+                        <span class="label-text">{$t("settings.providers.maxThreadTokens")} <span class="help-icon" title={helpTexts["provider.max_thread_tokens"]}>?</span></span>
+                        <input type="number" bind:value={editingProvider.max_thread_tokens} placeholder="2000" />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="form-group checkbox">
+                    <label>
+                      <input type="checkbox" bind:checked={editingProvider.supports_vision} />
+                      <span class="label-text">
+                        {$t("settings.providers.supportsVision")}
+                        <span class="help-icon" title={helpTexts["provider.supports_vision"]}>?</span>
+                      </span>
+                    </label>
+                  </div>
+
                   <div class="connection-test-section">
                     <button
                       class="btn btn-secondary"
@@ -1633,15 +2042,7 @@
                   </div>
 
                   <div class="modal-actions">
-                    <button class="btn btn-secondary" onclick={() => editingProvider = null}>{$t("common.cancel")}</button>
-                    <button
-                      class="btn btn-primary"
-                      onclick={saveProvider}
-                      disabled={!editingProvider.name || !llmConnectionTested}
-                      title={!llmConnectionTested ? "Test connection before saving" : ""}
-                    >
-                      {$t("settings.providers.saveProvider")}
-                    </button>
+                    <button class="btn btn-secondary" onclick={closeProviderModal}>{$t("common.close")}</button>
                   </div>
                 </div>
               </div>
@@ -1682,8 +2083,8 @@
             {#if editingApiKey}
               <div
                 class="modal-overlay"
-                onclick={() => { editingApiKey = null; editingApiKeyIndex = null; }}
-                onkeydown={(e) => e.key === "Escape" && (editingApiKey = null, editingApiKeyIndex = null)}
+                onclick={closeApiKeyModal}
+                onkeydown={(e) => e.key === "Escape" && closeApiKeyModal()}
                 role="presentation"
               >
                 <div
@@ -1695,10 +2096,13 @@
                 >
                   <h3 id="apikey-modal-title">{editingApiKeyIndex !== null ? $t("settings.apiKeys.editApiKey") : $t("settings.apiKeys.newApiKey")}</h3>
 
-                  <div class="form-group">
+                  <div class="form-group" class:field-required={!editingApiKey.name}>
                     <label>
-                      <span class="label-text">{$t("settings.apiKeys.name")}</span>
-                      <input type="text" bind:value={editingApiKey.name} placeholder="My Integration" />
+                      <span class="label-text">{$t("settings.apiKeys.name")} <span class="required-asterisk">*</span></span>
+                      <input type="text" bind:value={editingApiKey.name} placeholder="My Integration" required />
+                      {#if !editingApiKey.name}
+                        <span class="required-hint">{$t("settings.requiredField")}</span>
+                      {/if}
                     </label>
                   </div>
 
@@ -1795,8 +2199,7 @@
                   </div>
 
                   <div class="modal-actions">
-                    <button class="btn btn-secondary" onclick={() => { editingApiKey = null; editingApiKeyIndex = null; }}>{$t("common.cancel")}</button>
-                    <button class="btn btn-primary" onclick={saveApiKey} disabled={!editingApiKey.name}>{$t("settings.apiKeys.saveApiKey")}</button>
+                    <button class="btn btn-secondary" onclick={closeApiKeyModal}>{$t("common.close")}</button>
                   </div>
                 </div>
               </div>
@@ -2650,6 +3053,13 @@
     z-index: 100;
   }
 
+  .modal-with-side {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
   .modal {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
@@ -2946,7 +3356,147 @@
     font-size: 0.875rem;
   }
 
-  /* Wizard section locking */
+  /* Collapsible Advanced Section */
+  .collapsible-section {
+    margin-top: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    overflow: hidden;
+  }
+
+  .collapsible-section.section-locked {
+    opacity: 0.7;
+  }
+
+  .collapsible-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: var(--bg-tertiary);
+    border: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .collapsible-header:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--bg-tertiary) 80%, var(--accent) 20%);
+  }
+
+  .collapsible-header:disabled {
+    cursor: not-allowed;
+    color: var(--text-secondary);
+  }
+
+  .collapsible-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .collapsible-title svg {
+    transition: transform 0.2s;
+  }
+
+  .collapsible-title svg.rotated {
+    transform: rotate(90deg);
+  }
+
+  .locked-hint {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 400;
+  }
+
+  .collapsible-content {
+    padding: 1rem;
+    background: var(--bg-secondary);
+  }
+
+  /* Webhook styles */
+  .webhooks-header {
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .webhooks-header h4 {
+    margin: 0;
+  }
+
+  .webhook-editor {
+    padding: 1rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    margin-bottom: 1rem;
+  }
+
+  .webhook-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .webhooks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .webhook-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+  }
+
+  .webhook-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .webhook-url {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .webhook-events {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  .webhook-item-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: 1rem;
+  }
+
+  .empty-note {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    text-align: center;
+    padding: 1rem;
+    margin: 0;
+  }
+
+  /* Legacy wizard section locking - keep for backwards compat */
   .wizard-section {
     position: relative;
     padding: 0.75rem;
@@ -3229,5 +3779,147 @@
     .form-row {
       grid-template-columns: 1fr;
     }
+  }
+
+  .required-asterisk {
+    color: var(--error, #ef4444);
+    font-weight: bold;
+  }
+
+  .field-required input {
+    border-color: var(--error, #ef4444);
+    background-color: rgba(239, 68, 68, 0.05);
+  }
+
+  .required-hint {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--error, #ef4444);
+    margin-top: 0.25rem;
+  }
+
+  .modal-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .modal-header-row h3 {
+    margin: 0;
+    flex: 1;
+  }
+
+  .modal-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .header-action-btn {
+    position: relative;
+    padding: 0.5rem;
+  }
+
+  .header-action-btn.has-items {
+    color: var(--accent);
+  }
+
+  .header-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .header-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--accent);
+    color: white;
+    font-size: 0.625rem;
+    font-weight: bold;
+    padding: 0.125rem 0.375rem;
+    border-radius: 9999px;
+    min-width: 1rem;
+    text-align: center;
+  }
+
+  .header-dropdown-wrapper {
+    position: relative;
+  }
+
+  .header-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    min-width: 200px;
+    z-index: 200;
+    padding: 0.5rem;
+  }
+
+  .header-dropdown-menu .dropdown-actions {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .header-dropdown-menu .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    cursor: pointer;
+    border-radius: 0.25rem;
+  }
+
+  .header-dropdown-menu .dropdown-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .header-dropdown-menu .dropdown-item.action-delete {
+    color: var(--error);
+  }
+
+  .side-modal {
+    width: 320px;
+    max-height: 90vh;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+
+  .side-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .side-modal-header h4 {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .side-modal-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
   }
 </style>
