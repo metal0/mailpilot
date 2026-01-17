@@ -4070,6 +4070,7 @@
     flex-direction: column;
     flex-shrink: 0;
     animation: slideIn 0.2s ease-out;
+    overflow: visible;
   }
 
   @keyframes slideIn {
@@ -4099,8 +4100,9 @@
 
   .side-modal-content {
     flex: 1;
-    overflow-y: auto;
+    overflow: visible;
     padding: 1rem;
+    padding-bottom: 280px;
     display: flex;
     flex-direction: column;
     gap: 1rem;
