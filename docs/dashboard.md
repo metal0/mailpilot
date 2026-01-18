@@ -15,8 +15,10 @@ dashboard:
 
 When you first access the dashboard:
 
-1. Navigate to `http://localhost:8080/`
+1. Navigate to `http://localhost:8080/` (default port is 8080, configurable via `server.port`)
 2. You'll be redirected to `/setup`
+
+**Note**: When running in development mode (`pnpm dev`), the dashboard uses port `8085` by default.
 3. Create your admin account (username + password)
 4. You'll be logged in automatically
 
@@ -365,6 +367,14 @@ When the dashboard is enabled but no account exists:
 | `/api/test-classification/raw` | POST | Session/Key | `write:accounts` | Test classification with raw RFC822 email |
 | `/api/validate-prompt` | POST | Session/Key | `read:activity` | Validate classification prompt |
 | `/api/imap-folders` | POST | Session/Key | `write:accounts` | List folders from IMAP server |
+| `/api/auth` | GET | Session/Key | - | Check authentication status |
+| `/api/reload-config` | POST | Session/Key | `write:accounts` | Reload configuration from disk |
+| `/api/imap-presets` | GET | Session/Key | `read:stats` | Get IMAP provider presets |
+| `/api/llm-presets` | GET | Session/Key | `read:stats` | Get LLM provider presets |
+| `/api/action-types` | GET | Session/Key | `read:stats` | Get available action types |
+| `/api/extract-attachment` | POST | Session/Key | `write:accounts` | Extract text from file using Tika |
+| `/api/services` | GET | Session/Key | `read:stats` | Get service health (Tika, ClamAV) |
+| `/api/health-check` | GET | Session/Key | `read:stats` | Comprehensive health check |
 
 ### Query Parameters
 
