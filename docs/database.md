@@ -38,6 +38,8 @@ Records all actions taken on emails for auditing and debugging.
 | `llm_provider` | TEXT | LLM provider used (nullable) |
 | `llm_model` | TEXT | LLM model used (nullable) |
 | `subject` | TEXT | Email subject (nullable, opt-in) |
+| `confidence` | REAL | LLM confidence score 0.0-1.0 (nullable) |
+| `reasoning` | TEXT | LLM reasoning for the classification (nullable) |
 | `created_at` | INTEGER | Unix timestamp of processing |
 
 **Indexes:**

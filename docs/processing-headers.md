@@ -139,8 +139,8 @@ Query the audit log at `./data/mailpilot.db` using SQLite:
 
 ```sql
 SELECT * FROM audit_log
-WHERE account = 'personal-gmail'
-ORDER BY processed_at DESC
+WHERE account_name = 'personal-gmail'
+ORDER BY created_at DESC
 LIMIT 100;
 ```
 
