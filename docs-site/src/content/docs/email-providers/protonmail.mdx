@@ -1,0 +1,429 @@
+---
+title: ProtonMail Setup
+description: Configure Mailpilot with ProtonMail using ProtonMail Bridge
+---
+
+# ProtonMail Setup
+
+Configure Mailpilot to work with ProtonMail accounts using ProtonMail Bridge.
+
+<Callout type="info">
+**ProtonMail Bridge Required**: ProtonMail uses end-to-end encryption, so direct IMAP access is not possible. You must install and run ProtonMail Bridge to use Mailpilot with ProtonMail.
+</Callout>
+
+## Prerequisites
+
+- ProtonMail account (Paid plan required - Bridge is not available for free accounts)
+- ProtonMail Bridge installed and running
+- Linux, macOS, or Windows computer to run Bridge
+
+## What is ProtonMail Bridge?
+
+ProtonMail Bridge is a desktop application that:
+- Runs locally on your computer
+- Decrypts ProtonMail emails on your device
+- Provides a local IMAP/SMTP server
+- Maintains ProtonMail's end-to-end encryption
+
+**Privacy Note**: Your emails are only decrypted locally. ProtonMail Bridge never sends unencrypted data over the network.
+
+## Step 1: Install ProtonMail Bridge
+
+### Download Bridge
+
+1. Go to [ProtonMail Bridge Downloads](https://proton.me/mail/bridge#download)
+2. Download the version for your operating system:
+   - **Linux**: `.deb` (Debian/Ubuntu) or `.rpm` (Fedora/RHEL)
+   - **macOS**: `.dmg` installer
+   - **Windows**: `.exe` installer
+
+### Install Bridge
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo dpkg -i protonmail-bridge_*.deb
+sudo apt-get install -f  # Fix dependencies if needed
+```
+
+**Linux (Fedora/RHEL):**
+```bash
+sudo rpm -i protonmail-bridge-*.rpm
+```
+
+**macOS:**
+1. Open the `.dmg` file
+2. Drag ProtonMail Bridge to Applications folder
+3. Open from Applications
+
+**Windows:**
+1. Run the `.exe` installer
+2. Follow installation wizard
+3. Launch from Start Menu
+
+## Step 2: Configure ProtonMail Bridge
+
+### Add Your ProtonMail Account
+
+1. Launch ProtonMail Bridge
+2. Click **Add Account**
+3. Enter your ProtonMail credentials
+4. Complete 2FA if enabled
+5. Wait for Bridge to sync your mailbox
+
+### Get IMAP Credentials
+
+1. In ProtonMail Bridge, click on your account
+2. Click **Mailbox Configuration** or **IMAP/SMTP Settings**
+3. Note the following information:
+   - **IMAP Server**: `127.0.0.1` (localhost)
+   - **IMAP Port**: Typically `1143` (Bridge uses non-standard port)
+   - **Username**: Your ProtonMail email address
+   - **Password**: Bridge-generated password (NOT your ProtonMail password)
+
+<Callout type="warn">
+**Important**: The password shown in Bridge is different from your ProtonMail login password. Use the Bridge password for IMAP configuration.
+</Callout>
+
+### Copy Bridge Password
+
+1. In Bridge settings, find the IMAP password
+2. Click **Copy Password** or manually copy it
+3. Save this password - you'll need it for Mailpilot configuration
+
+## Step 3: Configure Mailpilot
+
+Add ProtonMail to your `config.yaml`:
+
+```yaml
+accounts:
+  - name: protonmail
+    imap:
+      host: 127.0.0.1              # ProtonMail Bridge runs locally
+      port: 1143                    # Bridge IMAP port (check Bridge settings)
+      username: ${PROTON_USER}      # your.email@proton.me
+      password: ${PROTON_BRIDGE_PASSWORD}  # Bridge password, NOT ProtonMail password
+      tls: true                     # Bridge uses TLS on localhost
+      tls_options:
+        rejectUnauthorized: false   # Required for Bridge's self-signed cert
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify this email...
+```
+
+<Callout type="warn">
+**TLS Configuration**: ProtonMail Bridge uses a self-signed certificate on localhost. You must set `rejectUnauthorized: false` to accept this certificate.
+</Callout>
+
+## Step 4: Set Environment Variables
+
+Set your ProtonMail credentials:
+
+```bash
+export PROTON_USER="your.email@proton.me"
+export PROTON_BRIDGE_PASSWORD="bridge-generated-password"
+```
+
+Or use a `.env` file:
+
+```bash
+PROTON_USER=your.email@proton.me
+PROTON_BRIDGE_PASSWORD=bridge-generated-password
+```
+
+## Step 5: Ensure Bridge is Running
+
+Before starting Mailpilot:
+
+1. **Launch ProtonMail Bridge** if not already running
+2. **Verify your account is connected** (green checkmark)
+3. **Check Bridge logs** for any connection issues
+
+<Callout type="warn">
+**Critical**: ProtonMail Bridge must be running for Mailpilot to access your emails. If Bridge stops, IMAP connections will fail.
+</Callout>
+
+## Step 6: Test Connection
+
+```bash
+pnpm start
+```
+
+Check the dashboard at `http://localhost:8080` for connection status.
+
+## IMAP Server Settings
+
+| Setting | Value |
+|---------|-------|
+| **IMAP Server** | `127.0.0.1` (localhost) |
+| **Port** | `1143` (default, check Bridge settings) |
+| **Encryption** | STARTTLS |
+| **Username** | Your ProtonMail email address |
+| **Password** | Bridge-generated password |
+| **Certificate** | Self-signed (requires `rejectUnauthorized: false`) |
+
+## ProtonMail Folder Names
+
+ProtonMail uses standard IMAP folder names:
+
+| IMAP Folder Name | ProtonMail Folder |
+|------------------|-------------------|
+| `INBOX` | Inbox |
+| `Sent` | Sent |
+| `Drafts` | Drafts |
+| `Trash` | Trash |
+| `Spam` | Spam |
+| `Archive` | Archive |
+| `All Mail` | All Mail |
+
+## Multiple ProtonMail Accounts
+
+ProtonMail Bridge supports multiple accounts:
+
+1. **Add accounts in Bridge**: Click **Add Account** for each
+2. **Each account gets a unique port**: Check Bridge settings for port numbers
+3. **Configure in Mailpilot**:
+
+```yaml
+accounts:
+  - name: proton-personal
+    imap:
+      host: 127.0.0.1
+      port: 1143                    # Port for first account
+      username: ${PROTON_PERSONAL_USER}
+      password: ${PROTON_PERSONAL_BRIDGE_PASSWORD}
+      tls: true
+      tls_options:
+        rejectUnauthorized: false
+
+  - name: proton-work
+    imap:
+      host: 127.0.0.1
+      port: 1144                    # Different port for second account
+      username: ${PROTON_WORK_USER}
+      password: ${PROTON_WORK_BRIDGE_PASSWORD}
+      tls: true
+      tls_options:
+        rejectUnauthorized: false
+```
+
+## Troubleshooting
+
+### "Connection refused" or "Connection timeout"
+
+**Cause**: ProtonMail Bridge is not running or not fully started.
+
+**Solutions:**
+1. Launch ProtonMail Bridge application
+2. Verify account shows green checkmark in Bridge
+3. Wait 30 seconds for Bridge to fully initialize
+4. Check Bridge logs for startup errors
+
+### "Username and password not accepted"
+
+**Causes:**
+1. Using ProtonMail password instead of Bridge password
+2. Bridge password changed/regenerated
+3. Account not added to Bridge
+
+**Solutions:**
+- Open Bridge and copy the correct IMAP password
+- Use Bridge password, NOT your ProtonMail login password
+- Ensure account is added and connected in Bridge
+- Regenerate Bridge password if needed (Bridge settings)
+
+### "Certificate verify failed" or SSL errors
+
+**Cause**: ProtonMail Bridge uses a self-signed certificate on localhost.
+
+**Solution:**
+```yaml
+imap:
+  host: 127.0.0.1
+  port: 1143
+  tls: true
+  tls_options:
+    rejectUnauthorized: false    # Required for Bridge
+```
+
+### "Wrong port" or "Connection works but can't login"
+
+**Cause**: Using the wrong port for your account.
+
+**Solution**:
+1. Open ProtonMail Bridge
+2. Click on your account
+3. Check **Mailbox Configuration** for the correct IMAP port
+4. Update `port` in config.yaml
+5. Port may change after Bridge updates
+
+### Bridge crashes or won't start
+
+**Solutions:**
+1. **Update Bridge**: Download latest version from [proton.me](https://proton.me/mail/bridge)
+2. **Check logs**:
+   - Linux: `~/.cache/protonmail/bridge/logs/`
+   - macOS: `~/Library/Logs/ProtonMail/Bridge/`
+   - Windows: `%APPDATA%\ProtonMail\Bridge\logs\`
+3. **Restart Bridge**: Quit completely and relaunch
+4. **Reinstall Bridge** if persistent issues
+
+### "Sync failed" or incomplete mailbox
+
+**Cause**: Bridge is still syncing your mailbox.
+
+**Solution**:
+1. Open Bridge and check sync status
+2. Wait for initial sync to complete (may take minutes to hours for large mailboxes)
+3. Don't start Mailpilot until sync is complete
+4. Check Bridge logs for sync errors
+
+## ProtonMail-Specific Considerations
+
+### ProtonMail Plans
+
+ProtonMail Bridge is **only available for paid plans**:
+- ✅ **Mail Plus**: Bridge included
+- ✅ **Proton Unlimited**: Bridge included
+- ✅ **Business plans**: Bridge included
+- ❌ **Free plan**: Bridge NOT available
+
+If you have a free ProtonMail account, you must upgrade to use Mailpilot.
+
+### Bridge System Requirements
+
+ProtonMail Bridge requires:
+- **RAM**: 200-500 MB
+- **Disk**: ~100 MB for application + cache space for emails
+- **CPU**: Minimal (background process)
+- **OS**: Linux, macOS 10.12+, Windows 10+
+
+### Bridge Must Always Run
+
+- **Desktop requirement**: Bridge runs on your computer, not a server
+- **Always running**: Bridge must be running when Mailpilot processes emails
+- **Startup**: Configure Bridge to start automatically with your system
+- **Server deployment**: If running Mailpilot on a server, Bridge must run on that server
+
+### Running Bridge Headless (Server Mode)
+
+For server deployments, run Bridge in CLI mode:
+
+**Linux:**
+```bash
+protonmail-bridge --cli
+# Then configure accounts via CLI interface
+```
+
+**Systemd Service (Linux):**
+```bash
+sudo systemctl enable protonmail-bridge
+sudo systemctl start protonmail-bridge
+```
+
+### Bridge and Firewall
+
+Bridge runs on localhost (`127.0.0.1`):
+- **No external firewall rules** needed
+- **No public internet exposure** - Bridge only accepts local connections
+- **Safe to run** on servers with strict firewall rules
+
+## Security Best Practices
+
+1. **Keep Bridge updated** - Check for updates regularly
+2. **Use strong ProtonMail password** with 2FA enabled
+3. **Protect Bridge password** - Store in environment variables only
+4. **Never expose Bridge port** to the internet (always use 127.0.0.1)
+5. **Run Bridge on trusted computers** only
+6. **Monitor Bridge logs** for unusual activity
+7. **Rotate Bridge password** periodically (regenerate in Bridge settings)
+
+## Advanced Configuration
+
+### Custom Bridge Port
+
+If you need to change Bridge's IMAP port:
+
+1. Open Bridge settings
+2. Change IMAP port (e.g., to `1200`)
+3. Update Mailpilot config:
+
+```yaml
+imap:
+  host: 127.0.0.1
+  port: 1200  # Match Bridge configuration
+```
+
+### Connection Pooling
+
+```yaml
+imap:
+  host: 127.0.0.1
+  port: 1143
+  maxConnections: 3      # Bridge handles fewer connections well
+  keepalive: true
+  timeout: 30000
+```
+
+### Debugging Bridge Connection
+
+Enable verbose logging to troubleshoot:
+
+```yaml
+imap:
+  host: 127.0.0.1
+  port: 1143
+  debug: true  # Enable IMAP debug logs
+```
+
+Check Mailpilot logs for detailed IMAP communication.
+
+## Testing Bridge Connection Manually
+
+Verify Bridge is accessible:
+
+```bash
+telnet 127.0.0.1 1143
+```
+
+You should see:
+```
+* OK ProtonMail Bridge IMAP4rev1 server ready
+```
+
+Test TLS connection:
+```bash
+openssl s_client -connect 127.0.0.1:1143 -starttls imap
+```
+
+## Alternative: ProtonMail API (Future)
+
+<Callout type="info">
+ProtonMail offers an API, but Mailpilot currently only supports IMAP via Bridge. Direct API support may be added in future releases.
+</Callout>
+
+## Migrating to ProtonMail
+
+If you're migrating from another provider:
+
+1. **Set up Bridge** first and ensure it works
+2. **Import existing emails** to ProtonMail (via web interface)
+3. **Wait for Bridge sync** to complete
+4. **Configure Mailpilot** with Bridge settings
+5. **Test thoroughly** before removing old provider
+6. **Update classification rules** if folder names differ
+
+## Next Steps
+
+- [Configure LLM provider](/docs/llm-providers)
+- [Write classification prompts](/docs/configuration/prompts-guide)
+- [Test rules in dashboard](/docs/features/dashboard)
+
+## Additional Resources
+
+- [ProtonMail Bridge Download](https://proton.me/mail/bridge)
+- [ProtonMail Bridge Documentation](https://proton.me/support/protonmail-bridge-install)
+- [ProtonMail Plans Comparison](https://proton.me/pricing)
+- [ProtonMail Support](https://proton.me/support)
