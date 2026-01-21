@@ -1060,6 +1060,7 @@
   variant="warning"
   maxWidth="550px"
   showCloseButton={true}
+  zIndex={200}
 >
   {#snippet children()}
     {#if pendingCertificate}
