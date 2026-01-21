@@ -32,6 +32,9 @@ const imapConfigSchema = z.object({
   oauth_client_id: z.string().optional(),
   oauth_client_secret: z.string().optional(),
   oauth_refresh_token: z.string().optional(),
+  // Array of trusted TLS certificate fingerprints (SHA-256) for self-signed certs
+  // Format: "sha256:FINGERPRINT_HEX" e.g., "sha256:AB:CD:EF:..."
+  trusted_tls_fingerprints: z.array(z.string()).optional(),
 });
 
 const webhookEventSchema = z.enum([

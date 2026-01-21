@@ -120,7 +120,7 @@
   let loading = $state(true);
   let saving = $state(false);
   let error = $state<string | null>(null);
-  let saveMessage = $state<{ type: "success" | "error"; text: string } | null>(null);
+  let saveMessage = $state<{ type: "success" | "error" | "warning"; text: string } | null>(null);
   let activeSection = $state<string>("global");
 
   // Track unsaved changes
@@ -234,7 +234,11 @@
 
   // IMAP test state
   let testingConnection = $state(false);
-  let testResult = $state<{ success: boolean; error?: string; capabilities?: string[]; folders?: string[] } | null>(null);
+  let testResult = $state<api.ImapTestResult | null>(null);
+
+  // Certificate trust modal state
+  let showCertTrustModal = $state(false);
+  let pendingCertificate = $state<api.CertificateInfo | null>(null);
 
   // Account wizard state
   type WizardState = "host_port" | "auth_ready" | "connected" | "complete";
@@ -506,13 +510,29 @@
     try {
       const result = await api.saveRawConfig(yamlContent);
       if (result.success) {
-        saveMessage = { type: "success", text: "YAML saved and configuration reloaded" };
-        // Refresh stats
-        const newStats = await api.fetchStats();
-        stats.set(newStats);
+        // Check if reload had errors
+        const reloadErrors = result.reloadResult?.errors || [];
+        if (reloadErrors.length > 0) {
+          saveMessage = {
+            type: "warning" as const,
+            text: `YAML saved, but reload had issues: ${reloadErrors.join(", ")}`
+          };
+        } else {
+          saveMessage = { type: "success", text: "YAML saved and configuration reloaded" };
+        }
+        // Refresh stats and config
+        try {
+          const newStats = await api.fetchStats();
+          stats.set(newStats);
+          // Also reload the config in form mode
+          await loadConfig();
+        } catch (refreshError) {
+          console.error("Failed to refresh after YAML save:", refreshError);
+        }
         setTimeout(() => { saveMessage = null; }, 5000);
       } else {
-        saveMessage = { type: "error", text: "Failed to save YAML" };
+        const errorMsg = (result as { error?: string }).error || "Failed to save YAML";
+        saveMessage = { type: "error", text: errorMsg };
       }
     } catch (e) {
       saveMessage = { type: "error", text: e instanceof Error ? e.message : "Failed to save YAML" };
@@ -963,8 +983,16 @@
         oauth_client_secret: editingAccount.imap.oauth_client_secret,
         oauth_refresh_token: editingAccount.imap.oauth_refresh_token,
         name: editingAccount.name || undefined, // Pass name for masked credential lookup
+        trusted_tls_fingerprints: editingAccount.imap.trusted_tls_fingerprints,
       });
       testResult = result;
+
+      // Handle certificate trust request
+      if (result.requiresCertificateTrust && result.certificateInfo) {
+        pendingCertificate = result.certificateInfo;
+        showCertTrustModal = true;
+        return;
+      }
 
       if (result.success) {
         connectionTested = true;
@@ -983,6 +1011,27 @@
       testingConnection = false;
     }
   }
+
+  function trustCertificate() {
+    if (!editingAccount || !pendingCertificate) return;
+
+    // Add fingerprint to trusted list
+    const fingerprint = `sha256:${pendingCertificate.fingerprint256}`;
+    const trusted = editingAccount.imap.trusted_tls_fingerprints || [];
+    if (!trusted.includes(fingerprint)) {
+      editingAccount.imap.trusted_tls_fingerprints = [...trusted, fingerprint];
+    }
+
+    // Close modal and retry connection
+    showCertTrustModal = false;
+    pendingCertificate = null;
+    testImapConnection();
+  }
+
+  function rejectCertificate() {
+    showCertTrustModal = false;
+    pendingCertificate = null;
+  }
 </script>
 
 <Modal
@@ -1000,6 +1049,61 @@
   {#snippet actions()}
     <button class="btn btn-secondary" onclick={cancelPortChange}>{$t("common.cancel")}</button>
     <button class="btn btn-warning" onclick={confirmPortChange}>{$t("settings.portWarning.confirm")}</button>
+  {/snippet}
+</Modal>
+
+<!-- Certificate Trust Modal -->
+<Modal
+  open={showCertTrustModal}
+  title="Untrusted Certificate Detected"
+  onclose={rejectCertificate}
+  variant="warning"
+  maxWidth="550px"
+  showCloseButton={true}
+>
+  {#snippet children()}
+    {#if pendingCertificate}
+      <div class="cert-warning">
+        <p class="cert-warning-message">
+          The server at <strong>{editingAccount?.imap.host}</strong> is using a certificate that cannot be verified.
+          {#if pendingCertificate.selfSigned}
+            This appears to be a <strong>self-signed certificate</strong>.
+          {/if}
+        </p>
+
+        <div class="cert-details">
+          <h4>Certificate Details</h4>
+          <div class="cert-detail-row">
+            <span class="cert-label">Subject:</span>
+            <span class="cert-value">{pendingCertificate.subject}</span>
+          </div>
+          <div class="cert-detail-row">
+            <span class="cert-label">Issuer:</span>
+            <span class="cert-value">{pendingCertificate.issuer}</span>
+          </div>
+          <div class="cert-detail-row">
+            <span class="cert-label">Valid From:</span>
+            <span class="cert-value">{pendingCertificate.validFrom}</span>
+          </div>
+          <div class="cert-detail-row">
+            <span class="cert-label">Valid Until:</span>
+            <span class="cert-value">{pendingCertificate.validTo}</span>
+          </div>
+          <div class="cert-detail-row cert-fingerprint">
+            <span class="cert-label">SHA-256 Fingerprint:</span>
+            <code class="cert-value fingerprint">{pendingCertificate.fingerprint256}</code>
+          </div>
+        </div>
+
+        <p class="cert-trust-warning">
+          ⚠️ Only trust this certificate if you are sure this is the correct server and you understand the security implications.
+        </p>
+      </div>
+    {/if}
+  {/snippet}
+  {#snippet actions()}
+    <button class="btn btn-secondary" onclick={rejectCertificate}>Cancel</button>
+    <button class="btn btn-warning" onclick={trustCertificate}>Trust This Certificate</button>
   {/snippet}
 </Modal>
 
@@ -1350,8 +1454,25 @@
                       <label>
                         <span class="label-text">
                           {$t("settings.accounts.port")}
-                          {#if portLocked || connectionFieldsLocked}
-                            <span class="locked-icon" title={connectionFieldsLocked ? "Enter IMAP host first" : "Auto-detected from server"}>🔒</span>
+                          {#if connectionFieldsLocked}
+                            <span class="locked-icon" title="Enter IMAP host first">🔒</span>
+                          {:else if portLocked}
+                            <button
+                              type="button"
+                              class="lock-toggle"
+                              title="Click to unlock and edit manually"
+                              onclick={() => portLocked = false}
+                            >🔒</button>
+                          {:else if probeResult?.success}
+                            <button
+                              type="button"
+                              class="lock-toggle unlocked"
+                              title="Click to re-lock to auto-detected value"
+                              onclick={() => {
+                                portLocked = true;
+                                handleTlsModeChange();
+                              }}
+                            >🔓</button>
                           {/if}
                           <span class="help-icon" title={helpTexts["imap.port"]}>?</span>
                         </span>
@@ -1359,8 +1480,8 @@
                           type="number"
                           bind:value={editingAccount.imap.port}
                           placeholder="993"
-                          disabled={portLocked || connectionFieldsLocked}
-                          class:field-locked={portLocked || connectionFieldsLocked}
+                          disabled={connectionFieldsLocked}
+                          class:field-locked={connectionFieldsLocked}
                         />
                       </label>
                     </div>
@@ -1369,7 +1490,7 @@
                         <span class="spinner-small"></span>
                         <span>Detecting server...</span>
                       </div>
-                    {:else if probeResult?.provider}
+                    {:else if probeResult?.success && probeResult?.provider}
                       <div class="probe-status probe-success">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                           <polyline points="20 6 9 17 4 12"/>
@@ -1378,6 +1499,15 @@
                         {#if probeResult.authMethods?.includes("oauth2")}
                           <span class="badge">OAuth supported</span>
                         {/if}
+                      </div>
+                    {:else if probeResult && !probeResult.success}
+                      <div class="probe-status probe-warning">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                          <line x1="12" y1="9" x2="12" y2="13"/>
+                          <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                        <span>Could not detect server - configure manually</span>
                       </div>
                     {:else if connectionFieldsLocked && !probingImap}
                       <div class="probe-status">
@@ -2702,6 +2832,11 @@
     color: var(--error);
   }
 
+  .save-warning {
+    background: color-mix(in srgb, var(--warning) 20%, transparent);
+    color: var(--warning);
+  }
+
   .unsaved-indicator {
     font-size: 0.875rem;
     padding: 0.5rem 1rem;
@@ -3281,6 +3416,72 @@
     background: color-mix(in srgb, var(--warning) 85%, black);
   }
 
+  /* Certificate Trust Modal */
+  .cert-warning {
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+
+  .cert-warning-message {
+    margin-bottom: 1rem;
+  }
+
+  .cert-details {
+    background: var(--bg-tertiary);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin: 1rem 0;
+  }
+
+  .cert-details h4 {
+    margin: 0 0 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .cert-detail-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.8125rem;
+  }
+
+  .cert-label {
+    color: var(--text-secondary);
+    min-width: 100px;
+    flex-shrink: 0;
+  }
+
+  .cert-value {
+    color: var(--text-primary);
+    word-break: break-all;
+  }
+
+  .cert-fingerprint {
+    flex-direction: column;
+    margin-top: 0.5rem;
+  }
+
+  .cert-fingerprint .cert-value {
+    font-family: monospace;
+    font-size: 0.7rem;
+    background: var(--bg-primary);
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    margin-top: 0.25rem;
+  }
+
+  .cert-trust-warning {
+    font-size: 0.8125rem;
+    color: var(--warning);
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: color-mix(in srgb, var(--warning) 15%, transparent);
+    border-radius: 0.375rem;
+  }
+
   .modal h3 {
     margin: 0 0 1.5rem;
   }
@@ -3822,6 +4023,25 @@
     margin-left: 0.25rem;
   }
 
+  .lock-toggle {
+    font-size: 0.75rem;
+    margin-left: 0.25rem;
+    background: none;
+    border: none;
+    padding: 0.125rem 0.25rem;
+    cursor: pointer;
+    border-radius: 0.25rem;
+    transition: background-color 0.15s ease;
+  }
+
+  .lock-toggle:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .lock-toggle.unlocked {
+    opacity: 0.6;
+  }
+
   .field-locked {
     opacity: 0.7;
     cursor: not-allowed;
@@ -3842,6 +4062,10 @@
 
   .probe-status.probe-success {
     color: var(--success);
+  }
+
+  .probe-status.probe-warning {
+    color: var(--warning);
   }
 
   .probe-status .badge {

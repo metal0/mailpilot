@@ -123,6 +123,20 @@ Stores emails that failed processing for later retry.
 
 ---
 
+### account_settings
+
+Stores per-account runtime settings that persist across restarts.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `account_name` | TEXT | Primary key, account identifier |
+| `paused` | INTEGER | Whether account is paused (0=no, 1=yes) |
+| `updated_at` | INTEGER | Unix timestamp of last update |
+
+**Usage:** When an account is paused via the dashboard, this status is persisted so it remains paused after application restart.
+
+---
+
 ## Database Configuration
 
 ```yaml

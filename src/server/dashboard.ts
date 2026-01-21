@@ -65,8 +65,16 @@ import {
 import { createTikaClient } from "../attachments/tika.js";
 import { createAntivirusScanner } from "../processor/antivirus.js";
 import { ImapFlow } from "imapflow";
-import * as net from "node:net";
 import * as tls from "node:tls";
+import {
+  probeImapPort,
+  probeTlsCertificate,
+  detectImapProvider,
+  type PortProbeResult,
+  type CertificateInfo,
+  type TlsProbeResult,
+  type ImapProviderInfo as ProbeImapProviderInfo,
+} from "../imap/probe.js";
 
 // Helper to build and broadcast current stats to all WebSocket clients
 function broadcastCurrentStats(): void {
@@ -239,198 +247,6 @@ function isPrivateOrLocalUrl(url: string): boolean {
   if (hostname.startsWith("fd") || hostname.startsWith("[fd")) return true;  // Unique local
 
   return false;
-}
-
-interface PortProbeResult {
-  port: number;
-  tls: "tls" | "starttls" | "none";
-  success: boolean;
-  capabilities?: string[];
-  authMethods?: ("basic" | "oauth2")[];
-}
-
-async function probeImapPort(
-  host: string,
-  port: number,
-  tlsMode: "tls" | "starttls" | "none",
-  timeoutMs = 5000
-): Promise<PortProbeResult> {
-  return new Promise((resolve) => {
-    let socket: net.Socket | tls.TLSSocket | undefined;
-    let resolved = false;
-    let dataBuffer = "";
-    let capabilities: string[] = [];
-    let greetingReceived = false;
-    let starttlsSent = false;
-
-    const cleanup = () => {
-      if (!resolved) {
-        resolved = true;
-        try { socket?.destroy(); } catch { /* ignore */ }
-      }
-    };
-
-    const finishSuccess = () => {
-      clearTimeout(timeout);
-      cleanup();
-      const authMethods: ("basic" | "oauth2")[] = ["basic"];
-      if (capabilities.some(cap => cap.toUpperCase().includes("AUTH=XOAUTH2"))) {
-        authMethods.push("oauth2");
-      }
-      resolve({ port, tls: tlsMode, success: true, capabilities, authMethods });
-    };
-
-    const finishFailure = () => {
-      clearTimeout(timeout);
-      cleanup();
-      resolve({ port, tls: tlsMode, success: false });
-    };
-
-    const timeout = setTimeout(() => {
-      cleanup();
-      resolve({ port, tls: tlsMode, success: false });
-    }, timeoutMs);
-
-    const parseCapabilities = (data: string) => {
-      // Parse capabilities from greeting or CAPABILITY response
-      const capMatch = data.match(/\[CAPABILITY ([^\]]+)\]/i) || data.match(/\* CAPABILITY (.+)/i);
-      if (capMatch?.[1]) {
-        capabilities = capMatch[1].split(" ").filter(c => c.length > 0);
-      }
-    };
-
-    const handleData = (data: Buffer) => {
-      dataBuffer += data.toString();
-
-      // Check for IMAP greeting
-      if (!greetingReceived && (dataBuffer.includes("* OK") || dataBuffer.includes("* PREAUTH"))) {
-        greetingReceived = true;
-        parseCapabilities(dataBuffer);
-
-        if (tlsMode === "tls" || tlsMode === "none") {
-          // For TLS mode, we already connected via TLS - success
-          // For none/insecure mode, plaintext connection works - success
-          finishSuccess();
-          return;
-        }
-
-        // For STARTTLS mode, check if server supports it and try to upgrade
-        // At this point, tlsMode must be "starttls" (tls and none already handled above)
-        const hasStarttls = capabilities.some(c => c.toUpperCase() === "STARTTLS");
-        if (!hasStarttls) {
-          // Server doesn't support STARTTLS
-          finishFailure();
-          return;
-        }
-        // Send STARTTLS command
-        starttlsSent = true;
-        socket?.write("A001 STARTTLS\r\n");
-      }
-
-      // Handle STARTTLS response
-      if (starttlsSent && dataBuffer.includes("A001 OK")) {
-        // Server accepted STARTTLS, now upgrade to TLS
-        const plainSocket = socket as net.Socket;
-        const tlsSocket = tls.connect({
-          socket: plainSocket,
-          host,
-          rejectUnauthorized: false,
-        }, () => {
-          // TLS upgrade successful
-          finishSuccess();
-        });
-        tlsSocket.on("error", finishFailure);
-        socket = tlsSocket;
-      } else if (starttlsSent && (dataBuffer.includes("A001 NO") || dataBuffer.includes("A001 BAD"))) {
-        // STARTTLS command failed
-        finishFailure();
-      }
-    };
-
-    const handleError = () => {
-      finishFailure();
-    };
-
-    try {
-      if (tlsMode === "tls") {
-        // Connect directly with TLS
-        socket = tls.connect({ host, port, rejectUnauthorized: false }, () => {
-          // TLS handshake successful, wait for IMAP greeting
-        });
-      } else {
-        // Connect via plain TCP (for both starttls and none modes)
-        socket = net.connect({ host, port }, () => {
-          // TCP connection established, wait for IMAP greeting
-        });
-      }
-
-      socket.on("data", handleData);
-      socket.on("error", handleError);
-      socket.on("close", () => {
-        if (!resolved) {
-          finishFailure();
-        }
-      });
-    } catch {
-      finishFailure();
-    }
-  });
-}
-
-function detectImapProvider(host: string): ImapProviderInfo {
-  const hostLower = host.toLowerCase();
-
-  if (hostLower.includes("gmail") || hostLower.includes("google")) {
-    return {
-      name: "Gmail",
-      type: "gmail",
-      requiresOAuth: false, // App passwords work
-      oauthSupported: true,
-    };
-  }
-
-  if (hostLower.includes("outlook") || hostLower.includes("office365") || hostLower.includes("microsoft")) {
-    return {
-      name: "Microsoft Outlook",
-      type: "outlook",
-      requiresOAuth: false, // App passwords work for personal accounts
-      oauthSupported: true,
-    };
-  }
-
-  if (hostLower.includes("yahoo")) {
-    return {
-      name: "Yahoo Mail",
-      type: "yahoo",
-      requiresOAuth: false,
-      oauthSupported: true,
-    };
-  }
-
-  if (hostLower.includes("icloud") || hostLower.includes("apple") || hostLower.includes("me.com")) {
-    return {
-      name: "iCloud Mail",
-      type: "icloud",
-      requiresOAuth: false, // App-specific passwords
-      oauthSupported: false,
-    };
-  }
-
-  if (hostLower.includes("fastmail")) {
-    return {
-      name: "Fastmail",
-      type: "fastmail",
-      requiresOAuth: false,
-      oauthSupported: false,
-    };
-  }
-
-  return {
-    name: "Generic IMAP",
-    type: "generic",
-    requiresOAuth: false,
-    oauthSupported: false,
-  };
 }
 
 export interface DashboardRouterOptions {
@@ -792,11 +608,12 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         rate_limit_rpm: 60,
       };
 
-      const success = await testLlmConnection(testProvider, default_model);
+      const result = await testLlmConnection(testProvider, default_model);
 
       return c.json({
-        success,
-        error: success ? undefined : "Failed to connect to LLM provider. Check your API key and URL.",
+        success: result.success,
+        error: result.error,
+        errorCode: result.errorCode,
       });
     } catch (error) {
       return c.json({
@@ -1141,11 +958,12 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       const successfulPorts = results.filter(r => r.success);
 
       if (successfulPorts.length === 0) {
+        // Don't return provider info when we couldn't connect to any port
+        // This prevents UI from showing "Generic IMAP detected" for invalid hosts
         return c.json({
           success: false,
-          provider: providerInfo,
           availablePorts: [],
-          error: "Could not connect to IMAP server on any standard port",
+          error: "Could not connect to IMAP server on any standard port (993, 143). Please verify the hostname and try again, or configure the connection manually.",
           portLocked: false,
         });
       }
@@ -1213,11 +1031,13 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         oauth_client_secret?: string;
         oauth_refresh_token?: string;
         name?: string; // Account name - used to lookup existing credentials if masked
+        trusted_tls_fingerprints?: string[]; // Trusted certificate fingerprints
       }>();
 
       let password = body.password;
       let oauthClientSecret = body.oauth_client_secret;
       let oauthRefreshToken = body.oauth_refresh_token;
+      let trustedFingerprints = body.trusted_tls_fingerprints || [];
 
       // If credentials are masked and we have an account name, look up the real values
       if (body.name) {
@@ -1233,24 +1053,80 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
           if (oauthRefreshToken === "********") {
             oauthRefreshToken = existingAccount.imap.oauth_refresh_token;
           }
+          // Use existing trusted fingerprints if not provided in request
+          if (trustedFingerprints.length === 0 && existingAccount.imap.trusted_tls_fingerprints) {
+            trustedFingerprints = existingAccount.imap.trusted_tls_fingerprints;
+          }
         }
       }
 
-      const secure = body.tls === "tls" || body.tls === "auto";
+      // Determine if we need TLS
+      const useSecure = body.tls === "tls" || body.tls === "auto";
+      const useStarttls = body.tls === "starttls";
+      const needsTls = useSecure || useStarttls;
+
+      // For TLS connections, first probe the certificate
+      let certificateInfo: CertificateInfo | undefined;
+      if (needsTls && body.tls !== "insecure") {
+        const tlsProbe = await probeTlsCertificate(body.host, body.port || 993);
+
+        if (!tlsProbe.success && tlsProbe.certificateInfo) {
+          // Check if this certificate is trusted
+          const fingerprint = tlsProbe.certificateInfo.fingerprint256;
+          const isTrusted = trustedFingerprints.some(fp =>
+            fp.replace(/^sha256:/i, "").toUpperCase() === fingerprint.toUpperCase()
+          );
+
+          if (!isTrusted) {
+            // Return certificate info so user can choose to trust it
+            return c.json({
+              success: false,
+              error: tlsProbe.error || "Certificate not trusted",
+              errorCode: tlsProbe.errorCode,
+              certificateInfo: tlsProbe.certificateInfo,
+              requiresCertificateTrust: true,
+            });
+          }
+          // Certificate is trusted, continue with connection
+          certificateInfo = tlsProbe.certificateInfo;
+        } else if (tlsProbe.certificateInfo) {
+          certificateInfo = tlsProbe.certificateInfo;
+        }
+      }
+
+      // Build TLS options
+      const tlsOptions: tls.ConnectionOptions = {};
+      if (trustedFingerprints.length > 0) {
+        // Allow self-signed certs if we have trusted fingerprints
+        tlsOptions.rejectUnauthorized = false;
+        tlsOptions.checkServerIdentity = (hostname, cert) => {
+          const fingerprint = cert.fingerprint256;
+          const isTrusted = trustedFingerprints.some(fp =>
+            fp.replace(/^sha256:/i, "").toUpperCase() === fingerprint.toUpperCase()
+          );
+          if (!isTrusted) {
+            return new Error(`Certificate fingerprint ${fingerprint} not in trusted list`);
+          }
+          return undefined;
+        };
+      }
 
       const client = new ImapFlow({
         host: body.host,
         port: body.port || 993,
-        secure,
+        secure: useSecure,
         auth: {
           user: body.username,
           pass: password || "",
         },
         logger: false,
+        tls: Object.keys(tlsOptions).length > 0 ? tlsOptions : undefined,
       });
 
       // Set a timeout for the connection test
+      let timedOut = false;
       const timeout = setTimeout(() => {
+        timedOut = true;
         client.close();
       }, 15000);
 
@@ -1277,18 +1153,57 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
           success: true,
           capabilities,
           folders,
+          certificateInfo,
         });
       } catch (error) {
         clearTimeout(timeout);
+
+        // Parse error to provide more descriptive messages
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        let errorCode = "CONNECTION_FAILED";
+        let userFriendlyError = errorMessage;
+
+        if (timedOut) {
+          errorCode = "TIMEOUT";
+          userFriendlyError = "Connection timed out after 15 seconds. Check if the host and port are correct and the server is reachable.";
+        } else if (errorMessage.includes("self-signed") || errorMessage.includes("SELF_SIGNED")) {
+          errorCode = "SELF_SIGNED_CERT";
+          userFriendlyError = "Server uses a self-signed certificate. You can choose to trust this certificate.";
+        } else if (errorMessage.includes("certificate") || errorMessage.includes("CERT_")) {
+          errorCode = "CERTIFICATE_ERROR";
+          userFriendlyError = `Certificate error: ${errorMessage}`;
+        } else if (errorMessage.includes("ENOTFOUND") || errorMessage.includes("getaddrinfo")) {
+          errorCode = "HOST_NOT_FOUND";
+          userFriendlyError = `Could not resolve hostname "${body.host}". Check if the hostname is correct.`;
+        } else if (errorMessage.includes("ECONNREFUSED")) {
+          errorCode = "CONNECTION_REFUSED";
+          userFriendlyError = `Connection refused by ${body.host}:${body.port}. Check if the server is running and the port is correct.`;
+        } else if (errorMessage.includes("ETIMEDOUT") || errorMessage.includes("timed out")) {
+          errorCode = "TIMEOUT";
+          userFriendlyError = "Connection timed out. The server may be unreachable or blocked by a firewall.";
+        } else if (errorMessage.includes("Invalid credentials") || errorMessage.includes("Authentication failed") || errorMessage.includes("AUTHENTICATIONFAILED")) {
+          errorCode = "AUTH_FAILED";
+          userFriendlyError = "Authentication failed. Check your username and password.";
+        } else if (errorMessage.includes("NO [ALERT]")) {
+          errorCode = "AUTH_FAILED";
+          userFriendlyError = `Authentication error: ${errorMessage.replace(/.*NO \[ALERT\]\s*/, "")}`;
+        } else if (errorMessage.includes("Unexpected close")) {
+          errorCode = "UNEXPECTED_CLOSE";
+          userFriendlyError = "Server closed connection unexpectedly. This may be due to TLS/SSL configuration issues or server-side restrictions.";
+        }
+
         return c.json({
           success: false,
-          error: error instanceof Error ? error.message : String(error),
+          error: userFriendlyError,
+          errorCode,
+          rawError: errorMessage,
         });
       }
     } catch (error) {
       return c.json({
         success: false,
         error: error instanceof Error ? error.message : "Invalid request",
+        errorCode: "INVALID_REQUEST",
       });
     }
   });
@@ -1333,14 +1248,55 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     return c.json({ config: safeConfig, configPath });
   });
 
-  // Raw YAML config endpoint - returns unmasked file content
+  // Raw YAML config endpoint - returns file content with secrets masked
   router.get("/api/config/raw", requireAuthOrApiKeyWithDryRun("write:accounts"), (c) => {
     if (!configPath) {
       return c.json({ error: "Config path not set" }, 500);
     }
 
     try {
-      const yamlContent = readFileSync(configPath, "utf-8");
+      let yamlContent = readFileSync(configPath, "utf-8");
+
+      // Mask sensitive values in YAML while preserving structure
+      // This regex matches key-value pairs for sensitive fields
+      const sensitiveFields = [
+        "password",
+        "oauth_client_secret",
+        "oauth_refresh_token",
+        "api_key",
+        "session_secret",
+        "auth_token",
+      ];
+
+      for (const field of sensitiveFields) {
+        // Match the field followed by a colon and a non-empty value (handles quoted and unquoted)
+        // This pattern handles: field: value, field: "value", field: 'value'
+        const patterns = [
+          // Standard YAML: field: value (unquoted)
+          new RegExp(`(${field}:\\s*)([^\\s#'"\\n][^\\n#]*)`, "gi"),
+          // Quoted with double quotes: field: "value"
+          new RegExp(`(${field}:\\s*)"([^"]+)"`, "gi"),
+          // Quoted with single quotes: field: 'value'
+          new RegExp(`(${field}:\\s*)'([^']+)'`, "gi"),
+        ];
+
+        for (const pattern of patterns) {
+          yamlContent = yamlContent.replace(pattern, (match, prefix, value) => {
+            // Don't mask if the value is already masked or looks like an env var
+            if (value === "********" || value.includes("${") || value.trim() === "") {
+              return match;
+            }
+            // Keep the original quoting style
+            if (match.includes('"')) {
+              return `${prefix}"********"`;
+            } else if (match.includes("'")) {
+              return `${prefix}'********'`;
+            }
+            return `${prefix}********`;
+          });
+        }
+      }
+
       return c.json({ yaml: yamlContent, configPath });
     } catch (error) {
       return c.json({
@@ -1357,7 +1313,56 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
 
     try {
       const body = await c.req.json<{ yaml: string; reload?: boolean }>();
-      const { yaml: yamlContent, reload = true } = body;
+      let { yaml: yamlContent, reload = true } = body;
+
+      // Read the original config file to restore masked values
+      const originalYaml = readFileSync(configPath, "utf-8");
+
+      // Restore masked values from original config
+      // This handles the case where user edited YAML but didn't change masked fields
+      const sensitiveFields = [
+        "password",
+        "oauth_client_secret",
+        "oauth_refresh_token",
+        "api_key",
+        "session_secret",
+        "auth_token",
+      ];
+
+      for (const field of sensitiveFields) {
+        // Find masked values in the new content and restore from original
+        const maskedPatterns = [
+          new RegExp(`(${field}:\\s*)\\*{8}\\s*$`, "gim"),
+          new RegExp(`(${field}:\\s*)"\\*{8}"`, "gi"),
+          new RegExp(`(${field}:\\s*)'\\*{8}'`, "gi"),
+        ];
+
+        for (const maskedPattern of maskedPatterns) {
+          yamlContent = yamlContent.replace(maskedPattern, (match, prefix) => {
+            // Find the original value in the original YAML
+            const origPatterns = [
+              new RegExp(`${field}:\\s*([^\\s#'"\\n][^\\n#]*)`, "i"),
+              new RegExp(`${field}:\\s*"([^"]+)"`, "i"),
+              new RegExp(`${field}:\\s*'([^']+)'`, "i"),
+            ];
+
+            for (const origPattern of origPatterns) {
+              const origMatch = originalYaml.match(origPattern);
+              if (origMatch?.[1] && origMatch[1] !== "********") {
+                // Restore with proper quoting
+                if (match.includes('"')) {
+                  return `${prefix}"${origMatch[1]}"`;
+                } else if (match.includes("'")) {
+                  return `${prefix}'${origMatch[1]}'`;
+                }
+                return `${prefix}${origMatch[1]}`;
+              }
+            }
+            // No original value found, keep as masked (will fail validation if required)
+            return match;
+          });
+        }
+      }
 
       // Write raw YAML to file
       writeFileSync(configPath, yamlContent, "utf-8");
@@ -1513,18 +1518,19 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     }
 
     // LLM provider health (only if explicitly requested - makes actual API calls)
-    const llmProviders: Array<{ name: string; model: string; url: string; healthy: boolean }> = [];
+    const llmProviders: Array<{ name: string; model: string; url: string; healthy: boolean; error?: string }> = [];
     if (checkLlm) {
       const providers = getAllProviders();
       for (const provider of providers) {
-        const healthy = await testLlmConnection(provider, provider.default_model);
+        const result = await testLlmConnection(provider, provider.default_model);
         // Persist health status so it shows on overview page
-        updateProviderHealth(provider.name, healthy);
+        updateProviderHealth(provider.name, result.success);
         llmProviders.push({
           name: provider.name,
           model: provider.default_model,
           url: provider.api_url,
-          healthy,
+          healthy: result.success,
+          error: result.error,
         });
       }
 

@@ -10,6 +10,11 @@ import { updateAccountStatus, removeAccountStatus } from "../server/status.js";
 import { registerProviders, getProviderForAccount } from "../llm/providers.js";
 import { createLogger } from "../utils/logger.js";
 import { isShutdownInProgress, onShutdown } from "../utils/shutdown.js";
+import {
+  savePausedStatus,
+  getAllPausedAccounts as getPersistedPausedAccounts,
+  deleteAccountSettings,
+} from "../storage/account-settings.js";
 
 const logger = createLogger("account-manager");
 
@@ -58,6 +63,7 @@ export async function startAccount(
     // Resolve actual LLM provider/model (even if using defaults)
     const llmInfo = getProviderForAccount(account.llm?.provider, account.llm?.model);
 
+    const isPaused = pausedAccounts.has(account.name);
     updateAccountStatus(account.name, {
       connected: true,
       idleSupported: imapClient.providerInfo.supportsIdle,
@@ -65,6 +71,7 @@ export async function startAccount(
       llmModel: llmInfo?.model ?? "none",
       imapHost: account.imap.host,
       imapPort: account.imap.port,
+      paused: isPaused,
     });
 
     const ctx = createAccountContext(config, account, imapClient);
@@ -209,6 +216,7 @@ export function pauseAccount(accountName: string): boolean {
     return false;
   }
   pausedAccounts.add(accountName);
+  savePausedStatus(accountName, true);
   updateAccountStatus(accountName, { paused: true });
   logger.info("Account paused", { accountName });
   return true;
@@ -219,6 +227,7 @@ export function resumeAccount(accountName: string): boolean {
     return false;
   }
   pausedAccounts.delete(accountName);
+  savePausedStatus(accountName, false);
   updateAccountStatus(accountName, { paused: false });
   logger.info("Account resumed", { accountName });
   return true;
@@ -230,6 +239,16 @@ export function isAccountPaused(accountName: string): boolean {
 
 export function getPausedAccounts(): string[] {
   return Array.from(pausedAccounts);
+}
+
+export function loadPausedAccounts(): void {
+  const persisted = getPersistedPausedAccounts();
+  for (const accountName of persisted) {
+    pausedAccounts.add(accountName);
+  }
+  if (persisted.length > 0) {
+    logger.info("Loaded paused accounts from database", { count: persisted.length, accounts: persisted });
+  }
 }
 
 // Manual reconnect
@@ -399,6 +418,7 @@ async function stopAccount(accountName: string): Promise<void> {
   activeClients.delete(accountName);
   accountContexts.delete(accountName);
   pausedAccounts.delete(accountName);
+  deleteAccountSettings(accountName);
   unregisterWebhooks(accountName);
   removeAccountStatus(accountName);
 

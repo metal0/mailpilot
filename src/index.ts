@@ -9,7 +9,7 @@ import { getAccountContext } from "./accounts/manager.js";
 import { processMessage } from "./processor/worker.js";
 import { registerProviders, startHealthChecks, stopHealthChecks } from "./llm/providers.js";
 import { startServer, stopServer } from "./server/index.js";
-import { startAccount, setupAccountShutdown, setConfigPath, setCurrentConfig } from "./accounts/manager.js";
+import { startAccount, setupAccountShutdown, setConfigPath, setCurrentConfig, loadPausedAccounts } from "./accounts/manager.js";
 import { dispatchStartup, dispatchShutdown } from "./webhooks/dispatcher.js";
 import {
   createLogger,
@@ -58,6 +58,9 @@ async function main(): Promise<void> {
   setLogLevel(loggingConfig.level as LogLevel);
 
   initDatabase(stateConfig.database_path);
+
+  // Load persisted paused accounts before starting them
+  loadPausedAccounts();
 
   onShutdown(async () => {
     await dispatchShutdown("shutdown");
