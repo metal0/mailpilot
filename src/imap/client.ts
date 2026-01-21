@@ -83,15 +83,20 @@ export function createImapClient(options: ImapClientOptions): ImapClient {
   // Determine if we should use secure connection
   // "insecure" mode means no TLS at all (plaintext), not bypassing certificate validation
   const useSecure = shouldUseSecure(config.tls);
+  // Both direct TLS (secure=true) and STARTTLS (secure=false) use TLS options.
+  // ImapFlow applies the tls options during STARTTLS upgrade when secure=false.
+  const usesTls = config.tls !== "insecure";
 
-  // Build IMAP options, conditionally including TLS options if present
+  // Build IMAP options, conditionally including TLS options if present.
+  // The tls options include checkServerIdentity for trusted fingerprint verification,
+  // which applies to both direct TLS connections and STARTTLS upgrades.
   const imapOptions: ImapFlowOptions = {
     host: config.host,
     port: config.port,
     secure: useSecure,
     auth: authConfig,
     logger: false,
-    ...(useSecure && Object.keys(tlsOptions).length > 0 ? { tls: tlsOptions } : {}),
+    ...(usesTls && Object.keys(tlsOptions).length > 0 ? { tls: tlsOptions } : {}),
   };
 
   const client = new ImapFlow(imapOptions);
@@ -152,7 +157,36 @@ export function createImapClient(options: ImapClientOptions): ImapClient {
           };
         }
 
-        await client.connect();
+        try {
+          await client.connect();
+        } catch (error) {
+          // Check if this is a certificate error - these should not be retried
+          // and should provide a helpful message instead of becoming uncaught exceptions
+          if (error instanceof Error) {
+            const isCertError = error.message.includes("self-signed") ||
+              error.message.includes("DEPTH_ZERO_SELF_SIGNED_CERT") ||
+              error.message.includes("SELF_SIGNED_CERT_IN_CHAIN") ||
+              error.message.includes("UNABLE_TO_VERIFY_LEAF_SIGNATURE") ||
+              error.message.includes("certificate");
+
+            if (isCertError) {
+              log.error("TLS certificate error - connection cannot proceed", {
+                error: error.message,
+                hint: "Add the certificate fingerprint to 'trusted_tls_fingerprints' in your account config. " +
+                  "Use the dashboard to test the connection and trust the certificate first.",
+              });
+              // Wrap in a special error that won't be retried
+              const certError = new Error(
+                `Certificate error: ${error.message}. ` +
+                `To fix this, use the dashboard to test the connection, trust the certificate, ` +
+                `then update your account configuration with the trusted fingerprint.`
+              );
+              (certError as NodeJS.ErrnoException).code = "CERT_ERROR";
+              throw certError;
+            }
+          }
+          throw error;
+        }
       });
 
       // Check actual IDLE capability from server

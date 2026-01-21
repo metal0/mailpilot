@@ -8,6 +8,7 @@
     variant?: "default" | "warning" | "danger";
     maxWidth?: string;
     showCloseButton?: boolean;
+    zIndex?: number;
     children: Snippet;
     actions?: Snippet;
   }
@@ -19,6 +20,7 @@
     variant = "default",
     maxWidth = "500px",
     showCloseButton = true,
+    zIndex = 100,
     children,
     actions,
   }: Props = $props();
@@ -89,6 +91,7 @@
 {#if open}
   <div
     class="modal-overlay"
+    style="z-index: {zIndex}"
     onclick={handleBackdropClick}
     role="presentation"
   >
@@ -141,7 +144,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 100;
     padding: 1rem;
   }
 
