@@ -1,4 +1,4 @@
-import { ImapFlow } from "imapflow";
+import { ImapFlow, type ImapFlowOptions } from "imapflow";
 import type * as tls from "node:tls";
 import type { ImapConfig, TlsMode } from "../config/schema.js";
 import { createLogger } from "../utils/logger.js";
@@ -84,18 +84,15 @@ export function createImapClient(options: ImapClientOptions): ImapClient {
   // "insecure" mode means no TLS at all (plaintext), not bypassing certificate validation
   const useSecure = shouldUseSecure(config.tls);
 
-  const imapOptions: Parameters<typeof ImapFlow>[0] = {
+  // Build IMAP options, conditionally including TLS options if present
+  const imapOptions: ImapFlowOptions = {
     host: config.host,
     port: config.port,
     secure: useSecure,
     auth: authConfig,
     logger: false,
+    ...(useSecure && Object.keys(tlsOptions).length > 0 ? { tls: tlsOptions } : {}),
   };
-
-  // Only add TLS options if we're using TLS and have custom options
-  if (useSecure && Object.keys(tlsOptions).length > 0) {
-    imapOptions.tls = tlsOptions;
-  }
 
   const client = new ImapFlow(imapOptions);
 

@@ -1181,7 +1181,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       if (trustedFingerprints.length > 0) {
         // Allow self-signed certs if we have trusted fingerprints
         tlsOptions.rejectUnauthorized = false;
-        tlsOptions.checkServerIdentity = (hostname, cert) => {
+        tlsOptions.checkServerIdentity = (_hostname, cert) => {
           const fingerprint = cert.fingerprint256;
           const isTrusted = trustedFingerprints.some(fp =>
             fp.replace(/^sha256:/i, "").toUpperCase() === fingerprint.toUpperCase()
@@ -1202,7 +1202,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
           pass: password || "",
         },
         logger: false,
-        tls: Object.keys(tlsOptions).length > 0 ? tlsOptions : undefined,
+        ...(Object.keys(tlsOptions).length > 0 ? { tls: tlsOptions } : {}),
       });
 
       // Set a timeout for the connection test (use object to track state across async boundary)
@@ -1544,7 +1544,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
           model: provider.default_model,
           url: provider.api_url,
           healthy: result.success,
-          error: result.error,
+          ...(result.error ? { error: result.error } : {}),
         });
       }
 
