@@ -1269,28 +1269,33 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
           userFriendlyError = "Server uses a self-signed certificate. You can choose to trust this certificate.";
 
           // Try to probe the certificate now that we know it's a cert error
-          try {
-            const certProbe = await probeTlsCertificate(body.host, body.port || 993);
-            if (certProbe.certificateInfo) {
-              // Check if already trusted
-              const fingerprint = certProbe.certificateInfo.fingerprint256;
-              const isTrusted = trustedFingerprints.some(fp =>
-                fp.replace(/^sha256:/i, "").toUpperCase() === fingerprint.toUpperCase()
-              );
+          // Note: Skip probe for STARTTLS as it requires IMAP protocol negotiation first
+          if (!useStarttls) {
+            try {
+              const certProbe = await probeTlsCertificate(body.host, body.port || 993);
+              if (certProbe.certificateInfo) {
+                // Check if already trusted
+                const fingerprint = certProbe.certificateInfo.fingerprint256;
+                const isTrusted = trustedFingerprints.some(fp =>
+                  fp.replace(/^sha256:/i, "").toUpperCase() === fingerprint.toUpperCase()
+                );
 
-              if (!isTrusted) {
-                return c.json({
-                  success: false,
-                  error: userFriendlyError,
-                  errorCode,
-                  certificateInfo: certProbe.certificateInfo,
-                  requiresCertificateTrust: true,
-                  rawError: errorMessage,
-                });
+                if (!isTrusted) {
+                  return c.json({
+                    success: false,
+                    error: userFriendlyError,
+                    errorCode,
+                    certificateInfo: certProbe.certificateInfo,
+                    requiresCertificateTrust: true,
+                    rawError: errorMessage,
+                  });
+                }
               }
+            } catch (probeError) {
+              logger.warn("Failed to probe certificate after self-signed error", { probeError });
             }
-          } catch (probeError) {
-            logger.warn("Failed to probe certificate after self-signed error", { probeError });
+          } else {
+            logger.warn("Cannot probe certificate for STARTTLS - requires IMAP protocol negotiation");
           }
         } else if (errorMessage.includes("certificate") || errorMessage.includes("CERT_")) {
           errorCode = "CERTIFICATE_ERROR";
