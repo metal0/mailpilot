@@ -6,8 +6,8 @@ import type { TableOfContents } from 'fumadocs-core/server';
 
 const mdxSource = createMDXSource(docs, meta);
 
-// Handle both function and array API for compatibility
-const files = typeof mdxSource.files === 'function' ? mdxSource.files() : mdxSource.files;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const files = mdxSource.files as any;
 
 export const source = loader({
   baseUrl: '/docs',
