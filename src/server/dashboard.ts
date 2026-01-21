@@ -1222,13 +1222,20 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
 
       // CRITICAL: Attach error handler immediately to prevent uncaught exceptions
       // ImapFlow can emit error events during TLS handshake before connect() rejects
+      // We capture the TLS error because connect() may reject with "Unexpected close" instead
+      const state = { timedOut: false, tlsError: undefined as Error | undefined };
       client.on("error", (error: Error) => {
-        // Just log - the actual error will be caught by the try/catch around connect()
         logger.debug("ImapFlow error event during test connection", { error: error.message });
+        // Capture TLS/certificate errors - connect() might reject with a different message
+        if (error.message.includes("self-signed") ||
+            error.message.includes("certificate") ||
+            error.message.includes("CERT_") ||
+            error.message.includes("UNABLE_TO_VERIFY")) {
+          state.tlsError = error;
+        }
       });
 
-      // Set a timeout for the connection test (use object to track state across async boundary)
-      const state = { timedOut: false };
+      // Set a timeout for the connection test
       const timeout = setTimeout(() => {
         state.timedOut = true;
         client.close();
@@ -1262,15 +1269,17 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       } catch (error) {
         clearTimeout(timeout);
 
-        // Parse error to provide more descriptive messages
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        // Use the captured TLS error if available, otherwise use the connect() error
+        // ImapFlow often rejects with "Unexpected close" when TLS fails, losing the real error
+        const actualError = state.tlsError || error;
+        const errorMessage = actualError instanceof Error ? actualError.message : String(actualError);
         let errorCode = "CONNECTION_FAILED";
         let userFriendlyError = errorMessage;
 
         if (state.timedOut) {
           errorCode = "TIMEOUT";
           userFriendlyError = "Connection timed out after 15 seconds. Check if the host and port are correct and the server is reachable.";
-        } else if (errorMessage.includes("self-signed") || errorMessage.includes("SELF_SIGNED")) {
+        } else if (state.tlsError || errorMessage.includes("self-signed") || errorMessage.includes("SELF_SIGNED")) {
           // Self-signed certificate error - try to get certificate info
           errorCode = "SELF_SIGNED_CERT";
           userFriendlyError = "Server uses a self-signed certificate. You can choose to trust this certificate.";
