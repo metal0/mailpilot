@@ -1,6 +1,6 @@
 import { getPage, getPages } from '@/lib/source';
 import type { Metadata } from 'next';
-import { DocsPage, DocsBody } from 'fumadocs-ui/page';
+import { DocsPage, DocsBody } from 'fumadocs-ui/layouts/docs/page';
 import { notFound } from 'next/navigation';
 
 export default async function Page({
