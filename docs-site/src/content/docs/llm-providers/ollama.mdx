@@ -1,0 +1,593 @@
+---
+title: Ollama Setup
+description: Run local LLM models with Ollama for complete privacy
+---
+
+# Ollama Setup
+
+Configure Mailpilot to use Ollama for running local LLM models with complete privacy.
+
+<Callout type="info">
+**Privacy-focused solution**: Ollama runs models entirely on your hardware. Emails never leave your server.
+</Callout>
+
+## What is Ollama?
+
+Ollama is a tool that makes running large language models locally easy:
+- **Download and run models** with a single command
+- **No API keys** or cloud services required
+- **Complete privacy** - data never leaves your machine
+- **Free to use** - no per-request costs
+- **GPU acceleration** - fast inference with NVIDIA/AMD/Apple Silicon
+
+## Prerequisites
+
+- **Hardware**:
+  - 8GB+ RAM minimum (16GB+ recommended)
+  - GPU recommended for better performance (optional)
+- **OS**: Linux, macOS, or Windows
+- **Disk space**: 4-8GB per model
+
+## Step 1: Install Ollama
+
+### Linux
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+### macOS
+
+```bash
+brew install ollama
+```
+
+Or download from [ollama.com/download](https://ollama.com/download)
+
+### Windows
+
+Download the installer from [ollama.com/download](https://ollama.com/download)
+
+## Step 2: Start Ollama Service
+
+### Linux/macOS
+
+```bash
+ollama serve
+```
+
+This starts the Ollama server on `http://localhost:11434`
+
+**Run in background**:
+```bash
+# Using systemd (Linux)
+sudo systemctl enable ollama
+sudo systemctl start ollama
+
+# Using launchd (macOS)
+brew services start ollama
+```
+
+### Windows
+
+Ollama runs as a service automatically after installation. Check the system tray for the Ollama icon.
+
+## Step 3: Download a Model
+
+### Recommended Models for Email Classification
+
+| Model | Size | RAM Needed | Speed | Accuracy |
+|-------|------|------------|-------|----------|
+| **llama3.2:latest** | 2GB | 8GB | ⚡⚡⚡ | ⭐⭐⭐⭐ |
+| **llama3.2:3b** | 2GB | 8GB | ⚡⚡⚡ | ⭐⭐⭐⭐ |
+| **llama3.1:8b** | 4.7GB | 16GB | ⚡⚡ | ⭐⭐⭐⭐ |
+| **mistral:latest** | 4.1GB | 16GB | ⚡⚡ | ⭐⭐⭐⭐ |
+| **phi3:mini** | 2.3GB | 8GB | ⚡⚡⚡ | ⭐⭐⭐ |
+
+### Download Your First Model
+
+```bash
+ollama pull llama3.2:latest
+```
+
+This downloads and caches the model locally.
+
+### List Available Models
+
+```bash
+ollama list
+```
+
+Output:
+```
+NAME              ID            SIZE    MODIFIED
+llama3.2:latest   abc123def     2.0 GB  2 hours ago
+mistral:latest    xyz789ghi     4.1 GB  1 day ago
+```
+
+## Step 4: Test Ollama
+
+Test the model works:
+
+```bash
+ollama run llama3.2:latest
+```
+
+Chat with the model:
+```
+>>> Classify this email: "Meeting reminder for tomorrow at 3pm"
+This appears to be a calendar/scheduling email...
+```
+
+Type `/bye` to exit.
+
+## Step 5: Configure Mailpilot
+
+Add Ollama to your `config.yaml`:
+
+```yaml
+llm_providers:
+  - name: ollama
+    provider: ollama
+    base_url: http://localhost:11434
+    model: llama3.2:latest
+    temperature: 0.1
+
+accounts:
+  - name: personal
+    imap:
+      host: imap.gmail.com
+      # ... imap config
+
+    folders:
+      - name: INBOX
+        llm_provider: ollama
+        prompt: |
+          Classify this email into one of the following categories:
+          - Important
+          - Social
+          - Promotions
+          - Spam
+
+          Return JSON: {"action": "move", "folder": "category", "confidence": 0.95}
+```
+
+## Step 6: Start Mailpilot
+
+```bash
+pnpm start
+```
+
+Check logs for:
+```
+✓ LLM Provider 'ollama' initialized successfully
+✓ Connected to Ollama server at http://localhost:11434
+✓ Using model: llama3.2:latest
+```
+
+## Configuration Options
+
+### Basic Configuration
+
+```yaml
+llm_providers:
+  - name: ollama
+    provider: ollama                # Required: Provider type
+    base_url: http://localhost:11434  # Required: Ollama server URL
+    model: llama3.2:latest          # Required: Model name
+```
+
+### Advanced Configuration
+
+```yaml
+llm_providers:
+  - name: ollama-advanced
+    provider: ollama
+    base_url: http://localhost:11434
+    model: llama3.2:latest
+    temperature: 0.1              # Randomness (0 = deterministic)
+    top_p: 0.9                    # Nucleus sampling
+    top_k: 40                     # Token selection
+    repeat_penalty: 1.1           # Reduce repetition
+    num_ctx: 2048                 # Context window size
+    timeout: 60000                # Request timeout (ms)
+```
+
+### Remote Ollama Server
+
+Run Ollama on a different machine:
+
+```yaml
+llm_providers:
+  - name: ollama-remote
+    provider: ollama
+    base_url: http://192.168.1.100:11434  # Remote server IP
+    model: llama3.2:latest
+```
+
+## Model Selection Guide
+
+### For General Email Classification
+
+**Recommended**: `llama3.2:latest` (2GB)
+
+```bash
+ollama pull llama3.2:latest
+```
+
+**Pros**:
+- Small and fast
+- Good accuracy for classification
+- Runs on modest hardware (8GB RAM)
+
+**Typical performance**: ~1-2 seconds per email
+
+### For Better Accuracy
+
+**Recommended**: `llama3.1:8b` (4.7GB)
+
+```bash
+ollama pull llama3.1:8b
+```
+
+**Pros**:
+- Higher accuracy than 3B models
+- Better understanding of complex emails
+- Good at following instructions
+
+**Requirements**: 16GB+ RAM recommended
+
+### For Minimal Hardware
+
+**Recommended**: `phi3:mini` (2.3GB)
+
+```bash
+ollama pull phi3:mini
+```
+
+**Pros**:
+- Very small model
+- Runs on 8GB RAM
+- Decent accuracy
+
+**Cons**:
+- Lower accuracy than Llama models
+- May miss nuanced classifications
+
+## Performance Optimization
+
+### GPU Acceleration
+
+Ollama automatically uses GPU if available:
+
+**Check GPU usage**:
+```bash
+ollama ps
+```
+
+Output shows GPU memory usage:
+```
+NAME              SIZE    GPU
+llama3.2:latest   2.0 GB  4.2 GB/8.0 GB
+```
+
+### CPU-Only Performance
+
+Without GPU, models run slower but still work:
+
+**Tips for CPU-only**:
+1. Use smaller models (llama3.2, phi3:mini)
+2. Reduce `num_ctx` (context window)
+3. Increase `timeout` setting
+4. Use fewer concurrent connections
+
+### Concurrent Requests
+
+Ollama can handle multiple requests:
+
+```yaml
+llm_providers:
+  - name: ollama
+    provider: ollama
+    base_url: http://localhost:11434
+    model: llama3.2:latest
+    max_concurrent: 3  # Process 3 emails simultaneously
+```
+
+### Model Preloading
+
+Keep model loaded in memory for faster responses:
+
+```bash
+# Preload model (stays in memory)
+ollama run llama3.2:latest &
+
+# Or configure keep_alive
+ollama run --keep-alive=24h llama3.2:latest
+```
+
+## Advanced Features
+
+### Custom Models
+
+Create custom models with Modelfiles:
+
+**Create**: `Modelfile`
+```dockerfile
+FROM llama3.2:latest
+
+# Set temperature
+PARAMETER temperature 0.1
+
+# Set system prompt
+SYSTEM You are an expert email classifier. Classify emails concisely and accurately.
+```
+
+**Build**:
+```bash
+ollama create email-classifier -f Modelfile
+```
+
+**Use**:
+```yaml
+llm_providers:
+  - name: ollama-custom
+    provider: ollama
+    model: email-classifier
+```
+
+### Multiple Models
+
+Use different models for different purposes:
+
+```yaml
+llm_providers:
+  - name: ollama-fast
+    provider: ollama
+    model: llama3.2:latest     # Fast, small model
+
+  - name: ollama-accurate
+    provider: ollama
+    model: llama3.1:8b         # Slower, more accurate
+
+accounts:
+  - name: personal
+    folders:
+      - name: INBOX
+        llm_provider: ollama-fast  # Fast classification for high volume
+
+  - name: work
+    folders:
+      - name: INBOX
+        llm_provider: ollama-accurate  # Better accuracy for important emails
+```
+
+## Troubleshooting
+
+### "Connection refused" or "Cannot connect to Ollama"
+
+**Cause**: Ollama server is not running.
+
+**Solutions:**
+```bash
+# Start Ollama server
+ollama serve
+
+# Or check if running
+curl http://localhost:11434
+```
+
+Should return: `Ollama is running`
+
+### "Model not found"
+
+**Cause**: Model not downloaded locally.
+
+**Solutions:**
+```bash
+# List available models
+ollama list
+
+# Pull the model you need
+ollama pull llama3.2:latest
+```
+
+### Out of memory errors
+
+**Cause**: Model too large for available RAM.
+
+**Solutions:**
+1. **Use smaller model**:
+   ```bash
+   ollama pull phi3:mini  # Only 2.3GB
+   ```
+
+2. **Quantize model** (reduce precision):
+   ```bash
+   ollama pull llama3.2:latest-q4  # 4-bit quantization
+   ```
+
+3. **Close other applications** to free RAM
+
+4. **Upgrade RAM** (16GB+ recommended)
+
+### Slow performance
+
+**Causes:**
+1. No GPU acceleration
+2. Large model on limited hardware
+3. High concurrent requests
+
+**Solutions:**
+1. **Enable GPU** if available
+2. **Use smaller model** (llama3.2 vs llama3.1:8b)
+3. **Reduce concurrent requests**:
+   ```yaml
+   max_concurrent: 1
+   ```
+4. **Reduce context window**:
+   ```yaml
+   num_ctx: 1024  # Reduce from default 2048
+   ```
+
+### Model produces poor classifications
+
+**Causes:**
+1. Model too small for task complexity
+2. Poor prompt engineering
+3. Low temperature causing repetitive outputs
+
+**Solutions:**
+1. **Try larger model**:
+   ```bash
+   ollama pull llama3.1:8b
+   ```
+
+2. **Improve prompts** (see [Prompts Guide](/docs/configuration/prompts-guide))
+
+3. **Adjust temperature**:
+   ```yaml
+   temperature: 0.2  # Increase from 0.1
+   ```
+
+## System Requirements
+
+### Minimum Requirements
+
+- **CPU**: Modern x64 processor
+- **RAM**: 8GB
+- **Disk**: 10GB free space
+- **OS**: Linux, macOS 11+, Windows 10+
+
+### Recommended Requirements
+
+- **CPU**: 8+ cores
+- **RAM**: 16GB+
+- **GPU**: NVIDIA RTX 3060+ / AMD RX 6000+ / Apple Silicon M1+
+- **Disk**: 20GB+ SSD
+
+### GPU Support
+
+**NVIDIA**:
+- CUDA 11.7+
+- 6GB+ VRAM
+
+**AMD**:
+- ROCm 5.7+
+- 6GB+ VRAM
+
+**Apple Silicon**:
+- M1/M2/M3
+- 8GB+ unified memory
+
+## Privacy & Security
+
+### Data Privacy
+
+With Ollama:
+- ✅ **All processing happens locally**
+- ✅ **No data sent to external servers**
+- ✅ **No API keys required**
+- ✅ **Works offline**
+- ✅ **GDPR/HIPAA compliant** (data never leaves your infrastructure)
+
+### Network Security
+
+Ollama binds to localhost by default:
+- Only accessible from your machine
+- No internet exposure
+- Safe behind firewall
+
+To allow remote access (advanced):
+```bash
+# NOT RECOMMENDED for production
+OLLAMA_HOST=0.0.0.0:11434 ollama serve
+```
+
+## Cost Comparison
+
+### Ollama (Free)
+
+- **Initial cost**: $0 (open source)
+- **Running cost**: $0/month
+- **Hardware cost**: One-time purchase or existing server
+- **Per-email cost**: $0
+
+### Example Calculation
+
+**Processing 100 emails/day**:
+- Ollama: $0/month
+- OpenAI gpt-4o-mini: ~$0.45/month
+- Anthropic Claude: ~$0.75/month
+
+**Annual savings with Ollama**: ~$5-10/year
+
+For high-volume email processing, Ollama saves significant costs.
+
+## Monitoring
+
+### Check Ollama Status
+
+```bash
+# View running models
+ollama ps
+
+# View model details
+ollama show llama3.2:latest
+
+# Check logs
+journalctl -u ollama -f  # Linux systemd
+```
+
+### Performance Metrics
+
+Monitor resource usage:
+
+```bash
+# CPU and RAM usage
+top
+
+# GPU usage (NVIDIA)
+nvidia-smi
+
+# GPU usage (AMD)
+rocm-smi
+```
+
+## Updating Ollama
+
+### Update Ollama
+
+```bash
+# Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# macOS
+brew upgrade ollama
+
+# Windows
+# Download latest installer from ollama.com
+```
+
+### Update Models
+
+```bash
+# Pull latest version of a model
+ollama pull llama3.2:latest
+
+# Remove old versions
+ollama rm old-model-name
+```
+
+## Next Steps
+
+- [Write effective classification prompts →](/docs/configuration/prompts-guide)
+- [Configure email folders →](/docs/configuration/folders)
+- [Test in dashboard →](/docs/features/dashboard)
+
+## Additional Resources
+
+- [Ollama Documentation](https://github.com/ollama/ollama/tree/main/docs)
+- [Ollama Models Library](https://ollama.com/library)
+- [Ollama GitHub](https://github.com/ollama/ollama)
+- [Model Performance Comparisons](https://github.com/ollama/ollama/blob/main/docs/performance.md)

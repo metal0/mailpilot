@@ -1,0 +1,458 @@
+---
+title: OpenAI Setup
+description: Configure Mailpilot with OpenAI GPT models for email classification
+---
+
+# OpenAI Setup
+
+Configure Mailpilot to use OpenAI's GPT models for email classification.
+
+## Prerequisites
+
+- OpenAI account
+- OpenAI API key
+- Billing configured (pay-as-you-go)
+
+## Supported Models
+
+| Model | Cost (per 1M tokens) | Speed | Use Case |
+|-------|---------------------|-------|----------|
+| **gpt-4o-mini** | Input: $0.15<br/>Output: $0.60 | ⚡⚡⚡ | **Recommended** - Best balance |
+| **gpt-4o** | Input: $2.50<br/>Output: $10.00 | ⚡⚡ | Complex reasoning |
+| **gpt-4-turbo** | Input: $10.00<br/>Output: $30.00 | ⚡⚡ | Legacy - use gpt-4o instead |
+| **gpt-3.5-turbo** | Input: $0.50<br/>Output: $1.50 | ⚡⚡⚡ | Deprecated - use gpt-4o-mini |
+
+<Callout type="info">
+**Recommended**: Use `gpt-4o-mini` for most email classification tasks. It's fast, accurate, and cost-effective.
+</Callout>
+
+## Step 1: Get OpenAI API Key
+
+1. Go to [OpenAI API Keys](https://platform.openai.com/api-keys)
+2. Sign in or create an account
+3. Click **+ Create new secret key**
+4. Name it: `Mailpilot` or `Email Automation`
+5. **Copy the API key** (starts with `sk-...`)
+6. Store it securely - you won't see it again
+
+<Callout type="warn">
+**Never share your API key** or commit it to version control. Treat it like a password.
+</Callout>
+
+## Step 2: Configure Billing
+
+OpenAI requires billing to be set up before API access:
+
+1. Go to [OpenAI Billing](https://platform.openai.com/account/billing)
+2. Click **Add payment method**
+3. Add a credit card or prepaid credits
+4. Set spending limits to control costs
+
+### Set Spending Limits
+
+Recommended limits for email automation:
+
+```
+- Hard limit: $20/month (prevents overspending)
+- Email alert: $10/month (early warning)
+```
+
+## Step 3: Configure Mailpilot
+
+Add OpenAI to your `config.yaml`:
+
+```yaml
+llm_providers:
+  - name: openai
+    provider: openai
+    api_key: ${OPENAI_API_KEY}
+    model: gpt-4o-mini
+    temperature: 0.1
+    max_tokens: 500
+
+accounts:
+  - name: personal
+    imap:
+      host: imap.gmail.com
+      # ... imap config
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify this email into one of the following categories:
+          - Important
+          - Social
+          - Promotions
+          - Spam
+
+          Return JSON: {"action": "move", "folder": "category", "confidence": 0.95}
+```
+
+## Step 4: Set Environment Variable
+
+Set your OpenAI API key:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+Or use a `.env` file:
+
+```bash
+OPENAI_API_KEY=sk-...
+```
+
+## Step 5: Test Configuration
+
+```bash
+pnpm start
+```
+
+Check the logs for:
+```
+✓ LLM Provider 'openai' initialized successfully
+✓ Using model: gpt-4o-mini
+```
+
+Send a test email and verify classification works.
+
+## Configuration Options
+
+### Basic Configuration
+
+```yaml
+llm_providers:
+  - name: openai
+    provider: openai              # Required: Provider type
+    api_key: ${OPENAI_API_KEY}    # Required: Your API key
+    model: gpt-4o-mini             # Required: Model name
+```
+
+### Advanced Configuration
+
+```yaml
+llm_providers:
+  - name: openai-advanced
+    provider: openai
+    api_key: ${OPENAI_API_KEY}
+    model: gpt-4o-mini
+    temperature: 0.1              # Randomness (0 = deterministic)
+    max_tokens: 500               # Max response length
+    top_p: 1.0                    # Nucleus sampling
+    frequency_penalty: 0.0        # Reduce repetition
+    presence_penalty: 0.0         # Encourage new topics
+    timeout: 30000                # Request timeout (ms)
+```
+
+### Custom Base URL (Advanced)
+
+For Azure OpenAI or OpenAI-compatible endpoints:
+
+```yaml
+llm_providers:
+  - name: azure-openai
+    provider: openai
+    api_key: ${AZURE_OPENAI_KEY}
+    base_url: https://your-resource.openai.azure.com/
+    model: gpt-4o-mini
+```
+
+## Model Comparison
+
+### gpt-4o-mini (Recommended)
+
+**Best for**: Most email classification tasks
+
+```yaml
+llm_providers:
+  - name: openai
+    provider: openai
+    model: gpt-4o-mini
+    temperature: 0.1
+```
+
+**Pros**:
+- Very cost-effective ($0.15 per 1M input tokens)
+- Fast response times (~1-2 seconds)
+- Excellent accuracy for email classification
+- Supports function calling and JSON mode
+
+**Cons**:
+- Less capable for very complex reasoning
+- Smaller context window than gpt-4o
+
+**Typical cost**: ~$0.015 per 1000 emails
+
+### gpt-4o
+
+**Best for**: Complex business emails requiring deep understanding
+
+```yaml
+llm_providers:
+  - name: openai-premium
+    provider: openai
+    model: gpt-4o
+    temperature: 0.1
+```
+
+**Pros**:
+- Superior reasoning and understanding
+- Larger context window (128K tokens)
+- Better at understanding nuance and tone
+- More reliable for complex classification rules
+
+**Cons**:
+- 16x more expensive than gpt-4o-mini
+- Slower response times (~2-4 seconds)
+
+**Typical cost**: ~$0.25 per 1000 emails
+
+## Cost Optimization
+
+### Estimate Your Costs
+
+Calculate expected monthly costs:
+
+```
+Daily emails: 100
+Token usage per email: ~500 tokens (input + output)
+Model: gpt-4o-mini
+
+Monthly tokens: 100 emails/day × 30 days × 500 tokens = 1.5M tokens
+Cost: 1.5M tokens × $0.15 / 1M = $0.225/month
+```
+
+### Reduce Costs
+
+1. **Use gpt-4o-mini**: 16x cheaper than gpt-4o
+2. **Optimize prompts**: Shorter prompts = fewer tokens
+3. **Reduce max_tokens**: Set to minimum needed (e.g., 200 for simple classification)
+4. **Use caching** (if available): Reduce repeated context costs
+
+Example cost-optimized configuration:
+
+```yaml
+llm_providers:
+  - name: openai-budget
+    provider: openai
+    model: gpt-4o-mini
+    temperature: 0.1
+    max_tokens: 200    # Reduce from default 500
+```
+
+## Advanced Features
+
+### JSON Mode
+
+Force responses in JSON format:
+
+```yaml
+llm_providers:
+  - name: openai-json
+    provider: openai
+    model: gpt-4o-mini
+    response_format:
+      type: json_object
+```
+
+Then in your prompt:
+
+```yaml
+folders:
+  - name: INBOX
+    llm_provider: openai-json
+    prompt: |
+      Classify this email. Respond with JSON only:
+      {
+        "action": "move",
+        "folder": "Important",
+        "confidence": 0.95
+      }
+```
+
+### Function Calling
+
+Use OpenAI's function calling for structured outputs:
+
+```yaml
+llm_providers:
+  - name: openai-functions
+    provider: openai
+    model: gpt-4o-mini
+    functions:
+      - name: classify_email
+        description: Classify email into categories
+        parameters:
+          type: object
+          properties:
+            action:
+              type: string
+              enum: [move, flag, archive, delete]
+            folder:
+              type: string
+            confidence:
+              type: number
+```
+
+### Multiple OpenAI Configurations
+
+Use different models for different purposes:
+
+```yaml
+llm_providers:
+  - name: openai-fast
+    provider: openai
+    model: gpt-4o-mini
+    temperature: 0.1
+
+  - name: openai-smart
+    provider: openai
+    model: gpt-4o
+    temperature: 0.1
+
+accounts:
+  - name: personal
+    folders:
+      - name: INBOX
+        llm_provider: openai-fast  # Fast model for high volume
+
+  - name: work
+    folders:
+      - name: INBOX
+        llm_provider: openai-smart  # Better model for important emails
+```
+
+## Troubleshooting
+
+### "Invalid API key" or "Unauthorized"
+
+**Causes:**
+1. API key not set in environment variables
+2. API key is incorrect or expired
+3. Typo in API key
+
+**Solutions:**
+- Verify `OPENAI_API_KEY` is set: `echo $OPENAI_API_KEY`
+- Check for spaces or quotes in API key
+- Generate a new API key at [OpenAI API Keys](https://platform.openai.com/api-keys)
+
+### "Billing hard limit reached"
+
+**Cause**: You've exceeded your monthly spending limit.
+
+**Solution**:
+1. Go to [OpenAI Billing](https://platform.openai.com/account/billing/limits)
+2. Increase your hard limit
+3. Add payment method if needed
+4. Wait for limit to reset next month
+
+### "Rate limit exceeded"
+
+**Cause**: Too many requests per minute.
+
+**Solutions**:
+- Reduce polling frequency in config
+- Add delay between requests
+- Upgrade to higher tier plan for more requests per minute
+- Implement request batching
+
+### "Model not found"
+
+**Cause**: Using deprecated or unavailable model name.
+
+**Solutions:**
+- Update to current model names:
+  - ❌ `gpt-3.5-turbo` → ✅ `gpt-4o-mini`
+  - ❌ `gpt-4` → ✅ `gpt-4o`
+- Check [OpenAI Models](https://platform.openai.com/docs/models) for available models
+
+### High unexpected costs
+
+**Causes:**
+1. Using expensive model (gpt-4o)
+2. Long prompts or email content
+3. High email volume
+
+**Solutions:**
+- Switch to `gpt-4o-mini`
+- Set `max_tokens` to lower value (e.g., 200)
+- Reduce prompt length
+- Set up billing alerts
+- Monitor usage in [OpenAI Usage](https://platform.openai.com/usage)
+
+### Slow response times
+
+**Causes:**
+1. Using slower model (gpt-4o)
+2. Long prompts
+3. Network latency
+4. API server congestion
+
+**Solutions:**
+- Use `gpt-4o-mini` (faster)
+- Reduce prompt length
+- Increase `timeout` setting
+- Check OpenAI status at [status.openai.com](https://status.openai.com/)
+
+## Monitoring Usage
+
+### Track API Usage
+
+Monitor your OpenAI usage:
+
+1. Go to [OpenAI Usage Dashboard](https://platform.openai.com/usage)
+2. View daily API costs
+3. Filter by model or time period
+4. Set up usage alerts
+
+### Mailpilot Logging
+
+Enable debug logging to track token usage:
+
+```yaml
+logging:
+  level: debug
+```
+
+Logs will show token counts per request:
+
+```
+[LLM] Classified email: tokens_used=450 cost=$0.0000675
+```
+
+## Security Best Practices
+
+1. **Never commit API keys** to version control
+2. **Use environment variables** for API keys
+3. **Set spending limits** in OpenAI dashboard
+4. **Rotate API keys** periodically (every 3-6 months)
+5. **Use separate keys** for different environments (dev/prod)
+6. **Monitor usage** for unexpected spikes
+7. **Revoke unused keys** in [OpenAI settings](https://platform.openai.com/api-keys)
+
+## Rate Limits
+
+OpenAI applies rate limits based on your tier:
+
+| Tier | Requests/minute | Tokens/minute |
+|------|----------------|---------------|
+| Free | 3 | 40,000 |
+| Tier 1 | 500 | 200,000 |
+| Tier 2 | 5,000 | 2,000,000 |
+| Tier 3+ | Higher | Higher |
+
+Your tier increases automatically based on usage history.
+
+## Next Steps
+
+- [Write effective classification prompts →](/docs/configuration/prompts-guide)
+- [Configure email folders →](/docs/configuration/folders)
+- [Test in dashboard →](/docs/features/dashboard)
+
+## Additional Resources
+
+- [OpenAI API Documentation](https://platform.openai.com/docs/api-reference)
+- [OpenAI Models Overview](https://platform.openai.com/docs/models)
+- [OpenAI Pricing](https://openai.com/api/pricing/)
+- [OpenAI Cookbook](https://cookbook.openai.com/)

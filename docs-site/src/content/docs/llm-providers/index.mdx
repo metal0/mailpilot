@@ -1,0 +1,290 @@
+---
+title: LLM Providers
+description: Configure AI providers for email classification
+---
+
+# LLM Providers
+
+Mailpilot uses Large Language Models (LLMs) to intelligently classify and process your emails. Choose from cloud-based APIs or run models locally for complete privacy.
+
+## Supported Providers
+
+<Cards>
+  <Card title="OpenAI" href="/docs/llm-providers/openai" icon="sparkles">
+    GPT-4o, GPT-4o-mini - Industry-leading performance
+  </Card>
+  <Card title="Ollama" href="/docs/llm-providers/ollama" icon="server">
+    Run models locally - Complete privacy and control
+  </Card>
+  <Card title="Anthropic Claude" href="/docs/llm-providers/anthropic" icon="sparkles">
+    Claude 3.5 Sonnet - Advanced reasoning and context
+  </Card>
+  <Card title="OpenRouter" href="/docs/llm-providers/openrouter" icon="network">
+    Access multiple providers through one API
+  </Card>
+  <Card title="Local Models" href="/docs/llm-providers/local-models" icon="cpu">
+    Custom local deployments and alternatives
+  </Card>
+</Cards>
+
+## Quick Comparison
+
+| Provider | Cost | Privacy | Performance | Ease of Setup |
+|----------|------|---------|-------------|---------------|
+| **OpenAI** | $$ | Cloud | ⭐⭐⭐⭐⭐ | Easy |
+| **Ollama** | Free | Local | ⭐⭐⭐⭐ | Medium |
+| **Anthropic** | $$$ | Cloud | ⭐⭐⭐⭐⭐ | Easy |
+| **OpenRouter** | $ - $$ | Cloud | ⭐⭐⭐⭐ | Easy |
+| **Local Models** | Free | Local | ⭐⭐⭐ | Hard |
+
+## Choosing a Provider
+
+### Cloud vs Local
+
+**Cloud-based (OpenAI, Anthropic, OpenRouter)**:
+- ✅ Superior performance and accuracy
+- ✅ No hardware requirements
+- ✅ Easy setup
+- ❌ Usage costs
+- ❌ Emails processed on third-party servers
+- ❌ Requires internet connection
+
+**Local (Ollama, Custom)**:
+- ✅ Complete privacy - data never leaves your server
+- ✅ No per-request costs
+- ✅ Works offline
+- ❌ Requires powerful hardware (GPU recommended)
+- ❌ Setup complexity
+- ❌ Lower accuracy than cloud models
+
+### Cost Considerations
+
+**Typical costs per 1000 emails** (assuming ~500 tokens per classification):
+
+| Provider | Model | Cost per 1K emails |
+|----------|-------|-------------------|
+| OpenAI | gpt-4o-mini | ~$0.015 |
+| OpenAI | gpt-4o | ~$0.25 |
+| Anthropic | claude-3-haiku | ~$0.025 |
+| Anthropic | claude-3.5-sonnet | ~$0.30 |
+| Ollama | llama3.2 | $0 (local) |
+| OpenRouter | Various | $0.01 - $0.50 |
+
+<Callout type="info">
+**Recommended for beginners**: Start with **OpenAI gpt-4o-mini**. It offers the best balance of cost, performance, and ease of use.
+</Callout>
+
+## Configuration Examples
+
+### OpenAI (Recommended)
+
+```yaml
+llm_providers:
+  - name: openai
+    provider: openai
+    api_key: ${OPENAI_API_KEY}
+    model: gpt-4o-mini
+    temperature: 0.1
+```
+
+### Ollama (Privacy-focused)
+
+```yaml
+llm_providers:
+  - name: ollama
+    provider: ollama
+    base_url: http://localhost:11434
+    model: llama3.2:latest
+```
+
+### Anthropic Claude
+
+```yaml
+llm_providers:
+  - name: anthropic
+    provider: anthropic
+    api_key: ${ANTHROPIC_API_KEY}
+    model: claude-3-5-sonnet-20241022
+```
+
+### OpenRouter (Multi-provider)
+
+```yaml
+llm_providers:
+  - name: openrouter
+    provider: openrouter
+    api_key: ${OPENROUTER_API_KEY}
+    model: anthropic/claude-3.5-sonnet
+```
+
+## Multiple Providers
+
+You can configure multiple LLM providers and choose different ones for different accounts or folders:
+
+```yaml
+llm_providers:
+  - name: openai-fast
+    provider: openai
+    model: gpt-4o-mini
+    temperature: 0.1
+
+  - name: ollama-private
+    provider: ollama
+    model: llama3.2:latest
+
+accounts:
+  - name: personal
+    folders:
+      - name: INBOX
+        llm_provider: ollama-private  # Use local model for personal emails
+
+  - name: work
+    folders:
+      - name: INBOX
+        llm_provider: openai-fast  # Use OpenAI for work emails
+```
+
+## Model Selection Guide
+
+### For General Email Classification
+
+**Recommended**: OpenAI `gpt-4o-mini`
+- Best balance of cost and accuracy
+- Fast response times
+- Excellent at understanding email context
+
+### For Complex Business Emails
+
+**Recommended**: Anthropic `claude-3-5-sonnet-20241022`
+- Superior reasoning capabilities
+- Better at understanding nuance
+- Longer context window (200K tokens)
+
+### For High Volume / Low Cost
+
+**Recommended**: Ollama `llama3.2:latest`
+- Zero API costs
+- Decent accuracy for simple classification
+- Privacy-preserving
+
+### For Experimentation
+
+**Recommended**: OpenRouter
+- Try multiple models without separate API keys
+- Compare model performance easily
+- Access cutting-edge models
+
+## Performance Tips
+
+### Optimize Token Usage
+
+- **Keep prompts concise**: Shorter prompts = lower costs
+- **Use smaller models** for simple tasks
+- **Batch similar emails** when possible
+
+### Improve Accuracy
+
+- **Use higher temperature (0.2-0.3)** for creative classifications
+- **Use lower temperature (0-0.1)** for consistent, deterministic results
+- **Provide clear examples** in your prompts
+- **Test with representative emails** before production
+
+### Reduce Latency
+
+- **Use local models** (Ollama) for instant responses
+- **Choose faster models** (gpt-4o-mini vs gpt-4o)
+- **Increase polling interval** to reduce API rate limiting
+
+## Common Configuration Options
+
+All providers support these common settings:
+
+```yaml
+llm_providers:
+  - name: my-provider
+    provider: openai
+    api_key: ${API_KEY}
+    model: gpt-4o-mini
+    temperature: 0.1          # Randomness (0 = deterministic, 1 = creative)
+    max_tokens: 500           # Maximum response length
+    timeout: 30000            # Request timeout in milliseconds
+```
+
+### Temperature Guide
+
+| Temperature | Use Case | Example |
+|-------------|----------|---------|
+| **0 - 0.1** | Consistent classification | "Important", "Spam", "Archive" |
+| **0.2 - 0.5** | Balanced creativity | Custom categories with some flexibility |
+| **0.6 - 1.0** | Creative responses | Generating email summaries or replies |
+
+## Environment Variables
+
+Store API keys securely:
+
+```bash
+# .env file
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+OPENROUTER_API_KEY=sk-or-...
+```
+
+Never commit API keys to version control!
+
+## Testing Your Configuration
+
+After configuring an LLM provider:
+
+1. Start Mailpilot: `pnpm start`
+2. Check logs for LLM provider initialization
+3. Send a test email or process existing emails
+4. View classifications in the dashboard
+5. Monitor API costs in provider dashboard
+
+## Troubleshooting
+
+### "API key not found" or "Unauthorized"
+
+**Solutions:**
+- Verify API key is set in environment variables
+- Check API key has correct permissions
+- Ensure no typos in provider configuration
+
+### "Model not found" or "Invalid model"
+
+**Solutions:**
+- Check model name matches provider's available models
+- Update to latest model version if deprecated
+- Verify your API key has access to the model
+
+### High API costs
+
+**Solutions:**
+- Switch to a cheaper model (gpt-4o-mini instead of gpt-4o)
+- Reduce `max_tokens` setting
+- Simplify classification prompts
+- Use local models (Ollama) for high-volume processing
+
+### Slow response times
+
+**Solutions:**
+- Use faster models (gpt-4o-mini, claude-3-haiku)
+- Switch to local models (Ollama)
+- Increase `timeout` setting
+- Check network connectivity to API servers
+
+## Next Steps
+
+- [Configure specific provider →](/docs/llm-providers/openai)
+- [Write classification prompts →](/docs/configuration/prompts-guide)
+- [Test in dashboard →](/docs/features/dashboard)
+
+## Provider-Specific Guides
+
+Select your preferred LLM provider for detailed setup instructions:
+
+- [OpenAI Setup](/docs/llm-providers/openai) - GPT-4o, GPT-4o-mini
+- [Ollama Setup](/docs/llm-providers/ollama) - Local model deployment
+- [Anthropic Claude](/docs/llm-providers/anthropic) - Claude 3.5 Sonnet
+- [OpenRouter](/docs/llm-providers/openrouter) - Multi-provider access
+- [Local Models](/docs/llm-providers/local-models) - Custom deployments
