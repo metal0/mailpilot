@@ -53,7 +53,7 @@ import {
   getCurrentConfig,
 } from "../accounts/manager.js";
 import { readFileSync, writeFileSync } from "node:fs";
-import { stringify as yamlStringify } from "yaml";
+import { stringify as yamlStringify, parse as yamlParse } from "yaml";
 import { fetchAndParseEmail } from "../processor/email.js";
 import {
   getDeadLetterEntries,
@@ -99,7 +99,97 @@ function broadcastCurrentStats(): void {
   });
 }
 
-// ImapProviderInfo type - used for IMAP preset results
+// Sensitive field names that should be masked in YAML config
+const SENSITIVE_FIELDS = [
+  "password",
+  "oauth_client_secret",
+  "oauth_refresh_token",
+  "api_key",
+  "session_secret",
+  "auth_token",
+];
+
+/**
+ * Mask sensitive values in a parsed config object.
+ * Creates a deep copy with sensitive fields masked.
+ */
+function maskSensitiveConfig(config: unknown): unknown {
+  if (config === null || config === undefined) {
+    return config;
+  }
+
+  if (Array.isArray(config)) {
+    return config.map(item => maskSensitiveConfig(item));
+  }
+
+  if (typeof config === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(config)) {
+      if (SENSITIVE_FIELDS.includes(key) && typeof value === "string") {
+        // Don't mask env var references or already masked values
+        if (value.includes("${") || value === "********") {
+          result[key] = value;
+        } else if (value.trim() !== "") {
+          result[key] = "********";
+        } else {
+          result[key] = value;
+        }
+      } else {
+        result[key] = maskSensitiveConfig(value);
+      }
+    }
+    return result;
+  }
+
+  return config;
+}
+
+/**
+ * Restore masked sensitive values from original config.
+ * Traverses both objects in parallel and replaces "********" with original values.
+ */
+function restoreSensitiveConfig(
+  maskedConfig: unknown,
+  originalConfig: unknown
+): unknown {
+  if (maskedConfig === null || maskedConfig === undefined) {
+    return maskedConfig;
+  }
+
+  if (Array.isArray(maskedConfig)) {
+    if (!Array.isArray(originalConfig)) {
+      return maskedConfig;
+    }
+    return maskedConfig.map((item, index) =>
+      restoreSensitiveConfig(item, originalConfig[index])
+    );
+  }
+
+  if (typeof maskedConfig === "object") {
+    if (typeof originalConfig !== "object" || originalConfig === null) {
+      return maskedConfig;
+    }
+    const result: Record<string, unknown> = {};
+    const origObj = originalConfig as Record<string, unknown>;
+
+    for (const [key, value] of Object.entries(maskedConfig)) {
+      if (SENSITIVE_FIELDS.includes(key) && value === "********") {
+        // Restore original value if it was masked
+        const originalValue = origObj[key];
+        if (typeof originalValue === "string" && originalValue !== "********") {
+          result[key] = originalValue;
+        } else {
+          result[key] = value;
+        }
+      } else {
+        result[key] = restoreSensitiveConfig(value, origObj[key]);
+      }
+    }
+    return result;
+  }
+
+  return maskedConfig;
+}
 
 interface ImapPreset {
   name: string;
@@ -1247,49 +1337,15 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
     }
 
     try {
-      let yamlContent = readFileSync(configPath, "utf-8");
+      const yamlContent = readFileSync(configPath, "utf-8");
 
-      // Mask sensitive values in YAML while preserving structure
-      // This regex matches key-value pairs for sensitive fields
-      const sensitiveFields = [
-        "password",
-        "oauth_client_secret",
-        "oauth_refresh_token",
-        "api_key",
-        "session_secret",
-        "auth_token",
-      ];
+      // Parse YAML, mask sensitive values, and re-serialize
+      // This properly handles multi-account configs and values with special characters
+      const parsedConfig = yamlParse(yamlContent) as unknown;
+      const maskedConfig = maskSensitiveConfig(parsedConfig);
+      const maskedYaml = yamlStringify(maskedConfig, { lineWidth: 0 });
 
-      for (const field of sensitiveFields) {
-        // Match the field followed by a colon and a non-empty value (handles quoted and unquoted)
-        // This pattern handles: field: value, field: "value", field: 'value'
-        const patterns = [
-          // Standard YAML: field: value (unquoted)
-          new RegExp(`(${field}:\\s*)([^\\s#'"\\n][^\\n#]*)`, "gi"),
-          // Quoted with double quotes: field: "value"
-          new RegExp(`(${field}:\\s*)"([^"]+)"`, "gi"),
-          // Quoted with single quotes: field: 'value'
-          new RegExp(`(${field}:\\s*)'([^']+)'`, "gi"),
-        ];
-
-        for (const pattern of patterns) {
-          yamlContent = yamlContent.replace(pattern, (match: string, prefix: string, value: string) => {
-            // Don't mask if the value is already masked or looks like an env var
-            if (value === "********" || value.includes("${") || value.trim() === "") {
-              return match;
-            }
-            // Keep the original quoting style
-            if (match.includes('"')) {
-              return `${prefix}"********"`;
-            } else if (match.includes("'")) {
-              return `${prefix}'********'`;
-            }
-            return `${prefix}********`;
-          });
-        }
-      }
-
-      return c.json({ yaml: yamlContent, configPath });
+      return c.json({ yaml: maskedYaml, configPath });
     } catch (error) {
       return c.json({
         error: error instanceof Error ? error.message : String(error),
@@ -1305,60 +1361,25 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
 
     try {
       const body = await c.req.json<{ yaml: string; reload?: boolean }>();
-      let yamlContent = body.yaml;
+      const { yaml: inputYaml } = body;
       const reload = body.reload ?? true;
 
-      // Read the original config file to restore masked values
+      // Parse the submitted YAML (may contain masked values)
+      const submittedConfig = yamlParse(inputYaml) as unknown;
+
+      // Read and parse the original config file
       const originalYaml = readFileSync(configPath, "utf-8");
+      const originalConfig = yamlParse(originalYaml) as unknown;
 
-      // Restore masked values from original config
-      // This handles the case where user edited YAML but didn't change masked fields
-      const sensitiveFields = [
-        "password",
-        "oauth_client_secret",
-        "oauth_refresh_token",
-        "api_key",
-        "session_secret",
-        "auth_token",
-      ];
+      // Restore masked values by traversing both configs in parallel
+      // This correctly handles multi-account configs where each account has its own password
+      const restoredConfig = restoreSensitiveConfig(submittedConfig, originalConfig);
 
-      for (const field of sensitiveFields) {
-        // Find masked values in the new content and restore from original
-        const maskedPatterns = [
-          new RegExp(`(${field}:\\s*)\\*{8}\\s*$`, "gim"),
-          new RegExp(`(${field}:\\s*)"\\*{8}"`, "gi"),
-          new RegExp(`(${field}:\\s*)'\\*{8}'`, "gi"),
-        ];
+      // Serialize back to YAML
+      const finalYaml = yamlStringify(restoredConfig, { lineWidth: 0 });
 
-        for (const maskedPattern of maskedPatterns) {
-          yamlContent = yamlContent.replace(maskedPattern, (match, prefix) => {
-            // Find the original value in the original YAML
-            const origPatterns = [
-              new RegExp(`${field}:\\s*([^\\s#'"\\n][^\\n#]*)`, "i"),
-              new RegExp(`${field}:\\s*"([^"]+)"`, "i"),
-              new RegExp(`${field}:\\s*'([^']+)'`, "i"),
-            ];
-
-            for (const origPattern of origPatterns) {
-              const origMatch = originalYaml.match(origPattern);
-              if (origMatch?.[1] && origMatch[1] !== "********") {
-                // Restore with proper quoting
-                if (match.includes('"')) {
-                  return `${prefix}"${origMatch[1]}"`;
-                } else if (match.includes("'")) {
-                  return `${prefix}'${origMatch[1]}'`;
-                }
-                return `${prefix}${origMatch[1]}`;
-              }
-            }
-            // No original value found, keep as masked (will fail validation if required)
-            return match;
-          });
-        }
-      }
-
-      // Write raw YAML to file
-      writeFileSync(configPath, yamlContent, "utf-8");
+      // Write to file
+      writeFileSync(configPath, finalYaml, "utf-8");
 
       // Optionally reload config
       if (reload) {

@@ -103,13 +103,14 @@ async function executeShutdown(signal: string): Promise<void> {
 }
 
 // List of error patterns that are recoverable and shouldn't crash the app
+// Note: Only include SPECIFIC certificate errors - generic "certificate" is too broad
+// and could suppress critical security errors like "certificate pinning violation" or "certificate revoked"
 const RECOVERABLE_ERROR_PATTERNS = [
   "self-signed certificate",
   "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
   "DEPTH_ZERO_SELF_SIGNED_CERT",
   "SELF_SIGNED_CERT_IN_CHAIN",
   "CERT_HAS_EXPIRED",
-  "certificate",
   "ECONNREFUSED",
   "ENOTFOUND",
   "ETIMEDOUT",
