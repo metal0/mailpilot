@@ -1148,8 +1148,9 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       const needsTls = useSecure || useStarttls;
 
       // For TLS connections, first probe the certificate
+      // Note: Skip probe for STARTTLS as it requires IMAP protocol negotiation first
       let certificateInfo: CertificateInfo | undefined;
-      if (needsTls && body.tls !== "insecure") {
+      if (needsTls && body.tls !== "insecure" && !useStarttls) {
         const tlsProbe = await probeTlsCertificate(body.host, body.port || 993);
 
         // Log probe result for debugging
@@ -1263,8 +1264,34 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
           errorCode = "TIMEOUT";
           userFriendlyError = "Connection timed out after 15 seconds. Check if the host and port are correct and the server is reachable.";
         } else if (errorMessage.includes("self-signed") || errorMessage.includes("SELF_SIGNED")) {
+          // Self-signed certificate error - try to get certificate info
           errorCode = "SELF_SIGNED_CERT";
           userFriendlyError = "Server uses a self-signed certificate. You can choose to trust this certificate.";
+
+          // Try to probe the certificate now that we know it's a cert error
+          try {
+            const certProbe = await probeTlsCertificate(body.host, body.port || 993);
+            if (certProbe.certificateInfo) {
+              // Check if already trusted
+              const fingerprint = certProbe.certificateInfo.fingerprint256;
+              const isTrusted = trustedFingerprints.some(fp =>
+                fp.replace(/^sha256:/i, "").toUpperCase() === fingerprint.toUpperCase()
+              );
+
+              if (!isTrusted) {
+                return c.json({
+                  success: false,
+                  error: userFriendlyError,
+                  errorCode,
+                  certificateInfo: certProbe.certificateInfo,
+                  requiresCertificateTrust: true,
+                  rawError: errorMessage,
+                });
+              }
+            }
+          } catch (probeError) {
+            log.warn("Failed to probe certificate after self-signed error", { probeError });
+          }
         } else if (errorMessage.includes("certificate") || errorMessage.includes("CERT_")) {
           errorCode = "CERTIFICATE_ERROR";
           userFriendlyError = `Certificate error: ${errorMessage}`;
