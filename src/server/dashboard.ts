@@ -1281,6 +1281,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
                 );
 
                 if (!isTrusted) {
+                  // Certificate not trusted - show trust UI
                   return c.json({
                     success: false,
                     error: userFriendlyError,
@@ -1289,13 +1290,45 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
                     requiresCertificateTrust: true,
                     rawError: errorMessage,
                   });
+                } else {
+                  // Certificate already trusted but still getting error - likely different issue
+                  userFriendlyError = "Certificate is already trusted, but connection still failed. Check other connection settings.";
+                  return c.json({
+                    success: false,
+                    error: userFriendlyError,
+                    errorCode,
+                    rawError: errorMessage,
+                  });
                 }
+              } else {
+                // Probe succeeded but no cert info - can't get fingerprint
+                logger.warn("Certificate probe succeeded but returned no certificate info");
+                return c.json({
+                  success: false,
+                  error: "Self-signed certificate detected, but couldn't retrieve certificate details. Try using direct TLS instead of STARTTLS, or inspect the certificate manually.",
+                  errorCode,
+                  rawError: errorMessage,
+                });
               }
             } catch (probeError) {
+              // Probe failed completely - can't get cert info
               logger.warn("Failed to probe certificate after self-signed error", { probeError });
+              return c.json({
+                success: false,
+                error: "Self-signed certificate detected, but couldn't retrieve certificate details for validation. The certificate probe failed. Try using direct TLS on port 993 instead of STARTTLS.",
+                errorCode,
+                rawError: errorMessage,
+              });
             }
           } else {
+            // STARTTLS - can't probe certificate directly
             logger.warn("Cannot probe certificate for STARTTLS - requires IMAP protocol negotiation");
+            return c.json({
+              success: false,
+              error: "Self-signed certificate detected. STARTTLS connections don't support certificate inspection in this interface. Use direct TLS on port 993 instead, or manually inspect the certificate using: openssl s_client -starttls imap -connect " + body.host + ":" + (body.port || 143),
+              errorCode,
+              rawError: errorMessage,
+            });
           }
         } else if (errorMessage.includes("certificate") || errorMessage.includes("CERT_")) {
           errorCode = "CERTIFICATE_ERROR";
