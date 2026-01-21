@@ -1,0 +1,17 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "getting-started",
+    "email-providers",
+    "llm-providers",
+    "configuration",
+    "features",
+    "recipes",
+    "api",
+    "development",
+    "troubleshooting",
+    "changelog",
+    "roadmap"
+  ]
+}
