@@ -1,5 +1,7 @@
+import tailwindPlugin from 'fumadocs-ui/tailwind-plugin';
+
 /** @type {import('tailwindcss').Config} */
-module.exports = {
+export default {
   darkMode: 'class',
   content: [
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
@@ -14,5 +16,5 @@ module.exports = {
       }
     }
   },
-  plugins: [require('fumadocs-ui/tailwind-plugin')]
+  plugins: [tailwindPlugin]
 };
