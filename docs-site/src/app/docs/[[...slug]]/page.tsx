@@ -15,10 +15,11 @@ export default async function Page(props: {
 
   if (!page) notFound();
 
-  const MDX = (page.data as PageType).body;
+  const data = page.data as PageType;
+  const MDX = data.body;
 
   return (
-    <DocsPage toc={page.data.toc} full={page.data.full}>
+    <DocsPage toc={data.toc} full={data.full}>
       <DocsBody>
         <MDX components={{ ...defaultMdxComponents, SetupWizard, ConfigSandbox, MatrixChatWidget }} />
       </DocsBody>
