@@ -1,0 +1,285 @@
+---
+title: Webhooks
+description: Real-time webhooks for email processing events
+---
+
+# Webhooks
+
+Mailpilot can send HTTP POST requests to external endpoints when specific email processing events occur.
+
+## Overview
+
+Webhooks enable real-time integrations with external services:
+
+- **Slack/Discord notifications** when important emails arrive
+- **Zapier/Make workflows** triggered by email events
+- **Custom integrations** with your own services
+- **Monitoring alerts** for errors or failures
+
+## Configuration
+
+Configure webhooks per-account or globally:
+
+```yaml
+accounts:
+  - name: personal
+    # ... IMAP settings ...
+    webhooks:
+      - url: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+        events: [email_processed, action_taken]
+        headers:
+          X-Custom-Header: value
+```
+
+## Event Types
+
+| Event | Description | Payload |
+|-------|-------------|---------|
+| `email_processed` | Email was successfully classified | Account, subject, actions |
+| `action_taken` | Specific action was executed | Account, action type, folder |
+| `error` | Processing error occurred | Account, error message |
+| `connection_lost` | IMAP connection lost | Account, error details |
+
+## Webhook Payload
+
+### email_processed Event
+
+```json
+{
+  "event": "email_processed",
+  "timestamp": "2026-01-14T10:30:00.000Z",
+  "account": "personal",
+  "subject": "Important Update",
+  "from": "sender@example.com",
+  "actions": [
+    {
+      "type": "move",
+      "folder": "Important"
+    },
+    {
+      "type": "flag",
+      "flags": ["Flagged"]
+    }
+  ],
+  "model": "gpt-4o-mini",
+  "reasoning": "Email from important sender requiring attention"
+}
+```
+
+### action_taken Event
+
+```json
+{
+  "event": "action_taken",
+  "timestamp": "2026-01-14T10:30:00.000Z",
+  "account": "personal",
+  "action": {
+    "type": "move",
+    "folder": "Archive"
+  },
+  "subject": "Newsletter",
+  "from": "newsletter@example.com"
+}
+```
+
+### error Event
+
+```json
+{
+  "event": "error",
+  "timestamp": "2026-01-14T10:30:00.000Z",
+  "account": "personal",
+  "error": "IMAP connection timeout",
+  "details": "Connection to imap.example.com timed out after 30s"
+}
+```
+
+## Custom Headers
+
+Add custom headers to webhook requests:
+
+```yaml
+webhooks:
+  - url: https://api.example.com/mailpilot
+    events: [email_processed]
+    headers:
+      Authorization: Bearer YOUR_API_TOKEN
+      X-Source: mailpilot
+      X-Environment: production
+```
+
+## Filtering Events
+
+Filter webhooks by account or event type:
+
+```yaml
+# Send only errors to monitoring service
+webhooks:
+  - url: https://monitoring.example.com/alerts
+    events: [error, connection_lost]
+
+# Send processed emails to Zapier
+webhooks:
+  - url: https://hooks.zapier.com/hooks/catch/...
+    events: [email_processed]
+```
+
+## Security
+
+### SSRF Protection
+
+Mailpilot blocks webhooks to private IP ranges to prevent Server-Side Request Forgery (SSRF) attacks:
+
+- Localhost: `127.0.0.1`, `::1`
+- Private networks: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`
+- Cloud metadata: `169.254.169.254`
+
+### Authentication
+
+Protect your webhook endpoints:
+
+```yaml
+webhooks:
+  - url: https://api.example.com/webhook
+    headers:
+      Authorization: Bearer ${WEBHOOK_SECRET}
+```
+
+Use environment variables for secrets:
+
+```bash
+export WEBHOOK_SECRET="your-secret-token"
+```
+
+### Signature Verification
+
+<Callout type="info">
+Mailpilot does not currently send webhook signatures. Use alternative authentication methods like bearer tokens or API keys.
+</Callout>
+
+## Testing Webhooks
+
+### Dashboard Testing
+
+Use the dashboard's webhook testing feature:
+
+1. Navigate to Settings → Accounts
+2. Add or edit an account
+3. Configure webhook URL and headers
+4. Click "Test Webhook"
+
+The dashboard will send a test payload and display the response status.
+
+### API Testing
+
+Use the `/api/test-webhook` endpoint:
+
+```bash
+curl -X POST -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://hooks.example.com/test",
+    "headers": {"X-Custom": "value"}
+  }' \
+  http://localhost:8080/api/test-webhook
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "statusCode": 200
+}
+```
+
+## Integration Examples
+
+### Slack Notifications
+
+```yaml
+webhooks:
+  - url: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+    events: [email_processed]
+```
+
+Mailpilot's payload can be formatted for Slack using a proxy service, or you can use Slack's Block Kit to format messages.
+
+### Discord Webhooks
+
+```yaml
+webhooks:
+  - url: https://discord.com/api/webhooks/YOUR/WEBHOOK
+    events: [email_processed, error]
+```
+
+### Zapier Integration
+
+```yaml
+webhooks:
+  - url: https://hooks.zapier.com/hooks/catch/YOUR/ZAP
+    events: [email_processed]
+```
+
+Connect Zapier to hundreds of services: Google Sheets, Notion, Airtable, etc.
+
+### Custom API
+
+```yaml
+webhooks:
+  - url: https://api.yourservice.com/mailpilot/events
+    events: [email_processed, action_taken, error]
+    headers:
+      Authorization: Bearer ${API_TOKEN}
+      Content-Type: application/json
+```
+
+## Retry Behavior
+
+<Callout type="warn">
+Currently, Mailpilot does not retry failed webhook deliveries. If your endpoint returns an error or times out, the webhook is lost.
+</Callout>
+
+**Workaround**: Use a queue service like:
+- AWS SQS + Lambda
+- Google Cloud Tasks
+- RabbitMQ
+
+These services handle retries and guarantee delivery.
+
+## Troubleshooting
+
+### Webhook Not Firing
+
+1. **Check event type**: Ensure the event you're expecting is in the `events` list
+2. **Check logs**: Look for webhook delivery logs in the dashboard
+3. **Test connectivity**: Use the test webhook endpoint to verify the URL is reachable
+
+### Timeout Errors
+
+**Symptom**: Webhook requests time out
+
+**Cause**: Endpoint is slow or unreachable
+
+**Fix**: Ensure your endpoint responds within 10 seconds (default timeout)
+
+### SSRF Blocked
+
+**Symptom**: Error message "Cannot test webhooks to private or local addresses"
+
+**Cause**: Webhook URL points to a private IP or localhost
+
+**Fix**: Use a publicly accessible URL or disable SSRF protection (not recommended)
+
+### Authentication Failures
+
+**Symptom**: Endpoint returns 401 or 403
+
+**Cause**: Missing or incorrect authentication headers
+
+**Fix**: Verify the `Authorization` or custom headers are correct
+
+## Next Steps
+
+- [Configure account webhooks →](/docs/configuration/accounts)
+- [View webhook logs in dashboard →](/docs/features/dashboard)
+- [API reference →](/docs/api/)

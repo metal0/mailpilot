@@ -1,0 +1,91 @@
+---
+title: Features
+description: Core features and capabilities of Mailpilot
+---
+
+import { Cards, Card } from 'fumadocs-ui/components/card';
+
+# Features
+
+Mailpilot provides powerful features for automated email processing and management.
+
+## Core Features
+
+<Cards>
+  <Card
+    title="Web Dashboard"
+    description="Modern Svelte-based dashboard with real-time monitoring and configuration management"
+    href="/docs/features/dashboard"
+  />
+  <Card
+    title="Attachment Processing"
+    description="Extract and analyze email attachments using Apache Tika integration"
+    href="/docs/features/attachments"
+  />
+  <Card
+    title="Antivirus Scanning"
+    description="Scan emails for malware using ClamAV integration"
+    href="/docs/features/antivirus"
+  />
+  <Card
+    title="Webhooks"
+    description="Real-time webhooks for email events and actions"
+    href="/docs/features/webhooks"
+  />
+  <Card
+    title="Processing Headers"
+    description="Custom IMAP headers for tracking and debugging email processing"
+    href="/docs/features/processing-headers"
+  />
+  <Card
+    title="Philosophy & Positioning"
+    description="Learn about Mailpilot's design philosophy and positioning"
+    href="/docs/features/positioning"
+  />
+</Cards>
+
+## Key Capabilities
+
+### Real-Time Monitoring
+
+- **WebSocket Updates**: Live activity feed and statistics
+- **Dashboard Widgets**: System health, LLM provider status, action breakdown
+- **Account Management**: Pause, resume, reconnect accounts from the UI
+- **Log Streaming**: Real-time log viewer with filtering
+
+### Email Processing
+
+- **LLM-Powered Classification**: Use OpenAI, Anthropic, Ollama, or local models
+- **Flexible Actions**: Move, flag, mark as read, delete, or spam
+- **Folder Management**: Predefined or auto-create folder modes
+- **Batch Processing**: Handle multiple accounts and folders simultaneously
+
+### Integration & Extensibility
+
+- **Webhooks**: Trigger external services on email events
+- **API Access**: RESTful API with API key authentication
+- **Custom Headers**: Track processing metadata in IMAP headers
+- **Export Capabilities**: Export audit logs as CSV or JSON
+
+### Security & Privacy
+
+- **Local Processing**: All email processing happens on your server
+- **Antivirus Scanning**: ClamAV integration for malware detection
+- **API Key Permissions**: Granular permission system for API access
+- **Session Security**: bcrypt password hashing, CSRF protection, rate limiting
+
+### Testing & Development
+
+- **Sandbox Mode**: Test classification rules without affecting live emails
+- **Dry Run Mode**: Preview actions without executing them
+- **Prompt Testing**: Test prompts against sample emails in the dashboard
+- **Dead Letter Queue**: Retry failed emails with detailed error messages
+
+## Next Steps
+
+Explore the features in detail:
+
+- [Set up the dashboard →](/docs/features/dashboard)
+- [Configure attachment processing →](/docs/features/attachments)
+- [Enable antivirus scanning →](/docs/features/antivirus)
+- [Set up webhooks →](/docs/features/webhooks)
