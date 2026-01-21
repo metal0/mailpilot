@@ -67,8 +67,8 @@ export function probeTlsCertificate(
                 (subjectObj?.CN ?? subjectObj?.O ?? "Unknown"),
               issuer: typeof cert.issuer === "string" ? cert.issuer :
                 (issuerObj?.CN ?? issuerObj?.O ?? "Unknown"),
-              validFrom: cert.valid_from ?? "",
-              validTo: cert.valid_to ?? "",
+              validFrom: cert.valid_from,
+              validTo: cert.valid_to,
               selfSigned: false,
             },
           });
@@ -94,7 +94,7 @@ export function probeTlsCertificate(
             cleanup();
             try { unsafeSocket.destroy(); } catch { /* ignore */ }
 
-            if (cert && cert.fingerprint256) {
+            if (cert) {
               const isSelfSigned = error.code === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
                 error.code === "SELF_SIGNED_CERT_IN_CHAIN" ||
                 error.message.includes("self-signed");
@@ -111,8 +111,8 @@ export function probeTlsCertificate(
                     (subjectObj?.CN ?? subjectObj?.O ?? "Unknown"),
                   issuer: typeof cert.issuer === "string" ? cert.issuer :
                     (issuerObj?.CN ?? issuerObj?.O ?? "Unknown"),
-                  validFrom: cert.valid_from ?? "",
-                  validTo: cert.valid_to ?? "",
+                  validFrom: cert.valid_from,
+                  validTo: cert.valid_to,
                   selfSigned: isSelfSigned,
                 },
               });
