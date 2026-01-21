@@ -89,8 +89,16 @@ export function probeTlsCertificate(
 
           try { socket?.destroy(); } catch { /* ignore */ }
 
-          // Connect without validation to get cert info
-          const unsafeSocket = tls.connect({ host, port, rejectUnauthorized: false }, () => {
+          // SECURITY: rejectUnauthorized: false is intentional here.
+          // This is a certificate inspection tool that retrieves cert info from
+          // servers with self-signed certificates so users can review and trust them.
+          // The connection is immediately closed after retrieving cert info - no
+          // sensitive data is sent or received.
+          const unsafeSocket = tls.connect({
+            host,
+            port,
+            rejectUnauthorized: false, // lgtm[js/disabling-certificate-validation]
+          }, () => {
             const cert = unsafeSocket.getPeerCertificate();
             cleanup();
             try { unsafeSocket.destroy(); } catch { /* ignore */ }
