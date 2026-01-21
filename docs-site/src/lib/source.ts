@@ -1,6 +1,8 @@
 import { loader } from 'fumadocs-core/source';
-import { createMDXSource, type InferPageType, type InferMetaType } from 'fumadocs-mdx';
+import { createMDXSource } from 'fumadocs-mdx';
 import { docs, meta } from '@/.source';
+import type { ReactElement } from 'react';
+import type { TableOfContents } from 'fumadocs-core/server';
 
 const mdxSource = createMDXSource(docs, meta);
 
@@ -11,8 +13,13 @@ export const source = loader({
   },
 });
 
-export type Page = InferPageType<typeof mdxSource>;
-export type Meta = InferMetaType<typeof mdxSource>;
+export interface PageData {
+  title: string;
+  description?: string;
+  body: (props: Record<string, unknown>) => ReactElement;
+  toc: TableOfContents;
+  full?: boolean;
+}
 
 export const { getPage, getPages, pageTree } = source;
 
