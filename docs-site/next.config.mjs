@@ -10,7 +10,10 @@ const config = {
     unoptimized: true  // Required for static export
   },
   basePath: process.env.VERCEL ? '' : (process.env.NODE_ENV === 'production' ? '/mailpilot' : ''),
-  trailingSlash: true
+  trailingSlash: true,
+  eslint: {
+    ignoreDuringBuilds: true  // ESLint runs separately in CI
+  }
 };
 
 export default withMDX(config);
