@@ -1325,7 +1325,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
             logger.warn("Cannot probe certificate for STARTTLS - requires IMAP protocol negotiation");
             return c.json({
               success: false,
-              error: "Self-signed certificate detected. STARTTLS connections don't support certificate inspection in this interface. Use direct TLS on port 993 instead, or manually inspect the certificate using: openssl s_client -starttls imap -connect " + body.host + ":" + (body.port || 143),
+              error: `Self-signed certificate detected. STARTTLS connections don't support certificate inspection in this interface. Use direct TLS on port 993 instead, or manually inspect the certificate using: openssl s_client -starttls imap -connect ${body.host}:${body.port || 143}`,
               errorCode,
               rawError: errorMessage,
             });
