@@ -99,6 +99,12 @@ function createTables(database: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_dead_letter_resolved
     ON dead_letter(resolved_at);
+
+    CREATE TABLE IF NOT EXISTS account_settings (
+      account_name TEXT PRIMARY KEY,
+      paused INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    );
   `);
 
   // Migration: Add retry columns to existing dead_letter table

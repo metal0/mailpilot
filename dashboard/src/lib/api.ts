@@ -222,13 +222,27 @@ export interface ImapTestParams {
   oauth_client_secret?: string;
   oauth_refresh_token?: string;
   name?: string; // Account name - used to lookup existing credentials if masked
+  trusted_tls_fingerprints?: string[]; // Trusted certificate fingerprints
+}
+
+export interface CertificateInfo {
+  fingerprint256: string;
+  subject: string;
+  issuer: string;
+  validFrom: string;
+  validTo: string;
+  selfSigned: boolean;
 }
 
 export interface ImapTestResult {
   success: boolean;
   error?: string;
+  errorCode?: string;
+  rawError?: string;
   capabilities?: string[];
   folders?: string[];
+  certificateInfo?: CertificateInfo;
+  requiresCertificateTrust?: boolean;
 }
 
 export async function testImapConnection(params: ImapTestParams): Promise<ImapTestResult> {

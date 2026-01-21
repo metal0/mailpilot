@@ -673,3 +673,196 @@ test.describe('API - Protected Endpoints', () => {
     }
   });
 });
+
+test.describe('API - IMAP Test Endpoint', () => {
+  test('POST /api/imap/test returns error code for invalid host', async ({ request }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+
+    try {
+      await reporter.step('Login');
+      const cookie = await getAuthCookie(request);
+      await reporter.stepComplete();
+
+      await reporter.step('POST /api/imap/test with invalid host');
+      const response = await request.post('/api/imap/test', {
+        headers: { Cookie: cookie },
+        data: {
+          host: 'nonexistent.invalid.host.example.com',
+          port: 993,
+          tls: 'tls',
+          username: 'test@example.com',
+          password: 'test123',
+        },
+      });
+      await reporter.stepComplete();
+
+      await reporter.step('Verify response structure has errorCode');
+      const body = await response.json();
+      expect(body).toHaveProperty('success', false);
+      expect(body).toHaveProperty('error');
+      expect(body).toHaveProperty('errorCode');
+      // Should be HOST_NOT_FOUND for DNS failure
+      expect(['HOST_NOT_FOUND', 'TIMEOUT', 'CONNECTION_FAILED']).toContain(body.errorCode);
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('POST /api/imap/test returns error code for connection refused', async ({ request }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+
+    try {
+      await reporter.step('Login');
+      const cookie = await getAuthCookie(request);
+      await reporter.stepComplete();
+
+      await reporter.step('POST /api/imap/test with closed port');
+      const response = await request.post('/api/imap/test', {
+        headers: { Cookie: cookie },
+        data: {
+          host: 'localhost',
+          port: 59999, // Unlikely to have anything listening
+          tls: 'tls',
+          username: 'test@example.com',
+          password: 'test123',
+        },
+      });
+      await reporter.stepComplete();
+
+      await reporter.step('Verify response has connection error code');
+      const body = await response.json();
+      expect(body).toHaveProperty('success', false);
+      expect(body).toHaveProperty('error');
+      expect(body).toHaveProperty('errorCode');
+      // Should be CONNECTION_REFUSED or TIMEOUT
+      expect(['CONNECTION_REFUSED', 'TIMEOUT', 'CONNECTION_FAILED']).toContain(body.errorCode);
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('POST /api/imap/test requires authentication', async ({ baseURL }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+
+    try {
+      const freshRequest = await playwrightRequest.newContext({ baseURL });
+
+      await reporter.step('POST /api/imap/test without auth');
+      const response = await freshRequest.post('/api/imap/test', {
+        data: {
+          host: 'imap.gmail.com',
+          port: 993,
+          tls: 'tls',
+          username: 'test@example.com',
+          password: 'test123',
+        },
+      });
+      await reporter.stepComplete();
+
+      await reporter.step('Verify response status 401');
+      expect(response.status()).toBe(401);
+      await reporter.stepComplete();
+
+      await freshRequest.dispose();
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('POST /api/imap/test returns rawError for debugging', async ({ request }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+
+    try {
+      await reporter.step('Login');
+      const cookie = await getAuthCookie(request);
+      await reporter.stepComplete();
+
+      await reporter.step('POST /api/imap/test with invalid connection');
+      const response = await request.post('/api/imap/test', {
+        headers: { Cookie: cookie },
+        data: {
+          host: 'localhost',
+          port: 59998,
+          tls: 'tls',
+          username: 'test@example.com',
+          password: 'test123',
+        },
+      });
+      await reporter.stepComplete();
+
+      await reporter.step('Verify response includes rawError');
+      const body = await response.json();
+      expect(body).toHaveProperty('success', false);
+      expect(body).toHaveProperty('rawError');
+      // rawError should contain the original technical error message
+      expect(typeof body.rawError).toBe('string');
+      await reporter.stepComplete();
+
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+
+  test('POST /api/imap/probe requires authentication', async ({ baseURL }, testInfo) => {
+    const reporter = createTestReporter(testInfo);
+
+    try {
+      const freshRequest = await playwrightRequest.newContext({ baseURL });
+
+      await reporter.step('POST /api/imap/probe without auth');
+      const response = await freshRequest.post('/api/imap/probe', {
+        data: {
+          host: 'imap.gmail.com',
+        },
+      });
+      await reporter.stepComplete();
+
+      await reporter.step('Verify response status 401');
+      expect(response.status()).toBe(401);
+      await reporter.stepComplete();
+
+      await freshRequest.dispose();
+      reporter.complete('pass');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await reporter.stepFailed(msg);
+      reporter.complete('fail', msg);
+      throw error;
+    } finally {
+      reporter.saveJsonReport();
+      reporter.saveMarkdownReport();
+    }
+  });
+});

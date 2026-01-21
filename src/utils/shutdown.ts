@@ -102,12 +102,50 @@ async function executeShutdown(signal: string): Promise<void> {
   process.exit(0);
 }
 
+// List of error patterns that are recoverable and shouldn't crash the app
+// Note: Only include SPECIFIC certificate errors - generic "certificate" is too broad
+// and could suppress critical security errors like "certificate pinning violation" or "certificate revoked"
+const RECOVERABLE_ERROR_PATTERNS = [
+  "self-signed certificate",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "CERT_HAS_EXPIRED",
+  "ECONNREFUSED",
+  "ENOTFOUND",
+  "ETIMEDOUT",
+  "Connection timeout",
+  "Unexpected close",
+  "socket hang up",
+  "IMAP",
+];
+
+function isRecoverableError(error: Error): boolean {
+  const message = error.message.toLowerCase();
+  const stack = (error.stack || "").toLowerCase();
+
+  return RECOVERABLE_ERROR_PATTERNS.some(pattern => {
+    const lowerPattern = pattern.toLowerCase();
+    return message.includes(lowerPattern) || stack.includes(lowerPattern);
+  });
+}
+
 export function setupShutdownHandlers(): void {
   process.on("SIGTERM", () => void executeShutdown("SIGTERM"));
   process.on("SIGINT", () => void executeShutdown("SIGINT"));
 
   process.on("uncaughtException", (error) => {
-    logger.error("Uncaught exception", {
+    // Check if this is a recoverable error (e.g., IMAP connection issues)
+    if (isRecoverableError(error)) {
+      logger.error("Recoverable uncaught exception (not shutting down)", {
+        error: error.message,
+        stack: error.stack,
+      });
+      // Don't shutdown for recoverable errors - just log them
+      return;
+    }
+
+    logger.error("Fatal uncaught exception", {
       error: error.message,
       stack: error.stack,
     });
@@ -115,7 +153,17 @@ export function setupShutdownHandlers(): void {
   });
 
   process.on("unhandledRejection", (reason) => {
-    logger.error("Unhandled rejection", {
+    // Check if this is a recoverable error
+    if (reason instanceof Error && isRecoverableError(reason)) {
+      logger.error("Recoverable unhandled rejection (not shutting down)", {
+        reason: reason.message,
+        stack: reason.stack,
+      });
+      // Don't shutdown for recoverable errors - just log them
+      return;
+    }
+
+    logger.error("Fatal unhandled rejection", {
       reason: reason instanceof Error ? reason.message : String(reason),
     });
     void executeShutdown("unhandledRejection");

@@ -21,7 +21,7 @@ AI-powered email processing daemon that uses LLM classification to automatically
 - **Attachment Intelligence** - Extract and analyze text from PDFs, Word docs, and spreadsheets via Apache Tika
 - **Dead Letter Queue** - Failed classifications automatically queued for manual review with one-click retry
 - **Privacy-First Design** - Email content never stored or logged; only message IDs and action records persisted
-- **Works With Any IMAP Server** - Gmail, Outlook, FastMail, self-hosted — any provider with IMAP support
+- **Works With Any IMAP Server** - Gmail, Outlook, FastMail, self-hosted — any provider with IMAP support, including servers with self-signed certificates
 - **Antivirus Integration** - Optional ClamAV scanning to quarantine or flag suspicious attachments
 
 ## Quick Start
@@ -56,6 +56,9 @@ accounts:
       host: imap.gmail.com
       username: ${GMAIL_USER}
       password: ${GMAIL_APP_PASSWORD}
+      # For self-signed certificates, add trusted fingerprints:
+      # trusted_tls_fingerprints:
+      #   - "AA:BB:CC:DD:..." # SHA-256 fingerprint
 ```
 
 Set environment variables:

@@ -146,6 +146,45 @@ Real-time system logs with:
 
 ### Account Settings
 
+#### TLS/SSL Configuration
+
+When adding or editing an account, the dashboard provides intelligent TLS configuration:
+
+**Auto-Detection**: When probing an IMAP server, the dashboard automatically detects:
+- Available ports (993 for TLS, 143 for STARTTLS or plaintext)
+- Supported TLS modes (TLS, STARTTLS, or plaintext)
+- Server capabilities and IDLE support
+
+**TLS Modes**:
+| Mode | Description |
+|------|-------------|
+| `tls` | Direct TLS connection (port 993) - most secure, recommended |
+| `starttls` | Plain connection upgraded to TLS via STARTTLS command (port 143) |
+| `insecure` | No encryption - **not recommended**, only for isolated/test networks |
+
+**Self-Signed Certificates**: For servers with self-signed or untrusted certificates:
+
+1. When connection test fails due to certificate error, a modal displays certificate details
+2. Review the certificate information (subject, issuer, fingerprint, validity)
+3. Click "Trust Certificate" to add the SHA-256 fingerprint to trusted list
+4. The fingerprint is stored in `trusted_tls_fingerprints` in your account config
+
+**Manual Fingerprint Configuration**:
+
+```yaml
+accounts:
+  - name: my-server
+    imap:
+      host: mail.internal.company
+      port: 993
+      username: user@company.com
+      password: secret
+      trusted_tls_fingerprints:
+        - "sha256:AB:CD:EF:12:34:56:78:90:..."
+```
+
+**Port Lock**: After auto-detection, the port field is locked to prevent accidental changes. Click the lock icon to unlock and manually edit the port.
+
 #### Polling Interval
 
 The `polling_interval` setting is configured per-account and controls how often Mailpilot checks for new emails when IMAP IDLE is not supported:

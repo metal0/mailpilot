@@ -170,10 +170,16 @@ function buildHeaders(provider: LlmProviderConfig): Record<string, string> {
   return headers;
 }
 
+export interface TestConnectionResult {
+  success: boolean;
+  error?: string;
+  errorCode?: string;
+}
+
 export async function testConnection(
   provider: LlmProviderConfig,
   model: string
-): Promise<boolean> {
+): Promise<TestConnectionResult> {
   try {
     const result = await classifyEmail({
       provider,
@@ -181,12 +187,47 @@ export async function testConnection(
       prompt: 'Test connection. Respond with: {"actions": [{"type": "noop"}]}',
     });
 
-    return result.actions.length > 0;
+    return { success: result.actions.length > 0 };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
     logger.error("LLM connection test failed", {
       provider: provider.name,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage,
     });
-    return false;
+
+    // Parse error to provide more helpful messages
+    let userFriendlyError = errorMessage;
+    let errorCode = "CONNECTION_FAILED";
+
+    if (errorMessage.includes("403")) {
+      if (errorMessage.includes("API key") && errorMessage.includes("not enabled")) {
+        errorCode = "API_KEY_NOT_NEEDED";
+        userFriendlyError = "This server doesn't require an API key. Try removing the API key from the configuration.";
+      } else {
+        errorCode = "FORBIDDEN";
+        userFriendlyError = "Access denied (403). Check your API key permissions.";
+      }
+    } else if (errorMessage.includes("401")) {
+      errorCode = "UNAUTHORIZED";
+      userFriendlyError = "Invalid API key (401). Check that your API key is correct.";
+    } else if (errorMessage.includes("404")) {
+      errorCode = "MODEL_NOT_FOUND";
+      userFriendlyError = `Model "${model}" not found. Check the model name is correct.`;
+    } else if (errorMessage.includes("429")) {
+      errorCode = "RATE_LIMITED";
+      userFriendlyError = "Rate limited (429). Try again later.";
+    } else if (errorMessage.includes("ECONNREFUSED")) {
+      errorCode = "CONNECTION_REFUSED";
+      userFriendlyError = "Connection refused. Check if the LLM server is running and the URL is correct.";
+    } else if (errorMessage.includes("ENOTFOUND")) {
+      errorCode = "HOST_NOT_FOUND";
+      userFriendlyError = "Host not found. Check the API URL.";
+    } else if (errorMessage.includes("ETIMEDOUT") || errorMessage.includes("timeout")) {
+      errorCode = "TIMEOUT";
+      userFriendlyError = "Connection timed out. The server may be unavailable.";
+    }
+
+    return { success: false, error: userFriendlyError, errorCode };
   }
 }

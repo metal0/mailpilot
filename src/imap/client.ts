@@ -1,4 +1,5 @@
-import { ImapFlow } from "imapflow";
+import { ImapFlow, type ImapFlowOptions } from "imapflow";
+import type * as tls from "node:tls";
 import type { ImapConfig, TlsMode } from "../config/schema.js";
 import { createLogger } from "../utils/logger.js";
 import { retryIndefinitely } from "../utils/retry.js";
@@ -60,20 +61,64 @@ export function createImapClient(options: ImapClientOptions): ImapClient {
     };
   }
 
-  const client = new ImapFlow({
+  // Build TLS options based on configuration
+  const tlsOptions: tls.ConnectionOptions = {};
+  const trustedFingerprints = config.trusted_tls_fingerprints || [];
+
+  if (trustedFingerprints.length > 0) {
+    // When we have trusted fingerprints, allow self-signed certs but verify the fingerprint
+    tlsOptions.rejectUnauthorized = false;
+    tlsOptions.checkServerIdentity = (_hostname, cert) => {
+      const fingerprint = cert.fingerprint256;
+      const isTrusted = trustedFingerprints.some(fp =>
+        fp.replace(/^sha256:/i, "").toUpperCase() === fingerprint.toUpperCase()
+      );
+      if (!isTrusted) {
+        return new Error(`Certificate fingerprint ${fingerprint} not in trusted list`);
+      }
+      return undefined;
+    };
+  }
+
+  // Determine if we should use secure connection
+  // "insecure" mode means no TLS at all (plaintext), not bypassing certificate validation
+  const useSecure = shouldUseSecure(config.tls);
+
+  // Build IMAP options, conditionally including TLS options if present
+  const imapOptions: ImapFlowOptions = {
     host: config.host,
     port: config.port,
-    secure: shouldUseSecure(config.tls),
+    secure: useSecure,
     auth: authConfig,
     logger: false,
-  });
+    ...(useSecure && Object.keys(tlsOptions).length > 0 ? { tls: tlsOptions } : {}),
+  };
+
+  const client = new ImapFlow(imapOptions);
 
   // Set up error handler to prevent uncaught exceptions from socket errors
   client.on("error", (error: Error) => {
-    log.error("IMAP client error", {
-      error: error.message,
-      stack: error.stack,
-    });
+    // Log the error but don't rethrow - let the connection retry handle it
+    const isCertError = error.message.includes("self-signed") ||
+      error.message.includes("certificate") ||
+      error.message.includes("CERT_");
+
+    if (isCertError) {
+      log.error("IMAP TLS certificate error - check trusted_tls_fingerprints config", {
+        error: error.message,
+        hint: "If this is a self-signed certificate, add its fingerprint to trusted_tls_fingerprints in your account config",
+      });
+    } else {
+      log.error("IMAP client error", {
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  });
+
+  // Handle connection close events
+  client.on("close", () => {
+    log.debug("IMAP connection closed");
   });
 
   return {
@@ -316,12 +361,27 @@ export function createImapClient(options: ImapClientOptions): ImapClient {
   };
 }
 
+/**
+ * Determines if we should use a secure (TLS) connection from the start.
+ *
+ * TLS modes:
+ * - "tls": Direct TLS connection on port (typically 993)
+ * - "starttls": Plain connection, then upgrade to TLS after STARTTLS command
+ * - "insecure": No TLS at all - plaintext connection only (NOT recommended)
+ * - "auto": Default to TLS
+ *
+ * Note: "insecure" means NO encryption, not "bypass certificate validation".
+ * For self-signed certificates, use trusted_tls_fingerprints config instead.
+ */
 function shouldUseSecure(tlsMode: TlsMode): boolean {
   switch (tlsMode) {
     case "tls":
       return true;
     case "starttls":
+      // STARTTLS starts plain and upgrades - ImapFlow handles this automatically
+      return false;
     case "insecure":
+      // No TLS at all - plaintext only
       return false;
     case "auto":
     default:
