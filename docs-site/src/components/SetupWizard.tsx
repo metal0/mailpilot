@@ -133,8 +133,8 @@ export function SetupWizard() {
   };
 
   return (
-    <div className="not-prose my-8 border rounded-lg p-6 bg-card">
-      <h3 className="text-lg font-semibold mb-4">
+    <div className="not-prose my-8 border border-fd-border rounded-lg p-6 bg-fd-card">
+      <h3 className="text-lg font-semibold mb-4 text-fd-foreground">
         Interactive Setup Wizard
       </h3>
 
@@ -145,19 +145,19 @@ export function SetupWizard() {
           active={step === 'email-provider'}
           completed={selectedEmail !== null}
         />
-        <div className="flex-1 h-px bg-border mx-2" />
+        <div className="flex-1 h-px bg-fd-border mx-2" />
         <StepIndicator
           label="LLM Provider"
           active={step === 'llm-provider'}
           completed={selectedLLM !== null}
         />
-        <div className="flex-1 h-px bg-border mx-2" />
+        <div className="flex-1 h-px bg-fd-border mx-2" />
         <StepIndicator
           label="Use Case"
           active={step === 'use-case'}
           completed={selectedUseCase !== null}
         />
-        <div className="flex-1 h-px bg-border mx-2" />
+        <div className="flex-1 h-px bg-fd-border mx-2" />
         <StepIndicator
           label="Configuration"
           active={step === 'result'}
@@ -205,17 +205,17 @@ function StepIndicator({ label, active, completed }: { label: string; active: bo
   return (
     <div className="flex flex-col items-center">
       <div
-        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
           completed
-            ? 'bg-primary text-primary-foreground'
+            ? 'bg-fd-primary text-fd-primary-foreground'
             : active
-            ? 'bg-primary/20 text-primary border-2 border-primary'
-            : 'bg-muted text-muted-foreground'
+            ? 'bg-fd-primary/20 text-fd-primary border-2 border-fd-primary'
+            : 'bg-fd-muted text-fd-muted-foreground'
         }`}
       >
         {completed ? '✓' : ''}
       </div>
-      <span className="text-xs mt-1 text-muted-foreground">{label}</span>
+      <span className="text-xs mt-1 text-fd-muted-foreground">{label}</span>
     </div>
   );
 }
@@ -223,19 +223,19 @@ function StepIndicator({ label, active, completed }: { label: string; active: bo
 function EmailProviderStep({ providers, onSelect }: { providers: EmailProvider[]; onSelect: (p: EmailProvider) => void }) {
   return (
     <div>
-      <h4 className="font-medium mb-4">Choose your email provider:</h4>
+      <h4 className="font-medium mb-4 text-fd-foreground">Choose your email provider:</h4>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {providers.map((provider) => (
           <button
             key={provider.id}
             onClick={() => onSelect(provider)}
-            className="p-4 border rounded-lg hover:border-primary hover:bg-accent transition-colors text-left"
+            className="p-4 border border-fd-border rounded-lg hover:border-fd-primary hover:bg-fd-accent transition-colors text-left"
           >
-            <div className="font-medium">{provider.name}</div>
-            <div className="text-sm text-muted-foreground mt-1">
+            <div className="font-medium text-fd-foreground">{provider.name}</div>
+            <div className="text-sm text-fd-muted-foreground mt-1">
               {provider.host}:{provider.port}
             </div>
-            <div className="text-xs text-muted-foreground mt-1">
+            <div className="text-xs text-fd-muted-foreground mt-1">
               Auth: {provider.authType === 'oauth2' ? 'OAuth 2.0' : 'App Password'}
             </div>
           </button>
@@ -263,20 +263,20 @@ function LLMProviderStep({
 
   return (
     <div>
-      <h4 className="font-medium mb-4">Choose your LLM provider:</h4>
+      <h4 className="font-medium mb-4 text-fd-foreground">Choose your LLM provider:</h4>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {providers.map((provider) => (
           <button
             key={provider.id}
             onClick={() => onSelect(provider)}
-            className="p-4 border rounded-lg hover:border-primary hover:bg-accent transition-colors text-left"
+            className="p-4 border border-fd-border rounded-lg hover:border-fd-primary hover:bg-fd-accent transition-colors text-left"
           >
-            <div className="font-medium">{provider.name}</div>
-            <div className="text-sm text-muted-foreground mt-1">
+            <div className="font-medium text-fd-foreground">{provider.name}</div>
+            <div className="text-sm text-fd-muted-foreground mt-1">
               Cost: {costLabels[provider.costLevel]}
             </div>
             {provider.requiresApiKey && (
-              <div className="text-xs text-muted-foreground mt-1">
+              <div className="text-xs text-fd-muted-foreground mt-1">
                 Requires API key
               </div>
             )}
@@ -285,7 +285,7 @@ function LLMProviderStep({
       </div>
       <button
         onClick={onBack}
-        className="mt-4 px-4 py-2 text-sm border rounded-lg hover:bg-accent"
+        className="mt-4 px-4 py-2 text-sm border border-fd-border rounded-lg hover:bg-fd-accent text-fd-foreground"
       >
         ← Back
       </button>
@@ -304,16 +304,16 @@ function UseCaseStep({
 }) {
   return (
     <div>
-      <h4 className="font-medium mb-4">What will you use Mailpilot for?</h4>
+      <h4 className="font-medium mb-4 text-fd-foreground">What will you use Mailpilot for?</h4>
       <div className="grid grid-cols-1 gap-3">
         {useCases.map((useCase) => (
           <button
             key={useCase.id}
             onClick={() => onSelect(useCase)}
-            className="p-4 border rounded-lg hover:border-primary hover:bg-accent transition-colors text-left"
+            className="p-4 border border-fd-border rounded-lg hover:border-fd-primary hover:bg-fd-accent transition-colors text-left"
           >
-            <div className="font-medium">{useCase.name}</div>
-            <div className="text-sm text-muted-foreground mt-1">
+            <div className="font-medium text-fd-foreground">{useCase.name}</div>
+            <div className="text-sm text-fd-muted-foreground mt-1">
               {useCase.description}
             </div>
           </button>
@@ -321,7 +321,7 @@ function UseCaseStep({
       </div>
       <button
         onClick={onBack}
-        className="mt-4 px-4 py-2 text-sm border rounded-lg hover:bg-accent"
+        className="mt-4 px-4 py-2 text-sm border border-fd-border rounded-lg hover:bg-fd-accent text-fd-foreground"
       >
         ← Back
       </button>
@@ -364,12 +364,12 @@ function ResultStep({
 
   return (
     <div>
-      <h4 className="font-medium mb-4">Your customized configuration:</h4>
+      <h4 className="font-medium mb-4 text-fd-foreground">Your customized configuration:</h4>
 
       <div className="space-y-4">
         {/* Summary */}
-        <div className="bg-muted p-4 rounded-lg">
-          <div className="text-sm">
+        <div className="bg-fd-muted p-4 rounded-lg">
+          <div className="text-sm text-fd-foreground">
             <div><strong>Email:</strong> {email.name}</div>
             <div><strong>LLM:</strong> {llm.name}</div>
             <div><strong>Use Case:</strong> {useCase.name}</div>
@@ -379,8 +379,8 @@ function ResultStep({
         {/* Environment variables */}
         {envVars.length > 0 && (
           <div>
-            <h5 className="text-sm font-medium mb-2">1. Set environment variables:</h5>
-            <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
+            <h5 className="text-sm font-medium mb-2 text-fd-foreground">1. Set environment variables:</h5>
+            <pre className="bg-fd-muted p-3 rounded text-xs overflow-x-auto text-fd-foreground">
               {envVars.map((v) => `export ${v}="your-${v.toLowerCase().replace(/_/g, '-')}"`).join('\n')}
             </pre>
           </div>
@@ -388,28 +388,28 @@ function ResultStep({
 
         {/* Configuration */}
         <div>
-          <h5 className="text-sm font-medium mb-2">2. Create config.yaml:</h5>
-          <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
+          <h5 className="text-sm font-medium mb-2 text-fd-foreground">2. Create config.yaml:</h5>
+          <pre className="bg-fd-muted p-3 rounded text-xs overflow-x-auto text-fd-foreground">
             {config}
           </pre>
         </div>
 
         {/* Next steps */}
         <div>
-          <h5 className="text-sm font-medium mb-2">3. Next steps:</h5>
-          <ul className="text-sm space-y-1 list-disc list-inside">
+          <h5 className="text-sm font-medium mb-2 text-fd-foreground">3. Next steps:</h5>
+          <ul className="text-sm space-y-1 list-disc list-inside text-fd-foreground">
             <li>
-              <a href={email.docsUrl} className="text-primary hover:underline">
+              <a href={email.docsUrl} className="text-fd-primary hover:underline">
                 Follow {email.name} setup guide →
               </a>
             </li>
             <li>
-              <a href={llm.docsUrl} className="text-primary hover:underline">
+              <a href={llm.docsUrl} className="text-fd-primary hover:underline">
                 Configure {llm.name} →
               </a>
             </li>
             <li>
-              <a href="/docs/getting-started/installation/" className="text-primary hover:underline">
+              <a href="/docs/getting-started/installation/" className="text-fd-primary hover:underline">
                 Complete installation →
               </a>
             </li>
@@ -419,7 +419,7 @@ function ResultStep({
 
       <button
         onClick={onReset}
-        className="mt-6 px-4 py-2 text-sm border rounded-lg hover:bg-accent"
+        className="mt-6 px-4 py-2 text-sm border border-fd-border rounded-lg hover:bg-fd-accent text-fd-foreground"
       >
         ← Start Over
       </button>

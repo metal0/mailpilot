@@ -26,6 +26,8 @@ AI-powered email processing daemon that uses LLM classification to automatically
 
 ## Quick Start
 
+**New to Mailpilot?** Try the [Interactive Setup Wizard](https://metal0.github.io/mailpilot/docs/getting-started/installation/) to generate a customized configuration for your email provider, LLM, and use case.
+
 ```bash
 # Clone and install
 git clone https://github.com/metal0/mailpilot.git
@@ -78,6 +80,7 @@ Full documentation is available at **[metal0.github.io/mailpilot](https://metal0
 
 | Guide | Description |
 |-------|-------------|
+| [Setup Wizard](https://metal0.github.io/mailpilot/docs/getting-started/installation/) | Interactive configuration generator |
 | [Installation](https://metal0.github.io/mailpilot/docs/getting-started/installation/) | Setup and requirements |
 | [Quick Start](https://metal0.github.io/mailpilot/docs/getting-started/quick-start/) | Get running in 5 minutes |
 | [Configuration Reference](https://metal0.github.io/mailpilot/docs/configuration/) | All configuration options |

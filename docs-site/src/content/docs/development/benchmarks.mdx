@@ -116,7 +116,7 @@ Average CPU usage during email processing:
 
 | Scenario | Baseline | Recommended | High-Performance |
 |----------|----------|-------------|------------------|
-| **Idle (IMAP IDLE)** | 1% | <1% | <1% |
+| **Idle (IMAP IDLE)** | 1% | &lt;1% | &lt;1% |
 | **Processing (API)** | 8-15% | 5-10% | 3-7% |
 | **Processing (Ollama 3b)** | 45-80% | 30-60% | 15-35% |
 | **Processing (Ollama 14b)** | 95-100%* | 75-90% | 40-65% |
@@ -127,8 +127,8 @@ Average CPU usage during email processing:
 
 | Provider Type | Idle | Light (100/day) | Heavy (1000/day) |
 |---------------|------|-----------------|------------------|
-| **API Providers** | <1 KB/s | 5-10 KB/s | 50-80 KB/s |
-| **Local Models** | <1 KB/s | <1 KB/s | <1 KB/s |
+| **API Providers** | &lt;1 KB/s | 5-10 KB/s | 50-80 KB/s |
+| **Local Models** | &lt;1 KB/s | &lt;1 KB/s | &lt;1 KB/s |
 
 *Network usage is minimal - mainly IMAP heartbeat and API calls*
 
@@ -227,7 +227,7 @@ accounts:
 - Hardware: Recommended
 
 **Results:**
-- **Processing time**: <30 seconds behind email arrival
+- **Processing time**: &lt;30 seconds behind email arrival
 - **Monthly cost**: ~$0.05
 - **CPU usage**: 5-8% average
 - **RAM usage**: 150 MB
@@ -240,7 +240,7 @@ accounts:
 - Hardware: High-Performance
 
 **Results:**
-- **Processing time**: <15 seconds behind email arrival
+- **Processing time**: &lt;15 seconds behind email arrival
 - **Monthly cost**: ~$1.50 (mostly Claude API)
 - **CPU usage**: 12-20% average
 - **RAM usage**: 600 MB (including Ollama model)

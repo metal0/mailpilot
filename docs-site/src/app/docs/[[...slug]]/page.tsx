@@ -1,13 +1,16 @@
 import { getPage, getPages } from '@/lib/source';
 import type { Metadata } from 'next';
-import { DocsPage, DocsBody } from 'fumadocs-ui/layouts/docs/page';
+import { DocsPage, DocsBody } from 'fumadocs-ui/page';
 import { notFound } from 'next/navigation';
+import defaultMdxComponents from 'fumadocs-ui/mdx';
+import { SetupWizard } from '@/components/SetupWizard';
+import { ConfigSandbox } from '@/components/ConfigSandbox';
+import { MatrixChatWidget } from '@/components/MatrixChatWidget';
 
-export default async function Page({
-  params,
-}: {
-  params: { slug?: string[] };
+export default async function Page(props: {
+  params: Promise<{ slug?: string[] }>;
 }) {
+  const params = await props.params;
   const page = getPage(params.slug);
 
   if (!page) notFound();
@@ -17,8 +20,7 @@ export default async function Page({
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
       <DocsBody>
-        <h1>{page.data.title}</h1>
-        <MDX />
+        <MDX components={{ ...defaultMdxComponents, SetupWizard, ConfigSandbox, MatrixChatWidget }} />
       </DocsBody>
     </DocsPage>
   );
@@ -30,11 +32,10 @@ export async function generateStaticParams() {
   }));
 }
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { slug?: string[] };
+export async function generateMetadata(props: {
+  params: Promise<{ slug?: string[] }>;
 }): Promise<Metadata> {
+  const params = await props.params;
   const page = getPage(params.slug);
 
   if (!page) notFound();

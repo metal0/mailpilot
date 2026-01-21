@@ -21,6 +21,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@/.source": [
+        "./.source/index"
       ]
     },
     "strict": true,
