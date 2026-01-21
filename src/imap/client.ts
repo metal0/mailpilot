@@ -83,15 +83,17 @@ export function createImapClient(options: ImapClientOptions): ImapClient {
   // Determine if we should use secure connection
   // "insecure" mode means no TLS at all (plaintext), not bypassing certificate validation
   const useSecure = shouldUseSecure(config.tls);
+  const usesTls = config.tls !== "insecure"; // Both TLS and STARTTLS use TLS options
 
   // Build IMAP options, conditionally including TLS options if present
+  // Note: TLS options apply to both direct TLS and STARTTLS modes
   const imapOptions: ImapFlowOptions = {
     host: config.host,
     port: config.port,
     secure: useSecure,
     auth: authConfig,
     logger: false,
-    ...(useSecure && Object.keys(tlsOptions).length > 0 ? { tls: tlsOptions } : {}),
+    ...(usesTls && Object.keys(tlsOptions).length > 0 ? { tls: tlsOptions } : {}),
   };
 
   const client = new ImapFlow(imapOptions);
