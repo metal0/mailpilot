@@ -270,6 +270,28 @@ When making changes to the codebase, documentation MUST be reviewed and updated:
    - Email provider setup (Gmail, Outlook, etc.)
    - LLM provider setup (OpenAI, Ollama, etc.)
    - Troubleshooting guides
+
+   **How to update the wiki:**
+   ```bash
+   # Clone wiki (if not already cloned)
+   git clone https://github.com/metal0/mailpilot.wiki.git wiki
+
+   # Edit wiki files (they are markdown files)
+   # Key files:
+   #   - Configuration-Reference.md - All config options
+   #   - Troubleshooting.md - Common issues and solutions
+   #   - Gmail-Setup.md, Outlook-&-Microsoft-365.md - Provider guides
+   #   - Installation.md, Quick-Start.md - Getting started
+
+   # Commit and push wiki changes
+   cd wiki
+   git add -A
+   git commit -m "docs: description of changes"
+   git push
+   ```
+
+   **Wiki is separate from main repo** - Changes to wiki don't appear in PRs. Always push wiki changes directly after updating.
+
 5. **docs/** folder - Technical docs for developers:
    - `docs/dashboard.md` - Dashboard API reference
    - Other technical implementation docs
