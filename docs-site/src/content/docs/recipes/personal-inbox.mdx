@@ -1,0 +1,68 @@
+---
+title: Personal Inbox
+description: Organize personal email efficiently
+---
+
+# Personal Inbox Recipe
+
+Configuration for organizing personal email with inbox zero approach.
+
+## Goal
+
+Automatically organize:
+- Newsletters → Newsletters folder
+- Shopping → Receipts folder
+- Social → Social folder
+- Important → Flag and keep in INBOX
+
+## Configuration
+
+```yaml
+folders:
+  mode: predefined
+  allowed:
+    - Important
+    - Personal
+    - Receipts
+    - Newsletters
+    - Social
+    - Archive
+
+accounts:
+  - name: personal
+    imap:
+      host: imap.gmail.com
+      port: 993
+      username: you@gmail.com
+      password: ${GMAIL_APP_PASSWORD}
+    folders:
+      - name: INBOX
+        llm_provider: openai-mini
+        prompt: |
+          Classify personal email for inbox zero:
+          
+          VIP Senders (flag + keep in INBOX):
+          - Family members
+          - Close friends
+          - Urgent matters
+          
+          Rules:
+          - Marketing emails → Newsletters
+          - Order confirmations, receipts → Receipts
+          - Social media notifications → Social
+          - Everything else worth keeping → Archive
+
+llm_providers:
+  - name: openai-mini
+    provider: openai
+    model: gpt-4o-mini
+```
+
+## Cost
+
+~$0.05/month for 500 emails/day
+
+## Next Steps
+
+- [Write custom prompts →](/docs/configuration/prompts-guide)
+- [Add more accounts →](/docs/configuration/accounts)
