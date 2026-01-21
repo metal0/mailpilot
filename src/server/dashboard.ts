@@ -1152,12 +1152,26 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       if (needsTls && body.tls !== "insecure") {
         const tlsProbe = await probeTlsCertificate(body.host, body.port || 993);
 
+        // Log probe result for debugging
+        log.info("TLS probe result", {
+          success: tlsProbe.success,
+          hasCertInfo: !!tlsProbe.certificateInfo,
+          error: tlsProbe.error,
+          errorCode: tlsProbe.errorCode,
+        });
+
         if (!tlsProbe.success && tlsProbe.certificateInfo) {
           // Check if this certificate is trusted
           const fingerprint = tlsProbe.certificateInfo.fingerprint256;
           const isTrusted = trustedFingerprints.some(fp =>
             fp.replace(/^sha256:/i, "").toUpperCase() === fingerprint.toUpperCase()
           );
+
+          log.info("Certificate trust check", {
+            fingerprint,
+            isTrusted,
+            trustedCount: trustedFingerprints.length,
+          });
 
           if (!isTrusted) {
             // Return certificate info so user can choose to trust it
