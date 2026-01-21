@@ -1,4 +1,5 @@
 packages:
   - "."
   - "dashboard"
+  - "docs-site"
 onlyBuiltDependencies: ["better-sqlite3", "esbuild", "tesseract.js"]
