@@ -10,7 +10,7 @@
     "generate:api": "tsx src/lib/generate-api-docs.ts",
     "generate:changelog": "tsx src/lib/generate-changelog.ts",
     "generate:gifs": "playwright test --project=gif-generation",
-    "prebuild": "pnpm run generate:api && pnpm run generate:changelog"
+    "prebuild": "pnpm run generate:api || true && pnpm run generate:changelog || true"
   },
   "dependencies": {
     "next": "^14.2.0",
