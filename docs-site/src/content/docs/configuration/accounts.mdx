@@ -1,0 +1,148 @@
+---
+title: Email Accounts
+description: IMAP account configuration and settings
+---
+
+# Email Accounts Configuration
+
+Configure one or more email accounts for Mailpilot to process.
+
+## Basic Configuration
+
+```yaml
+accounts:
+  - name: personal
+    imap:
+      host: imap.gmail.com
+      port: 993
+      username: ${GMAIL_USER}
+      password: ${GMAIL_APP_PASSWORD}
+      tls: true
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify this email...
+
+    polling_interval: 60s
+```
+
+## Account Options
+
+| Option | Type | Required | Default | Description |
+|--------|------|----------|---------|-------------|
+| `name` | string | Yes | - | Unique account identifier |
+| `imap` | object | Yes | - | IMAP connection settings |
+| `folders` | array | No | - | Folders to watch and process |
+| `polling_interval` | duration | No | `60s` | How often to check for new mail |
+| `webhooks` | array | No | - | Account-specific webhooks |
+
+## IMAP Settings
+
+```yaml
+imap:
+  host: imap.gmail.com
+  port: 993
+  tls: true
+  username: you@gmail.com
+  password: ${PASSWORD}
+```
+
+| Option | Type | Required | Default | Description |
+|--------|------|---------|---------|-------------|
+| `host` | string | Yes | - | IMAP server hostname |
+| `port` | integer | No | `993` | IMAP server port |
+| `tls` | boolean | No | `true` | Enable TLS encryption |
+| `username` | string | Yes | - | Login username |
+| `password` | string | Yes | - | Password or app password |
+
+### TLS Configuration
+
+**Recommended** (port 993):
+```yaml
+imap:
+  host: imap.gmail.com
+  port: 993
+  tls: true
+```
+
+**STARTTLS** (port 143):
+```yaml
+imap:
+  host: imap.example.com
+  port: 143
+  tls: true
+  starttls: true
+```
+
+## Polling Interval
+
+How often to check for new emails when IMAP IDLE is not supported:
+
+```yaml
+accounts:
+  - name: personal
+    polling_interval: 60s  # Check every 60 seconds
+```
+
+**Recommendations:**
+
+| Use Case | Interval |
+|----------|----------|
+| High-priority inbox | `30s` - `60s` |
+| Normal inbox | `2m` - `5m` |
+| Low-priority inbox | `10m` - `30m` |
+| Archive folder | `1h` - `24h` |
+
+## Webhooks
+
+Send HTTP notifications for account events:
+
+```yaml
+accounts:
+  - name: personal
+    webhooks:
+      - url: https://example.com/webhook
+        events: [action_taken, error]
+        headers:
+          Authorization: Bearer ${WEBHOOK_TOKEN}
+```
+
+### Webhook Events
+
+| Event | Description |
+|-------|-------------|
+| `action_taken` | Email action executed |
+| `error` | Processing error occurred |
+| `connection_lost` | IMAP connection lost |
+| `connection_restored` | IMAP connection restored |
+
+## Multiple Accounts
+
+Process multiple email accounts:
+
+```yaml
+accounts:
+  - name: personal-gmail
+    imap:
+      host: imap.gmail.com
+      port: 993
+      username: ${GMAIL_PERSONAL_USER}
+      password: ${GMAIL_PERSONAL_PASSWORD}
+    polling_interval: 60s
+
+  - name: work-outlook
+    imap:
+      host: outlook.office365.com
+      port: 993
+      username: ${OUTLOOK_WORK_USER}
+      password: ${OUTLOOK_WORK_PASSWORD}
+    polling_interval: 30s
+```
+
+## Next Steps
+
+- [Configure folders →](/docs/configuration/folders)
+- [Write classification prompts →](/docs/configuration/prompts-guide)
+- [Set up webhooks →](/docs/features/webhooks)

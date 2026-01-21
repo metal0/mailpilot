@@ -1,0 +1,165 @@
+---
+title: Antivirus
+description: Configure ClamAV for malware detection
+---
+
+# Antivirus Configuration
+
+Configure ClamAV integration for email malware scanning.
+
+## Prerequisites
+
+**ClamAV** must be installed and running:
+
+### Linux
+
+```bash
+# Install ClamAV
+sudo apt install clamav clamav-daemon
+
+# Update virus definitions
+sudo freshclam
+
+# Start daemon
+sudo systemctl start clamav-daemon
+```
+
+### macOS
+
+```bash
+# Install via Homebrew
+brew install clamav
+
+# Update definitions
+freshclam
+
+# Start daemon
+clamd
+```
+
+### Docker
+
+```bash
+docker run -d -p 3310:3310 clamav/clamav:latest
+```
+
+## Basic Configuration
+
+```yaml
+antivirus:
+  enabled: true
+  host: localhost
+  port: 3310
+  on_virus_detected: quarantine
+```
+
+## Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable antivirus scanning |
+| `host` | string | `localhost` | ClamAV daemon host |
+| `port` | integer | `3310` | ClamAV daemon port |
+| `timeout` | duration | `30s` | Scan timeout |
+| `on_virus_detected` | string | `quarantine` | Action when virus detected |
+
+## Virus Actions
+
+| Action | Description |
+|--------|-------------|
+| `quarantine` | Move to quarantine folder |
+| `delete` | Delete the email |
+| `flag_only` | Flag email but don't move/delete |
+
+## Quarantine Action
+
+Emails with viruses are moved to a quarantine folder:
+
+```yaml
+antivirus:
+  enabled: true
+  on_virus_detected: quarantine
+```
+
+Creates folder: `Quarantine` (if it doesn't exist)
+
+## Delete Action
+
+<Callout type="warn">
+**Destructive**: Emails with viruses are permanently deleted.
+</Callout>
+
+```yaml
+antivirus:
+  enabled: true
+  on_virus_detected: delete
+```
+
+## Flag Only
+
+Flag suspicious emails without moving:
+
+```yaml
+antivirus:
+  enabled: true
+  on_virus_detected: flag_only
+```
+
+Emails are flagged with `X-Mailpilot-Virus: detected`
+
+## Troubleshooting
+
+### ClamAV Not Running
+
+**Error**: `Failed to connect to ClamAV`
+
+**Solution**:
+```bash
+# Check if ClamAV is running
+sudo systemctl status clamav-daemon
+
+# Or test connection
+telnet localhost 3310
+```
+
+### Outdated Virus Definitions
+
+Update regularly:
+
+```bash
+sudo freshclam
+```
+
+### Performance Issues
+
+Scanning large attachments can be slow.
+
+**Solution**:
+```yaml
+antivirus:
+  timeout: 60s  # Increase timeout
+```
+
+Or scan only specific MIME types:
+```yaml
+attachments:
+  allowed_types:
+    - application/pdf
+    - application/zip
+```
+
+## Remote ClamAV
+
+Use a remote ClamAV server:
+
+```yaml
+antivirus:
+  enabled: true
+  host: 192.168.1.100
+  port: 3310
+```
+
+## Next Steps
+
+- [Configure attachments →](/docs/configuration/attachments)
+- [Monitor in dashboard →](/docs/features/dashboard)

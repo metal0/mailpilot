@@ -1,0 +1,79 @@
+---
+title: Notifications
+description: Configure alerts and notifications
+---
+
+# Notifications
+
+Configure browser notifications for important events.
+
+## Basic Configuration
+
+```yaml
+notifications:
+  enabled: true
+  channels: [browser]
+  events: [error, connection_lost, dead_letter]
+```
+
+## Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable notifications |
+| `channels` | array | `[browser]` | Notification channels |
+| `events` | array | `[error]` | Events to notify on |
+
+## Notification Events
+
+| Event | Description |
+|-------|-------------|
+| `error` | Processing errors |
+| `connection_lost` | IMAP connection lost |
+| `dead_letter` | Email moved to dead letter queue |
+| `retry_exhausted` | Email exhausted all retry attempts |
+
+## Quiet Hours
+
+Disable notifications during specific hours:
+
+```yaml
+notifications:
+  enabled: true
+  quiet_hours:
+    enabled: true
+    start: "22:00"
+    end: "08:00"
+```
+
+No notifications will be sent between 10 PM and 8 AM.
+
+## Examples
+
+### Production Setup
+
+```yaml
+notifications:
+  enabled: true
+  channels: [browser]
+  events:
+    - error
+    - connection_lost
+    - retry_exhausted
+  quiet_hours:
+    enabled: true
+    start: "22:00"
+    end: "08:00"
+```
+
+### Development Setup
+
+```yaml
+notifications:
+  enabled: false  # Disable during development
+```
+
+## Next Steps
+
+- [Configure webhooks →](/docs/features/webhooks)
+- [Monitor in dashboard →](/docs/features/dashboard)

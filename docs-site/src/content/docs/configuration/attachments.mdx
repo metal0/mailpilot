@@ -1,0 +1,127 @@
+---
+title: Attachments
+description: Configure Apache Tika for attachment processing
+---
+
+# Attachment Processing
+
+Configure Apache Tika integration to extract and analyze email attachments.
+
+## Prerequisites
+
+**Apache Tika Server** must be running:
+
+```bash
+# Download Tika Server
+wget https://dlcdn.apache.org/tika/3.0.0/tika-server-standard-3.0.0.jar
+
+# Start Tika Server
+java -jar tika-server-standard-3.0.0.jar
+```
+
+Tika runs on `http://localhost:9998` by default.
+
+## Basic Configuration
+
+```yaml
+attachments:
+  enabled: true
+  tika_url: http://localhost:9998
+  max_size_mb: 10
+```
+
+## Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable attachment processing |
+| `tika_url` | string | - | Apache Tika server URL |
+| `timeout` | duration | `30s` | Extraction timeout |
+| `max_size_mb` | number | `10` | Maximum attachment size in MB |
+| `max_extracted_chars` | integer | `10000` | Max characters to extract |
+| `allowed_types` | array | see below | MIME types to process |
+| `extract_images` | boolean | `false` | Include images for vision models |
+
+## Allowed File Types
+
+Default allowed types:
+
+- `application/pdf`
+- `application/msword`
+- `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+- `text/plain`
+- `text/csv`
+- Images: `image/png`, `image/jpeg`, `image/gif`
+
+### Custom Allowed Types
+
+```yaml
+attachments:
+  enabled: true
+  tika_url: http://localhost:9998
+  allowed_types:
+    - application/pdf
+    - text/plain
+    - text/csv
+```
+
+## Vision Models
+
+Extract images for vision-enabled models:
+
+```yaml
+attachments:
+  enabled: true
+  tika_url: http://localhost:9998
+  extract_images: true  # Enable for GPT-4 Vision, Claude 3
+
+llm_providers:
+  - name: openai-vision
+    provider: openai
+    model: gpt-4o  # Supports vision
+    supports_vision: true
+```
+
+## Troubleshooting
+
+### Tika Not Running
+
+**Error**: `Failed to connect to Tika server`
+
+**Solution**:
+```bash
+# Check if Tika is running
+curl http://localhost:9998/tika
+
+# Should return "Apache Tika"
+```
+
+### Large Attachments
+
+Attachments exceeding `max_size_mb` are skipped.
+
+**Solution**: Increase limit:
+```yaml
+attachments:
+  max_size_mb: 25  # Increase to 25MB
+```
+
+## Docker Setup
+
+Run Tika in Docker:
+
+```bash
+docker run -d -p 9998:9998 apache/tika:latest
+```
+
+Then configure:
+```yaml
+attachments:
+  enabled: true
+  tika_url: http://localhost:9998
+```
+
+## Next Steps
+
+- [Configure antivirus scanning →](/docs/configuration/antivirus)
+- [Write prompts for attachments →](/docs/configuration/prompts-guide)

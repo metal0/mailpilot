@@ -1,0 +1,84 @@
+---
+title: Folder Configuration
+description: Configure which folders to watch and process
+---
+
+# Folder Configuration
+
+Configure which IMAP folders Mailpilot watches and processes.
+
+## Basic Configuration
+
+```yaml
+accounts:
+  - name: personal
+    imap:
+      # ... IMAP settings
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify this email...
+```
+
+## Folder Options
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `name` | string | Yes | IMAP folder name to watch |
+| `llm_provider` | string | Yes | LLM provider to use for classification |
+| `prompt` | string | No | Classification prompt (uses default if not set) |
+| `model` | string | No | Override default model |
+
+## Multiple Folders
+
+Watch and process multiple folders:
+
+```yaml
+accounts:
+  - name: personal
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify inbox emails...
+
+      - name: Important
+        llm_provider: openai
+        prompt: |
+          Re-classify important emails...
+
+      - name: Archive
+        llm_provider: ollama  # Use local model for archive
+        prompt: |
+          Organize archived emails...
+```
+
+## Folder Names
+
+Use exact IMAP folder names from your email provider:
+
+**Gmail:**
+```yaml
+folders:
+  - name: INBOX
+  - name: "[Gmail]/All Mail"
+  - name: "[Gmail]/Sent Mail"
+```
+
+**Outlook:**
+```yaml
+folders:
+  - name: INBOX
+  - name: "Sent Items"
+  - name: "Deleted Items"
+```
+
+See [Email Providers](/docs/email-providers) for provider-specific folder names.
+
+## Next Steps
+
+- [Folder modes →](/docs/configuration/folder-modes)
+- [Write prompts →](/docs/configuration/prompts-guide)
+- [Email provider folder names →](/docs/email-providers)
