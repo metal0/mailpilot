@@ -201,12 +201,14 @@ export async function testConnection(
     let errorCode = "CONNECTION_FAILED";
 
     if (errorMessage.includes("403")) {
-      if (errorMessage.includes("API key") && errorMessage.includes("not enabled")) {
+      // Only suggest removing API key if error explicitly says it's not needed/required
+      if ((errorMessage.includes("API key") || errorMessage.includes("api_key")) &&
+          (errorMessage.includes("not required") || errorMessage.includes("not needed") || errorMessage.includes("not necessary"))) {
         errorCode = "API_KEY_NOT_NEEDED";
         userFriendlyError = "This server doesn't require an API key. Try removing the API key from the configuration.";
       } else {
         errorCode = "FORBIDDEN";
-        userFriendlyError = "Access denied (403). Check your API key permissions.";
+        userFriendlyError = "Access denied (403). Check your API key permissions or ensure the API key is valid.";
       }
     } else if (errorMessage.includes("401")) {
       errorCode = "UNAUTHORIZED";

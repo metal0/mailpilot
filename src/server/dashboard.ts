@@ -69,6 +69,7 @@ import * as tls from "node:tls";
 import {
   probeImapPort,
   probeTlsCertificate,
+  probeStarttlsCertificate,
   detectImapProvider,
   type CertificateInfo,
 } from "../imap/probe.js";
@@ -1148,9 +1149,18 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       const needsTls = useSecure || useStarttls;
 
       // For TLS connections, first probe the certificate
+      // Note: Skip probe for STARTTLS as it requires IMAP protocol negotiation first
       let certificateInfo: CertificateInfo | undefined;
-      if (needsTls && body.tls !== "insecure") {
+      if (needsTls && body.tls !== "insecure" && !useStarttls) {
         const tlsProbe = await probeTlsCertificate(body.host, body.port || 993);
+
+        // Log probe result for debugging
+        logger.info("TLS probe result", {
+          success: tlsProbe.success,
+          hasCertInfo: !!tlsProbe.certificateInfo,
+          error: tlsProbe.error,
+          errorCode: tlsProbe.errorCode,
+        });
 
         if (!tlsProbe.success && tlsProbe.certificateInfo) {
           // Check if this certificate is trusted
@@ -1158,6 +1168,12 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
           const isTrusted = trustedFingerprints.some(fp =>
             fp.replace(/^sha256:/i, "").toUpperCase() === fingerprint.toUpperCase()
           );
+
+          logger.info("Certificate trust check", {
+            fingerprint,
+            isTrusted,
+            trustedCount: trustedFingerprints.length,
+          });
 
           if (!isTrusted) {
             // Return certificate info so user can choose to trust it
@@ -1205,8 +1221,22 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         ...(Object.keys(tlsOptions).length > 0 ? { tls: tlsOptions } : {}),
       });
 
-      // Set a timeout for the connection test (use object to track state across async boundary)
-      const state = { timedOut: false };
+      // CRITICAL: Attach error handler immediately to prevent uncaught exceptions
+      // ImapFlow can emit error events during TLS handshake before connect() rejects
+      // We capture the TLS error because connect() may reject with "Unexpected close" instead
+      const state = { timedOut: false, tlsError: undefined as Error | undefined };
+      client.on("error", (error: Error) => {
+        logger.debug("ImapFlow error event during test connection", { error: error.message });
+        // Capture TLS/certificate errors - connect() might reject with a different message
+        if (error.message.includes("self-signed") ||
+            error.message.includes("certificate") ||
+            error.message.includes("CERT_") ||
+            error.message.includes("UNABLE_TO_VERIFY")) {
+          state.tlsError = error;
+        }
+      });
+
+      // Set a timeout for the connection test
       const timeout = setTimeout(() => {
         state.timedOut = true;
         client.close();
@@ -1240,17 +1270,121 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
       } catch (error) {
         clearTimeout(timeout);
 
-        // Parse error to provide more descriptive messages
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        // Use the captured TLS error if available, otherwise use the connect() error
+        // ImapFlow often rejects with "Unexpected close" when TLS fails, losing the real error
+        const actualError = state.tlsError || error;
+        const errorMessage = actualError instanceof Error ? actualError.message : String(actualError);
         let errorCode = "CONNECTION_FAILED";
         let userFriendlyError = errorMessage;
 
         if (state.timedOut) {
           errorCode = "TIMEOUT";
           userFriendlyError = "Connection timed out after 15 seconds. Check if the host and port are correct and the server is reachable.";
-        } else if (errorMessage.includes("self-signed") || errorMessage.includes("SELF_SIGNED")) {
+        } else if (state.tlsError || errorMessage.includes("self-signed") || errorMessage.includes("SELF_SIGNED")) {
+          // Self-signed certificate error - try to get certificate info
           errorCode = "SELF_SIGNED_CERT";
           userFriendlyError = "Server uses a self-signed certificate. You can choose to trust this certificate.";
+
+          // Try to probe the certificate now that we know it's a cert error
+          // Note: Skip probe for STARTTLS as it requires IMAP protocol negotiation first
+          if (!useStarttls) {
+            try {
+              const certProbe = await probeTlsCertificate(body.host, body.port || 993);
+              if (certProbe.certificateInfo) {
+                // Check if already trusted
+                const fingerprint = certProbe.certificateInfo.fingerprint256;
+                const isTrusted = trustedFingerprints.some(fp =>
+                  fp.replace(/^sha256:/i, "").toUpperCase() === fingerprint.toUpperCase()
+                );
+
+                if (!isTrusted) {
+                  // Certificate not trusted - show trust UI
+                  return c.json({
+                    success: false,
+                    error: userFriendlyError,
+                    errorCode,
+                    certificateInfo: certProbe.certificateInfo,
+                    requiresCertificateTrust: true,
+                    rawError: errorMessage,
+                  });
+                } else {
+                  // Certificate already trusted but still getting error - likely different issue
+                  userFriendlyError = "Certificate is already trusted, but connection still failed. Check other connection settings.";
+                  return c.json({
+                    success: false,
+                    error: userFriendlyError,
+                    errorCode,
+                    rawError: errorMessage,
+                  });
+                }
+              } else {
+                // Probe succeeded but no cert info - can't get fingerprint
+                logger.warn("Certificate probe succeeded but returned no certificate info");
+                return c.json({
+                  success: false,
+                  error: "Self-signed certificate detected, but couldn't retrieve certificate details. Try using direct TLS instead of STARTTLS, or inspect the certificate manually.",
+                  errorCode,
+                  rawError: errorMessage,
+                });
+              }
+            } catch (probeError) {
+              // Probe failed completely - can't get cert info
+              logger.warn("Failed to probe certificate after self-signed error", { probeError });
+              return c.json({
+                success: false,
+                error: "Self-signed certificate detected, but couldn't retrieve certificate details for validation. The certificate probe failed. Try using direct TLS on port 993 instead of STARTTLS.",
+                errorCode,
+                rawError: errorMessage,
+              });
+            }
+          } else {
+            // STARTTLS - probe certificate using STARTTLS protocol
+            logger.info("Probing certificate via STARTTLS");
+            try {
+              const starttlsProbe = await probeStarttlsCertificate(body.host, body.port || 143);
+              if (starttlsProbe.certificateInfo) {
+                const fingerprint = starttlsProbe.certificateInfo.fingerprint256;
+                const isTrusted = trustedFingerprints.some(fp =>
+                  fp.replace(/^sha256:/i, "").toUpperCase() === fingerprint.toUpperCase()
+                );
+
+                if (!isTrusted) {
+                  return c.json({
+                    success: false,
+                    error: userFriendlyError,
+                    errorCode,
+                    certificateInfo: starttlsProbe.certificateInfo,
+                    requiresCertificateTrust: true,
+                    rawError: errorMessage,
+                  });
+                } else {
+                  userFriendlyError = "Certificate is already trusted, but connection still failed. Check other connection settings.";
+                  return c.json({
+                    success: false,
+                    error: userFriendlyError,
+                    errorCode,
+                    rawError: errorMessage,
+                  });
+                }
+              } else {
+                logger.warn("STARTTLS certificate probe returned no certificate info");
+                return c.json({
+                  success: false,
+                  error: "Self-signed certificate detected, but couldn't retrieve certificate details via STARTTLS.",
+                  errorCode,
+                  rawError: errorMessage,
+                });
+              }
+            } catch (starttlsError) {
+              logger.warn("STARTTLS certificate probe failed", { error: starttlsError });
+              return c.json({
+                success: false,
+                error: `Self-signed certificate detected. Failed to probe certificate via STARTTLS. You can manually inspect it using: openssl s_client -starttls imap -connect ${body.host}:${body.port || 143}`,
+                errorCode,
+                rawError: errorMessage,
+              });
+            }
+          }
         } else if (errorMessage.includes("certificate") || errorMessage.includes("CERT_")) {
           errorCode = "CERTIFICATE_ERROR";
           userFriendlyError = `Certificate error: ${errorMessage}`;

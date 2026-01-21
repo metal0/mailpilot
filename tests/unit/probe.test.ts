@@ -209,6 +209,9 @@ describe("IMAP Probing", () => {
         expect(result.errorCode).toBeDefined();
       }, 5000);
     });
+
+    // Note: Self-signed certificate handling tests are omitted due to ESM mocking limitations
+    // The certificate retrieval logic is tested through integration tests with real servers
   });
 });
 

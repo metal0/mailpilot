@@ -77,6 +77,7 @@ export function probeTlsCertificate(
         }
       });
 
+      // CRITICAL: Attach error handler immediately to prevent uncaught exceptions
       socket.on("error", (error: NodeJS.ErrnoException) => {
         // Try again without validation to get certificate info for self-signed certs
         if (error.code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" ||
@@ -88,8 +89,16 @@ export function probeTlsCertificate(
 
           try { socket?.destroy(); } catch { /* ignore */ }
 
-          // Connect without validation to get cert info
-          const unsafeSocket = tls.connect({ host, port, rejectUnauthorized: false }, () => {
+          // SECURITY: rejectUnauthorized: false is intentional here.
+          // This is a certificate inspection tool that retrieves cert info from
+          // servers with self-signed certificates so users can review and trust them.
+          // The connection is immediately closed after retrieving cert info - no
+          // sensitive data is sent or received.
+          const unsafeSocket = tls.connect({
+            host,
+            port,
+            rejectUnauthorized: false, // lgtm[js/disabling-certificate-validation]
+          }, () => {
             const cert = unsafeSocket.getPeerCertificate();
             cleanup();
             try { unsafeSocket.destroy(); } catch { /* ignore */ }
@@ -125,13 +134,40 @@ export function probeTlsCertificate(
             }
           });
 
-          unsafeSocket.on("error", () => {
+          unsafeSocket.on("error", (_unsafeError) => {
+            // Try to get certificate even if there was an error
+            const cert = unsafeSocket.getPeerCertificate();
             cleanup();
-            resolve({
-              success: false,
-              error: error.message,
-              errorCode: error.code || "CERT_ERROR",
-            });
+
+            if (cert.fingerprint256) {
+              const isSelfSigned = error.code === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
+                error.code === "SELF_SIGNED_CERT_IN_CHAIN" ||
+                error.message.includes("self-signed");
+              const subjectObj = cert.subject as { CN?: string; O?: string } | undefined;
+              const issuerObj = cert.issuer as { CN?: string; O?: string } | undefined;
+
+              resolve({
+                success: false,
+                error: isSelfSigned ? "Self-signed certificate" : error.message,
+                errorCode: error.code ?? "CERT_ERROR",
+                certificateInfo: {
+                  fingerprint256: cert.fingerprint256,
+                  subject: typeof cert.subject === "string" ? cert.subject :
+                    (subjectObj?.CN ?? subjectObj?.O ?? "Unknown"),
+                  issuer: typeof cert.issuer === "string" ? cert.issuer :
+                    (issuerObj?.CN ?? issuerObj?.O ?? "Unknown"),
+                  validFrom: cert.valid_from,
+                  validTo: cert.valid_to,
+                  selfSigned: isSelfSigned,
+                },
+              });
+            } else {
+              resolve({
+                success: false,
+                error: error.message,
+                errorCode: error.code || "CERT_ERROR",
+              });
+            }
           });
         } else {
           cleanup();
@@ -143,6 +179,165 @@ export function probeTlsCertificate(
         }
       });
     } catch (error) {
+      cleanup();
+      resolve({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        errorCode: "CONNECTION_ERROR",
+      });
+    }
+  });
+}
+
+/**
+ * Probe certificate over STARTTLS connection.
+ * This connects via plain TCP, sends STARTTLS command, upgrades to TLS
+ * with validation disabled (since we're probing for self-signed certs),
+ * then extracts the certificate info.
+ */
+export function probeStarttlsCertificate(
+  host: string,
+  port: number,
+  timeoutMs = 10000
+): Promise<TlsProbeResult> {
+  return new Promise((resolve) => {
+    let socket: net.Socket | tls.TLSSocket | undefined;
+    let resolved = false;
+    let dataBuffer = "";
+    let greetingReceived = false;
+    let starttlsSent = false;
+
+    const cleanup = () => {
+      if (!resolved) {
+        resolved = true;
+        try { socket?.destroy(); } catch { /* ignore */ }
+      }
+    };
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve({ success: false, error: "Connection timed out", errorCode: "TIMEOUT" });
+    }, timeoutMs);
+
+    const handleData = (data: Buffer) => {
+      dataBuffer += data.toString();
+
+      // Check for IMAP greeting
+      if (!greetingReceived && (dataBuffer.includes("* OK") || dataBuffer.includes("* PREAUTH"))) {
+        greetingReceived = true;
+
+        // Parse capabilities to check for STARTTLS support
+        const capMatch = dataBuffer.match(/\[CAPABILITY ([^\]]+)\]/i) || dataBuffer.match(/\* CAPABILITY (.+)/i);
+        const capabilities = capMatch?.[1]?.split(" ").filter(c => c.length > 0) || [];
+        const hasStarttls = capabilities.some(c => c.toUpperCase() === "STARTTLS");
+
+        if (!hasStarttls) {
+          clearTimeout(timeout);
+          cleanup();
+          resolve({ success: false, error: "Server does not support STARTTLS", errorCode: "NO_STARTTLS" });
+          return;
+        }
+
+        // Send STARTTLS command
+        starttlsSent = true;
+        dataBuffer = ""; // Clear buffer for response
+        socket?.write("A001 STARTTLS\r\n");
+      }
+
+      // Handle STARTTLS response
+      if (starttlsSent && dataBuffer.includes("A001 OK")) {
+        // Server accepted STARTTLS, now upgrade to TLS
+        const plainSocket = socket as net.Socket;
+
+        // SECURITY: rejectUnauthorized: false is intentional here.
+        // This is a certificate inspection tool that retrieves cert info from
+        // servers with self-signed certificates so users can review and trust them.
+        // The connection is immediately closed after retrieving cert info - no data
+        // is sent or received. This is the standard pattern for certificate pinning UIs.
+        const tlsSocket = tls.connect({
+          socket: plainSocket,
+          host,
+          rejectUnauthorized: false, // lgtm[js/disabling-certificate-validation]
+        }, () => {
+          const cert = tlsSocket.getPeerCertificate();
+          clearTimeout(timeout);
+          try { tlsSocket.destroy(); } catch { /* ignore */ }
+          resolved = true;
+
+          if (cert.fingerprint256) {
+            // Determine if self-signed by comparing subject and issuer
+            const subjectObj = cert.subject as { CN?: string; O?: string } | undefined;
+            const issuerObj = cert.issuer as { CN?: string; O?: string } | undefined;
+            const subjectStr = typeof cert.subject === "string" ? cert.subject :
+              (subjectObj?.CN ?? subjectObj?.O ?? "");
+            const issuerStr = typeof cert.issuer === "string" ? cert.issuer :
+              (issuerObj?.CN ?? issuerObj?.O ?? "");
+            const isSelfSigned = subjectStr === issuerStr;
+
+            resolve({
+              success: false, // Always false because we disabled validation
+              error: isSelfSigned ? "Self-signed certificate" : "Certificate validation skipped",
+              errorCode: isSelfSigned ? "DEPTH_ZERO_SELF_SIGNED_CERT" : "CERT_VALIDATION_DISABLED",
+              certificateInfo: {
+                fingerprint256: cert.fingerprint256,
+                subject: subjectStr || "Unknown",
+                issuer: issuerStr || "Unknown",
+                validFrom: cert.valid_from,
+                validTo: cert.valid_to,
+                selfSigned: isSelfSigned,
+              },
+            });
+          } else {
+            resolve({
+              success: false,
+              error: "Could not retrieve certificate details",
+              errorCode: "NO_CERT_INFO",
+            });
+          }
+        });
+
+        tlsSocket.on("error", (error: NodeJS.ErrnoException) => {
+          clearTimeout(timeout);
+          cleanup();
+          resolve({
+            success: false,
+            error: error.message,
+            errorCode: error.code || "TLS_ERROR",
+          });
+        });
+
+        socket = tlsSocket;
+      } else if (starttlsSent && (dataBuffer.includes("A001 NO") || dataBuffer.includes("A001 BAD"))) {
+        clearTimeout(timeout);
+        cleanup();
+        resolve({ success: false, error: "STARTTLS command rejected by server", errorCode: "STARTTLS_REJECTED" });
+      }
+    };
+
+    try {
+      socket = net.connect({ host, port }, () => {
+        // TCP connection established, wait for IMAP greeting
+      });
+
+      socket.on("data", handleData);
+      socket.on("error", (error: Error) => {
+        clearTimeout(timeout);
+        cleanup();
+        resolve({
+          success: false,
+          error: error.message,
+          errorCode: (error as NodeJS.ErrnoException).code || "CONNECTION_ERROR",
+        });
+      });
+      socket.on("close", () => {
+        if (!resolved) {
+          clearTimeout(timeout);
+          resolved = true;
+          resolve({ success: false, error: "Connection closed", errorCode: "CONNECTION_CLOSED" });
+        }
+      });
+    } catch (error) {
+      clearTimeout(timeout);
       cleanup();
       resolve({
         success: false,

@@ -45,6 +45,24 @@ function isNetworkError(error: unknown): boolean {
   return false;
 }
 
+function isCertificateError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const certIndicators = [
+      "self-signed",
+      "DEPTH_ZERO_SELF_SIGNED_CERT",
+      "SELF_SIGNED_CERT_IN_CHAIN",
+      "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+      "CERT_ERROR",
+      "certificate",
+    ];
+    return certIndicators.some(
+      (indicator) => error.message.includes(indicator) ||
+        ("code" in error && (error as NodeJS.ErrnoException).code === indicator)
+    );
+  }
+  return false;
+}
+
 export async function retry<T>(
   fn: () => Promise<T>,
   options: Partial<RetryOptions> = {}
@@ -83,6 +101,13 @@ export async function retry<T>(
   );
 }
 
+export class CertificateError extends Error {
+  constructor(message: string, public readonly originalError: Error) {
+    super(message);
+    this.name = "CertificateError";
+  }
+}
+
 export async function retryIndefinitely<T>(
   fn: () => Promise<T>,
   options: Partial<Omit<RetryOptions, "maxAttempts">> = {}
@@ -95,6 +120,17 @@ export async function retryIndefinitely<T>(
     try {
       return await fn();
     } catch (error) {
+      // Certificate errors should not be retried - they require user action
+      if (isCertificateError(error)) {
+        const certError = new CertificateError(
+          error instanceof Error
+            ? `Certificate error: ${error.message}. Configure trusted_tls_fingerprints in your account to trust this certificate.`
+            : "Certificate validation failed",
+          error instanceof Error ? error : new Error(String(error))
+        );
+        throw certError;
+      }
+
       if (!isNetworkError(error)) {
         throw error;
       }
