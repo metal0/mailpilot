@@ -1,4 +1,4 @@
-import { getPage, getPages } from '@/lib/source';
+import { getPage, getPages, type Page as PageType } from '@/lib/source';
 import type { Metadata } from 'next';
 import { DocsPage, DocsBody } from 'fumadocs-ui/page';
 import { notFound } from 'next/navigation';
@@ -15,7 +15,7 @@ export default async function Page(props: {
 
   if (!page) notFound();
 
-  const MDX = page.data.body;
+  const MDX = (page.data as PageType).body;
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>

@@ -1,5 +1,5 @@
 import { loader } from 'fumadocs-core/source';
-import { createMDXSource } from 'fumadocs-mdx';
+import { createMDXSource, type InferPageType, type InferMetaType } from 'fumadocs-mdx';
 import { docs, meta } from '@/.source';
 
 const mdxSource = createMDXSource(docs, meta);
@@ -10,6 +10,9 @@ export const source = loader({
     files: mdxSource.files(),
   },
 });
+
+export type Page = InferPageType<typeof mdxSource>;
+export type Meta = InferMetaType<typeof mdxSource>;
 
 export const { getPage, getPages, pageTree } = source;
 
