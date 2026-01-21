@@ -6,7 +6,7 @@ import type { TableOfContents } from 'fumadocs-core/server';
 
 const mdxSource = createMDXSource(docs, meta);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment */
 const files = mdxSource.files as any;
 
 export const source = loader({
@@ -15,6 +15,7 @@ export const source = loader({
     files,
   },
 });
+/* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment */
 
 export interface PageData {
   title: string;
