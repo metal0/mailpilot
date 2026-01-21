@@ -301,8 +301,12 @@ function PromptTestTab({
 }) {
   const [sampleEmail, setSampleEmail] = useState(defaultSampleEmail);
   const [testResult, setTestResult] = useState<string>('');
+  const [isTestingReal, setIsTestingReal] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [testMode, setTestMode] = useState<'preview' | 'real'>('preview');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const runTest = () => {
+  const runPreviewTest = () => {
     if (!validation?.parsed?.accounts?.[0]?.folders?.[0]?.prompt) {
       setTestResult('Error: No prompt found in configuration');
       return;
@@ -310,7 +314,6 @@ function PromptTestTab({
 
     const prompt = validation.parsed.accounts[0].folders[0].prompt;
 
-    // Simulate prompt testing (in reality, this would call the LLM)
     setTestResult(`Prompt to be sent to LLM:
 
 ${prompt}
@@ -319,11 +322,110 @@ Sample email:
 ${sampleEmail}
 
 ---
-Note: This is a visualization of what would be sent to the LLM. In production, you would need to connect your API key to actually test classification.`);
+Note: This is a preview of what would be sent to the LLM. Switch to "Real API Test" mode to test with your actual API key.`);
+  };
+
+  const runRealTest = async () => {
+    if (!validation?.parsed?.llm_providers?.[0]) {
+      setTestResult('Error: No LLM provider found in configuration');
+      return;
+    }
+
+    if (!apiKey.trim()) {
+      setTestResult('Error: Please enter your API key');
+      return;
+    }
+
+    const provider = validation.parsed.llm_providers[0];
+    const prompt = validation.parsed.accounts?.[0]?.folders?.[0]?.prompt ||
+                   'Classify this email and suggest an action.';
+
+    setIsLoading(true);
+    setTestResult('');
+
+    try {
+      const result = await testLLMClassification(provider, apiKey, prompt, sampleEmail);
+      setTestResult(`✓ Classification Result:
+
+${result}
+
+---
+Test completed successfully. Your API key was used for this request but was never stored or transmitted to our servers.`);
+    } catch (error: any) {
+      setTestResult(`✗ Error:
+
+${error.message}
+
+${error.corsError ? '\n⚠️ CORS Error: Direct browser requests to this provider are blocked. This is a browser security limitation, not an issue with your configuration. The same setup will work when running the actual mailpilot daemon.' : ''}
+
+---
+Your API key was never stored or transmitted to our servers.`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="p-4 space-y-4">
+      {/* Mode selector */}
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3">
+        <div className="flex items-start gap-2 mb-3">
+          <span className="text-blue-600 dark:text-blue-400">ℹ️</span>
+          <div className="text-xs text-blue-800 dark:text-blue-300">
+            <strong>Testing Modes:</strong>
+            <ul className="mt-1 space-y-1 list-disc list-inside">
+              <li><strong>Preview Mode:</strong> Shows what would be sent to the LLM (no API call)</li>
+              <li><strong>Real API Test:</strong> Makes actual API call using your key (client-side only, never stored)</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => setTestMode('preview')}
+            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+              testMode === 'preview'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border'
+            }`}
+          >
+            Preview Mode
+          </button>
+          <button
+            onClick={() => setTestMode('real')}
+            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+              testMode === 'real'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border'
+            }`}
+          >
+            Real API Test
+          </button>
+        </div>
+      </div>
+
+      {/* API Key input (only in real mode) */}
+      {testMode === 'real' && (
+        <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded p-3 space-y-2">
+          <div className="flex items-start gap-2">
+            <span className="text-orange-600 dark:text-orange-400">🔐</span>
+            <div className="text-xs text-orange-800 dark:text-orange-300 flex-1">
+              <strong>Security Warning:</strong> Your API key is processed entirely in your browser.
+              It is NEVER sent to our servers, only directly to the LLM provider.
+              The key is not stored anywhere - it exists only in memory during the test.
+            </div>
+          </div>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={`Enter your ${validation?.parsed?.llm_providers?.[0]?.provider || 'LLM'} API key`}
+            className="w-full p-2 text-sm bg-white dark:bg-gray-800 rounded border focus:outline-none focus:ring-2 focus:ring-orange-400"
+          />
+        </div>
+      )}
+
+      {/* Sample email input */}
       <div>
         <label className="text-sm font-medium mb-2 block">Sample Email Content</label>
         <textarea
@@ -334,14 +436,16 @@ Note: This is a visualization of what would be sent to the LLM. In production, y
         />
       </div>
 
+      {/* Test button */}
       <button
-        onClick={runTest}
-        disabled={!validation?.valid}
+        onClick={testMode === 'preview' ? runPreviewTest : runRealTest}
+        disabled={!validation?.valid || (testMode === 'real' && !apiKey.trim()) || isLoading}
         className="px-4 py-2 bg-primary text-primary-foreground rounded text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Test Classification
+        {isLoading ? 'Testing...' : testMode === 'preview' ? 'Preview Prompt' : 'Test with Real API'}
       </button>
 
+      {/* Test result */}
       {testResult && (
         <div>
           <label className="text-sm font-medium mb-2 block">Test Result</label>
@@ -352,6 +456,116 @@ Note: This is a visualization of what would be sent to the LLM. In production, y
       )}
     </div>
   );
+}
+
+/**
+ * Test LLM classification with real API call (client-side only)
+ */
+async function testLLMClassification(
+  provider: any,
+  apiKey: string,
+  prompt: string,
+  email: string
+): Promise<string> {
+  const providerType = provider.provider.toLowerCase();
+  const model = provider.model || getDefaultModel(providerType);
+
+  const fullPrompt = `${prompt}\n\nEmail to classify:\n${email}\n\nProvide your classification response:`;
+
+  try {
+    if (providerType === 'openai') {
+      return await testOpenAI(apiKey, model, fullPrompt);
+    } else if (providerType === 'anthropic') {
+      return await testAnthropic(apiKey, model, fullPrompt);
+    } else if (providerType === 'ollama') {
+      return await testOllama(provider.base_url || 'http://localhost:11434', model, fullPrompt);
+    } else {
+      throw new Error(`Provider "${providerType}" is not supported for browser testing. Supported: openai, anthropic, ollama`);
+    }
+  } catch (error: any) {
+    if (error.message.includes('CORS') || error.name === 'TypeError') {
+      error.corsError = true;
+    }
+    throw error;
+  }
+}
+
+async function testOpenAI(apiKey: string, model: string, prompt: string): Promise<string> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: 500,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
+    throw new Error(`OpenAI API Error: ${error.error?.message || response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.choices[0].message.content;
+}
+
+async function testAnthropic(apiKey: string, model: string, prompt: string): Promise<string> {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 500,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
+    throw new Error(`Anthropic API Error: ${error.error?.message || response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.content[0].text;
+}
+
+async function testOllama(baseUrl: string, model: string, prompt: string): Promise<string> {
+  const response = await fetch(`${baseUrl}/api/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      prompt,
+      stream: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ollama API Error: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.response;
+}
+
+function getDefaultModel(provider: string): string {
+  const defaults: Record<string, string> = {
+    openai: 'gpt-4o-mini',
+    anthropic: 'claude-3-haiku-20240307',
+    ollama: 'llama2',
+  };
+  return defaults[provider] || 'gpt-4o-mini';
 }
 
 interface ValidationResult {

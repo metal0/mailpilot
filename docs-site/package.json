@@ -6,11 +6,15 @@
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
+    "postbuild": "pnpm run generate:sitemap || true",
     "start": "next start",
     "generate:api": "tsx src/lib/generate-api-docs.ts",
     "generate:changelog": "tsx src/lib/generate-changelog.ts",
     "generate:gifs": "playwright test --project=gif-generation",
-    "prebuild": "pnpm run generate:api || true && pnpm run generate:changelog || true"
+    "generate:sitemap": "tsx src/lib/generate-sitemap.ts",
+    "generate:openapi": "tsx src/lib/generate-openapi-json.ts",
+    "optimize:images": "tsx src/lib/optimize-images.ts",
+    "prebuild": "pnpm run generate:api || true && pnpm run generate:changelog || true && pnpm run generate:openapi || true && pnpm run optimize:images || true"
   },
   "dependencies": {
     "next": "^14.2.0",
@@ -36,6 +40,7 @@
     "tailwindcss": "^3.4.0",
     "tsx": "^4.7.0",
     "@playwright/test": "^1.45.0",
+    "canvas": "^2.11.2",
     "gif-encoder-2": "^1.0.5",
     "conventional-changelog-cli": "^5.0.0",
     "next-image-export-optimizer": "^1.14.0"

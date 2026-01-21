@@ -149,9 +149,15 @@ function main() {
   const routes: ParsedRoute[] = [];
 
   // Find all TypeScript files in routes directory
-  const files = fs.readdirSync(ROUTES_DIR)
+  let files = fs.readdirSync(ROUTES_DIR)
     .filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts'))
     .map(f => path.join(ROUTES_DIR, f));
+
+  // Always include the comprehensive openapi-routes.ts file
+  const openApiRoutesFile = path.join(ROUTES_DIR, 'openapi-routes.ts');
+  if (fs.existsSync(openApiRoutesFile) && !files.includes(openApiRoutesFile)) {
+    files.push(openApiRoutesFile);
+  }
 
   console.log(`Found ${files.length} route files`);
 

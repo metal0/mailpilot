@@ -55,6 +55,21 @@ jobs:
         env:
           NODE_ENV: production
 
+      - name: Check for broken links
+        run: |
+          # Install link checker
+          npm install -g linkinator
+
+          # Check all HTML files in the output directory
+          # Allow external links to fail (they might be rate-limited in CI)
+          # Focus on internal links which are critical
+          linkinator ./docs-site/out \
+            --recurse \
+            --skip "^(https?:\/\/)" \
+            --timeout 30000 \
+            --verbosity error
+        continue-on-error: true  # Don't fail deployment for link issues, just warn
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
