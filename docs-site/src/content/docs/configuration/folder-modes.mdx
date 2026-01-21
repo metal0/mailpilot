@@ -1,0 +1,229 @@
+---
+title: Folder Modes
+description: Predefined and auto-create folder targeting modes
+---
+
+# Folder Modes
+
+Mailpilot supports two folder targeting modes for the `move` action.
+
+## Predefined Mode (Default)
+
+The LLM picks from a list of allowed folders you define.
+
+```yaml
+accounts:
+  - name: personal
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify emails...
+
+folders:
+  mode: predefined
+  allowed:
+    - Work
+    - Personal
+    - Finance/Bills
+    - Finance/Receipts
+    - Newsletters
+    - Archive
+```
+
+**Behavior:**
+- LLM can only move emails to folders in the `allowed` list
+- If LLM suggests a folder not in the list, the action is skipped
+- Folders are created automatically if they don't exist
+
+**Best for:**
+- Structured folder hierarchies
+- Compliance requirements
+- Preventing folder sprawl
+
+**Prompt example:**
+```markdown
+Move emails to one of these folders:
+- Work: work-related emails
+- Personal: personal correspondence
+- Finance/Bills: bills and statements
+- Finance/Receipts: purchase receipts
+- Newsletters: subscriptions and digests
+- Archive: everything else worth keeping
+```
+
+## Auto-Discovery (No Allowed Folders)
+
+If you use predefined mode but don't specify any `allowed` folders, Mailpilot will automatically discover existing folders via IMAP and use them as the allowed list:
+
+```yaml
+folders:
+  mode: predefined
+  # No 'allowed' list - existing folders are auto-discovered
+```
+
+This is useful when:
+- You want to restrict to existing folders without manually listing them
+- You're migrating from another system with an existing folder structure
+- You want predefined behavior without the maintenance overhead
+
+## Auto-Create Mode
+
+The LLM decides folder names freely, creating them as needed.
+
+```yaml
+folders:
+  mode: auto_create
+```
+
+**Behavior:**
+- LLM can specify any folder name
+- Non-existent folders are created automatically
+- Existing folders are auto-discovered and injected into prompt
+- Supports hierarchical names: `Clients/Acme Corp`
+
+**Best for:**
+- Flexible organization
+- Business email with many clients/projects
+- Power users who want AI-driven structure
+
+**Prompt example:**
+```markdown
+Organize emails by creating appropriate folders:
+- Use "Clients/{ClientName}" for client communication
+- Use "Projects/{ProjectName}" for project-related emails
+- Use "Accounting/Invoices" and "Accounting/Receipts" for financial
+- Be consistent - reuse existing folders when appropriate
+```
+
+## Folder Naming Conventions
+
+When using auto-create mode, guide the LLM with naming conventions:
+
+```yaml
+accounts:
+  - name: business
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Folder naming rules:
+          - Use Title Case: "Client Name" not "client name"
+          - Use "/" for hierarchy: "Work/Projects" not "Work - Projects"
+          - Be specific: "Clients/Acme Corp" not just "Acme"
+          - Be consistent: don't create both "Invoices" and "Bills"
+
+          Classify and organize emails...
+```
+
+## Watching Multiple Folders
+
+Monitor folders beyond INBOX:
+
+```yaml
+accounts:
+  - name: personal
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify inbox emails...
+
+      - name: Sent
+        llm_provider: openai
+        prompt: |
+          Organize sent emails...
+
+      - name: "[Gmail]/Important"
+        llm_provider: openai
+        prompt: |
+          Re-classify important emails...
+```
+
+<Callout type="info">
+**Gmail special folders** use the `[Gmail]/` prefix:
+- `[Gmail]/All Mail`
+- `[Gmail]/Sent Mail`
+- `[Gmail]/Important`
+</Callout>
+
+## Comparison
+
+| Feature | Predefined | Auto-Create |
+|---------|-----------|-------------|
+| Folder list | Manually defined | Auto-discovered + AI-created |
+| New folders | Only from allowed list | Unlimited |
+| Naming control | Strict | Flexible |
+| Best for | Structured workflows | Dynamic organization |
+| Risk of sprawl | Low | Medium |
+
+## Combining with Webhooks
+
+Track folder creation with webhooks:
+
+```yaml
+accounts:
+  - name: business
+    webhooks:
+      - url: https://hooks.example.com/mailpilot
+        events: [action_taken]
+```
+
+The `action_taken` webhook includes the folder name for move actions.
+
+## Examples
+
+### Personal Email (Predefined)
+
+```yaml
+folders:
+  mode: predefined
+  allowed:
+    - Important
+    - Work
+    - Personal
+    - Shopping
+    - Newsletters
+    - Social
+    - Archive
+
+accounts:
+  - name: personal
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Organize personal email into categories:
+          - Important: Urgent matters, family
+          - Work: Work-related emails
+          - Shopping: Orders, shipping, receipts
+          - Newsletters: Marketing and subscriptions
+          - Social: Social media notifications
+```
+
+### Business Email (Auto-Create)
+
+```yaml
+folders:
+  mode: auto_create
+
+accounts:
+  - name: business
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Organize business email using hierarchical folders:
+          - "Clients/{Company Name}" for client communication
+          - "Projects/{Project Name}" for project emails
+          - "Invoices" for billing
+          - "Team/Standup" for internal updates
+
+          Create folders as needed, but reuse existing ones.
+```
+
+## Next Steps
+
+- [Write prompts →](/docs/configuration/prompts-guide)
+- [Configure folders →](/docs/configuration/folders)
+- [Email provider folder names →](/docs/email-providers)

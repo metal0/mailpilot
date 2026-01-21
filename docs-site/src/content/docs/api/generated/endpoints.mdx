@@ -1,0 +1,54 @@
+---
+title: API Endpoints
+description: Auto-generated API documentation from source code
+---
+
+# API Endpoints
+
+<Callout type="info">
+This documentation will be automatically generated from JSDoc comments in the source code during the build process.
+</Callout>
+
+## Health
+
+### GET /health
+
+Get service health status
+
+Returns overall service health including account connections, dead letter queue size, and optional integration statuses (Tika, ClamAV). No authentication required.
+
+**Source:** `src/server/health.ts`
+
+**Response Example:**
+```json
+{
+  "status": "ok",
+  "uptime": 3600,
+  "accounts": {
+    "connected": 2,
+    "total": 2
+  },
+  "deadLetterCount": 0,
+  "lastProcessed": "2026-01-21T10:30:00.000Z"
+}
+```
+
+---
+
+## Dashboard
+
+See [Dashboard Documentation](/docs/features/dashboard) for complete API reference including:
+
+- `/api/accounts` - Account management
+- `/api/audit` - Audit log entries
+- `/api/dead-letter` - Dead letter queue
+- `/api/stats` - Processing statistics
+- `/api/test-prompt` - Prompt testing sandbox
+
+---
+
+## Authentication
+
+All dashboard API endpoints require session authentication via `/api/login`.
+
+For programmatic access, API key authentication will be available in a future release.

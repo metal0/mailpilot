@@ -1,0 +1,142 @@
+---
+title: Email Providers
+description: Configure IMAP access for your email provider
+---
+
+# Email Providers
+
+Mailpilot works with any email provider that supports IMAP. This section covers setup guides for popular providers.
+
+## Supported Providers
+
+<Cards>
+  <Card title="Gmail" href="/docs/email-providers/gmail" icon="mail">
+    Google Workspace and personal Gmail accounts
+  </Card>
+  <Card title="Outlook / Microsoft 365" href="/docs/email-providers/outlook" icon="mail">
+    Outlook.com, Hotmail, and Microsoft 365 accounts
+  </Card>
+  <Card title="Yahoo Mail" href="/docs/email-providers/yahoo" icon="mail">
+    Yahoo Mail with app passwords
+  </Card>
+  <Card title="iCloud Mail" href="/docs/email-providers/icloud" icon="mail">
+    Apple iCloud Mail accounts
+  </Card>
+  <Card title="ProtonMail" href="/docs/email-providers/protonmail" icon="mail">
+    ProtonMail Bridge for IMAP access
+  </Card>
+  <Card title="Generic IMAP" href="/docs/email-providers/generic-imap" icon="server">
+    Any email provider with IMAP support
+  </Card>
+</Cards>
+
+## Quick Configuration Examples
+
+### Gmail
+
+```yaml
+accounts:
+  - name: personal
+    imap:
+      host: imap.gmail.com
+      port: 993
+      username: ${GMAIL_USER}
+      password: ${GMAIL_APP_PASSWORD}  # Not your regular password!
+```
+
+### Outlook / Microsoft 365
+
+```yaml
+accounts:
+  - name: work
+    imap:
+      host: outlook.office365.com
+      port: 993
+      username: ${OUTLOOK_USER}
+      password: ${OUTLOOK_PASSWORD}
+```
+
+### Generic IMAP
+
+```yaml
+accounts:
+  - name: custom
+    imap:
+      host: imap.example.com
+      port: 993
+      username: ${EMAIL_USER}
+      password: ${EMAIL_PASSWORD}
+      tls: true
+```
+
+## Common Requirements
+
+Most email providers require:
+
+1. **IMAP enabled** in account settings
+2. **App-specific password** (not your regular password)
+3. **"Less secure apps"** or OAuth disabled for IMAP access
+4. **TLS/SSL** connection (port 993)
+
+## Testing Your Connection
+
+After configuration, verify your IMAP connection:
+
+1. Start Mailpilot: `pnpm start`
+2. Check the dashboard at `http://localhost:8080`
+3. Look for **Health Status** - IMAP should show as "Connected"
+4. Check logs for connection errors
+
+## Troubleshooting
+
+### Authentication Failures
+
+If you see "Authentication failed" errors:
+
+- **Gmail**: Use an [app password](https://myaccount.google.com/apppasswords), not your regular password
+- **Outlook**: Enable IMAP in [account settings](https://outlook.live.com/mail/options/mail/accounts)
+- **Yahoo**: Generate an [app password](https://login.yahoo.com/account/security)
+- **Others**: Check if app passwords or OAuth is required
+
+### Connection Timeouts
+
+If IMAP connections timeout:
+
+- Verify the hostname and port are correct
+- Check firewall rules allow outbound connections to port 993
+- Try increasing the `timeout` setting in your configuration
+
+### SSL/TLS Errors
+
+If you see SSL/TLS certificate errors:
+
+```yaml
+imap:
+  host: imap.example.com
+  tls: true
+  tls_options:
+    rejectUnauthorized: false  # Only for self-signed certificates!
+```
+
+<Callout type="warn">
+Only disable certificate verification for self-signed certificates on trusted servers.
+</Callout>
+
+## Provider-Specific Guides
+
+Select your email provider for detailed setup instructions:
+
+- [Gmail Setup](/docs/email-providers/gmail) - Google Workspace and personal accounts
+- [Outlook Setup](/docs/email-providers/outlook) - Microsoft 365 and Outlook.com
+- [Yahoo Mail](/docs/email-providers/yahoo) - Yahoo Mail configuration
+- [iCloud Mail](/docs/email-providers/icloud) - Apple iCloud setup
+- [ProtonMail](/docs/email-providers/protonmail) - Using ProtonMail Bridge
+- [Generic IMAP](/docs/email-providers/generic-imap) - Any other IMAP server
+
+## Next Steps
+
+After configuring your email provider:
+
+1. [Set up an LLM provider](/docs/llm-providers)
+2. [Write classification rules](/docs/configuration/prompts-guide)
+3. [Test in the dashboard](/docs/features/dashboard)

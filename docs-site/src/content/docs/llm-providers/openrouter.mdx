@@ -1,0 +1,486 @@
+---
+title: OpenRouter Setup
+description: Access multiple LLM providers through OpenRouter's unified API
+---
+
+# OpenRouter Setup
+
+Configure Mailpilot to use OpenRouter for accessing multiple LLM providers through a single API.
+
+<Callout type="info">
+**One API, Many Models**: OpenRouter provides access to models from OpenAI, Anthropic, Meta, Google, and more through one unified interface.
+</Callout>
+
+## What is OpenRouter?
+
+OpenRouter is an LLM router that:
+- **Unified API**: Access 100+ models from different providers
+- **Automatic failover**: Falls back to alternative models if primary fails
+- **Cost optimization**: Choose the most cost-effective model for each task
+- **No vendor lock-in**: Switch models without code changes
+- **Competitive pricing**: Often cheaper than going directly to providers
+
+## Prerequisites
+
+- OpenRouter account
+- OpenRouter API key
+- Credits purchased (pay-as-you-go)
+
+## Step 1: Get OpenRouter API Key
+
+1. Go to [OpenRouter](https://openrouter.ai/)
+2. Click **Sign In** and create an account
+3. Navigate to **Keys** in your dashboard
+4. Click **Create Key**
+5. Name it: `Mailpilot` or `Email Automation`
+6. **Copy the API key** (starts with `sk-or-...`)
+7. Store it securely
+
+<Callout type="warn">
+**Never share your API key** or commit it to version control.
+</Callout>
+
+## Step 2: Add Credits
+
+OpenRouter uses a prepaid credit system:
+
+1. Go to [OpenRouter Credits](https://openrouter.ai/credits)
+2. Click **Add Credits**
+3. Purchase credits (minimum $5)
+4. Credits are used as you make API calls
+
+<Callout type="info">
+**No subscription**: Pay only for what you use. Credits don't expire.
+</Callout>
+
+## Step 3: Configure Mailpilot
+
+Add OpenRouter to your `config.yaml`:
+
+```yaml
+llm_providers:
+  - name: openrouter
+    provider: openrouter
+    api_key: ${OPENROUTER_API_KEY}
+    model: anthropic/claude-3.5-sonnet
+    temperature: 0.1
+
+accounts:
+  - name: personal
+    imap:
+      host: imap.gmail.com
+      # ... imap config
+
+    folders:
+      - name: INBOX
+        llm_provider: openrouter
+        prompt: |
+          Classify this email...
+```
+
+## Step 4: Set Environment Variable
+
+Set your OpenRouter API key:
+
+```bash
+export OPENROUTER_API_KEY="sk-or-..."
+```
+
+Or use a `.env` file:
+
+```bash
+OPENROUTER_API_KEY=sk-or-...
+```
+
+## Step 5: Test Configuration
+
+```bash
+pnpm start
+```
+
+Check logs for:
+```
+✓ LLM Provider 'openrouter' initialized successfully
+✓ Using model: anthropic/claude-3.5-sonnet
+```
+
+## Available Models
+
+### OpenAI Models
+
+```yaml
+model: openai/gpt-4o-mini        # Fastest, cheapest
+model: openai/gpt-4o             # Balanced
+model: openai/gpt-4-turbo        # Powerful
+```
+
+### Anthropic Models
+
+```yaml
+model: anthropic/claude-3.5-sonnet     # Best reasoning
+model: anthropic/claude-3.5-haiku      # Fast and cheap
+model: anthropic/claude-3-opus         # Maximum capability
+```
+
+### Meta Models
+
+```yaml
+model: meta-llama/llama-3.2-3b-instruct    # Free, small
+model: meta-llama/llama-3.1-8b-instruct    # Free, medium
+model: meta-llama/llama-3.1-70b-instruct   # Free, large
+```
+
+### Google Models
+
+```yaml
+model: google/gemini-pro-1.5       # Multimodal
+model: google/gemini-flash-1.5     # Fast and cheap
+```
+
+### Other Popular Models
+
+```yaml
+model: mistralai/mistral-7b-instruct    # Fast, open
+model: cohere/command-r-plus            # Enterprise-focused
+model: perplexity/llama-3-sonar-large   # Specialized
+```
+
+Browse all models at [OpenRouter Models](https://openrouter.ai/models)
+
+## Configuration Options
+
+### Basic Configuration
+
+```yaml
+llm_providers:
+  - name: openrouter
+    provider: openrouter                # Required
+    api_key: ${OPENROUTER_API_KEY}      # Required
+    model: anthropic/claude-3.5-sonnet  # Required
+```
+
+### Advanced Configuration
+
+```yaml
+llm_providers:
+  - name: openrouter-advanced
+    provider: openrouter
+    api_key: ${OPENROUTER_API_KEY}
+    model: anthropic/claude-3.5-sonnet
+    temperature: 0.1                # Randomness
+    max_tokens: 500                 # Max response length
+    top_p: 1.0                      # Nucleus sampling
+    top_k: 0                        # Token selection
+    frequency_penalty: 0.0          # Reduce repetition
+    presence_penalty: 0.0           # Encourage new topics
+    timeout: 30000                  # Request timeout
+```
+
+### Automatic Fallbacks
+
+OpenRouter can automatically fall back to alternative models:
+
+```yaml
+llm_providers:
+  - name: openrouter-failover
+    provider: openrouter
+    api_key: ${OPENROUTER_API_KEY}
+    model: anthropic/claude-3.5-sonnet
+    fallback_models:
+      - openai/gpt-4o
+      - meta-llama/llama-3.1-70b-instruct
+```
+
+If Claude is unavailable, OpenRouter tries GPT-4o, then Llama 3.1.
+
+### Model Routing
+
+Route to cheapest or fastest model:
+
+```yaml
+llm_providers:
+  - name: openrouter-auto
+    provider: openrouter
+    api_key: ${OPENROUTER_API_KEY}
+    route: cheapest  # or 'fastest' or 'best'
+    require:
+      - context_length: 8000  # Minimum context window
+      - max_cost_per_1k: 0.5  # Maximum cost
+```
+
+## Model Selection Guide
+
+### For Cost-Effective Classification
+
+**Recommended**: `meta-llama/llama-3.1-8b-instruct` (Free tier)
+
+```yaml
+llm_providers:
+  - name: openrouter-free
+    provider: openrouter
+    model: meta-llama/llama-3.1-8b-instruct
+```
+
+**Cost**: FREE (rate-limited)
+**Accuracy**: Good for simple classification
+**Speed**: Moderate
+
+### For Best Performance
+
+**Recommended**: `anthropic/claude-3.5-sonnet`
+
+```yaml
+llm_providers:
+  - name: openrouter-best
+    provider: openrouter
+    model: anthropic/claude-3.5-sonnet
+```
+
+**Cost**: ~$0.30 per 1K emails
+**Accuracy**: Excellent
+**Speed**: Fast
+
+### For Balance
+
+**Recommended**: `openai/gpt-4o-mini`
+
+```yaml
+llm_providers:
+  - name: openrouter-balanced
+    provider: openrouter
+    model: openai/gpt-4o-mini
+```
+
+**Cost**: ~$0.015 per 1K emails
+**Accuracy**: Very good
+**Speed**: Very fast
+
+## Cost Comparison
+
+| Model | Cost per 1K emails | Quality | Speed |
+|-------|-------------------|---------|-------|
+| **meta-llama/llama-3.1-8b** | FREE* | ⭐⭐⭐ | ⚡⚡ |
+| **openai/gpt-4o-mini** | $0.015 | ⭐⭐⭐⭐ | ⚡⚡⚡ |
+| **anthropic/claude-3.5-haiku** | $0.08 | ⭐⭐⭐⭐ | ⚡⚡⭐ |
+| **anthropic/claude-3.5-sonnet** | $0.30 | ⭐⭐⭐⭐⭐ | ⚡⚡ |
+
+*Free models have rate limits
+
+## Multiple Providers
+
+Use different models for different purposes:
+
+```yaml
+llm_providers:
+  - name: openrouter-free
+    provider: openrouter
+    model: meta-llama/llama-3.1-8b-instruct
+
+  - name: openrouter-premium
+    provider: openrouter
+    model: anthropic/claude-3.5-sonnet
+
+accounts:
+  - name: personal
+    folders:
+      - name: INBOX
+        llm_provider: openrouter-free  # Free model for personal
+
+  - name: work
+    folders:
+      - name: INBOX
+        llm_provider: openrouter-premium  # Premium model for work
+```
+
+## Advanced Features
+
+### Model Preferences
+
+Specify multiple models with preferences:
+
+```yaml
+llm_providers:
+  - name: openrouter-smart
+    provider: openrouter
+    models:
+      - model: anthropic/claude-3.5-sonnet
+        weight: 1.0
+      - model: openai/gpt-4o
+        weight: 0.5
+      - model: meta-llama/llama-3.1-70b-instruct
+        weight: 0.3
+```
+
+OpenRouter chooses based on availability and cost.
+
+### Per-Request Model Selection
+
+Override model per request (advanced):
+
+```yaml
+folders:
+  - name: INBOX
+    llm_provider: openrouter
+    prompt: |
+      Classify this email...
+    model_override: anthropic/claude-3.5-sonnet  # Override for this folder
+```
+
+### Custom HTTP Headers
+
+Add custom headers for tracking:
+
+```yaml
+llm_providers:
+  - name: openrouter
+    provider: openrouter
+    api_key: ${OPENROUTER_API_KEY}
+    headers:
+      HTTP-Referer: https://mailpilot.dev
+      X-Title: Mailpilot Email Classifier
+```
+
+## Troubleshooting
+
+### "Invalid API key"
+
+**Causes:**
+1. API key not set
+2. Incorrect key format
+3. Typo in key
+
+**Solutions:**
+- Verify `OPENROUTER_API_KEY` is set
+- Check key starts with `sk-or-`
+- Generate new key at [OpenRouter Keys](https://openrouter.ai/keys)
+
+### "Insufficient credits"
+
+**Cause**: Ran out of prepaid credits.
+
+**Solution**:
+1. Go to [OpenRouter Credits](https://openrouter.ai/credits)
+2. Add more credits
+3. Check current balance in dashboard
+
+### "Model not found"
+
+**Cause**: Using incorrect model name.
+
+**Solutions:**
+- Check model name at [OpenRouter Models](https://openrouter.ai/models)
+- Use full model path: `provider/model-name`
+- Example: `anthropic/claude-3.5-sonnet` (not just `claude-3.5-sonnet`)
+
+### "Rate limit exceeded" (free models)
+
+**Cause**: Free tier models have rate limits.
+
+**Solutions:**
+- Reduce polling frequency
+- Upgrade to paid model
+- Wait for rate limit to reset (typically per minute)
+
+### High unexpected costs
+
+**Causes:**
+1. Using expensive model
+2. High email volume
+
+**Solutions:**
+- Switch to cheaper model (`gpt-4o-mini` or free Llama models)
+- Set spending limits in OpenRouter dashboard
+- Monitor usage regularly
+
+## Monitoring Usage
+
+### Track Costs
+
+Monitor your OpenRouter usage:
+
+1. Go to [OpenRouter Dashboard](https://openrouter.ai/activity)
+2. View daily costs by model
+3. Filter by time period
+4. Export usage data
+
+### Set Spending Limits
+
+Prevent overspending:
+
+1. Go to [OpenRouter Settings](https://openrouter.ai/settings)
+2. Set **Monthly Budget**
+3. Enable **Email Alerts**
+
+### Mailpilot Logging
+
+Enable debug logging:
+
+```yaml
+logging:
+  level: debug
+```
+
+Logs show per-request costs:
+
+```
+[LLM] Classified email: model=claude-3.5-sonnet tokens=450 cost=$0.00135
+```
+
+## Benefits of OpenRouter
+
+### 1. Model Flexibility
+
+Switch models without code changes:
+
+```yaml
+# Start with free model
+model: meta-llama/llama-3.1-8b-instruct
+
+# Upgrade to premium later (just change one line)
+model: anthropic/claude-3.5-sonnet
+```
+
+### 2. Cost Optimization
+
+Compare costs across providers:
+- OpenAI GPT-4o: $0.25/1K emails
+- Via OpenRouter: ~$0.20/1K emails (often cheaper)
+
+### 3. Reliability
+
+Automatic failover prevents downtime:
+- Primary model down? → Switches to backup
+- No manual intervention needed
+
+### 4. Experimentation
+
+Test multiple models easily:
+
+```bash
+# Try different models
+model: openai/gpt-4o-mini
+model: anthropic/claude-3.5-haiku
+model: google/gemini-flash-1.5
+```
+
+## Security Best Practices
+
+1. **Never commit API keys** to version control
+2. **Use environment variables** for keys
+3. **Set spending limits** in OpenRouter dashboard
+4. **Monitor usage** regularly
+5. **Rotate keys** periodically
+6. **Use separate keys** for dev/prod
+
+## Next Steps
+
+- [Browse available models →](https://openrouter.ai/models)
+- [Write classification prompts →](/docs/configuration/prompts-guide)
+- [Test in dashboard →](/docs/features/dashboard)
+
+## Additional Resources
+
+- [OpenRouter Documentation](https://openrouter.ai/docs)
+- [OpenRouter Models](https://openrouter.ai/models)
+- [OpenRouter Pricing](https://openrouter.ai/models)
+- [OpenRouter Discord](https://discord.gg/openrouter)

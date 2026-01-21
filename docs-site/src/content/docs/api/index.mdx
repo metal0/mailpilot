@@ -1,0 +1,64 @@
+---
+title: API Reference
+description: REST API and webhooks documentation
+---
+
+import { Cards, Card } from 'fumadocs-ui/components/card';
+
+# API Reference
+
+Programmatic access to Mailpilot's functionality via REST API.
+
+## API Sections
+
+<Cards>
+  <Card
+    title="Authentication"
+    description="API key and session authentication"
+    href="/docs/api/authentication"
+  />
+  <Card
+    title="Endpoints"
+    description="REST API endpoints reference"
+    href="/docs/api/endpoints"
+  />
+</Cards>
+
+## Base URL
+
+```
+http://localhost:8080/api
+```
+
+## Rate Limits
+
+Currently, there are no enforced rate limits on API keys. However, best practices recommend:
+
+- Max 100 requests/minute for normal operations
+- Max 10 requests/second for real-time monitoring
+
+## Response Format
+
+All API responses return JSON:
+
+```json
+{
+  "success": true,
+  "data": { ... }
+}
+```
+
+Errors return:
+
+```json
+{
+  "success": false,
+  "error": "Error message"
+}
+```
+
+## Next Steps
+
+- [Authentication Guide →](/docs/api/authentication)
+- [API Endpoints →](/docs/api/endpoints)
+- [Webhooks →](/docs/features/webhooks)

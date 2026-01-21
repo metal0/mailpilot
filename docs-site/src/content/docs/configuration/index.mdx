@@ -1,0 +1,481 @@
+---
+title: Configuration
+description: Complete reference for configuring Mailpilot
+---
+
+# Configuration
+
+Mailpilot is configured using a YAML file. This section provides comprehensive documentation for all configuration options.
+
+## Configuration File Location
+
+Mailpilot searches for configuration in these locations (in order):
+
+1. Path specified by `--config` flag
+2. `./config.yaml` (current directory)
+3. `~/.config/mailpilot/config.yaml`
+
+## Quick Links
+
+<Cards>
+  <Card title="Global Settings" href="/docs/configuration/global" icon="settings">
+    Concurrency, dry-run mode, and top-level options
+  </Card>
+  <Card title="Server & Dashboard" href="/docs/configuration/server" icon="server">
+    HTTP server, authentication, and web dashboard
+  </Card>
+  <Card title="Email Accounts" href="/docs/configuration/accounts" icon="mail">
+    IMAP configuration and account-specific settings
+  </Card>
+  <Card title="LLM Providers" href="/docs/configuration/llm" icon="sparkles">
+    AI model configuration and provider settings
+  </Card>
+  <Card title="Folder Configuration" href="/docs/configuration/folders" icon="folder">
+    Folder modes, watch lists, and allowed folders
+  </Card>
+  <Card title="Prompts Guide" href="/docs/configuration/prompts-guide" icon="code">
+    Write effective classification prompts
+  </Card>
+</Cards>
+
+<Cards>
+  <Card title="Folder Modes" href="/docs/configuration/folder-modes" icon="layers">
+    Predefined, free-form, and structured folder modes
+  </Card>
+  <Card title="Notifications" href="/docs/configuration/notifications" icon="bell">
+    Browser notifications and alert configuration
+  </Card>
+  <Card title="Attachments" href="/docs/configuration/attachments" icon="paperclip">
+    Apache Tika integration for attachment processing
+  </Card>
+  <Card title="Antivirus" href="/docs/configuration/antivirus" icon="shield">
+    ClamAV integration for email scanning
+  </Card>
+</Cards>
+
+## Environment Variables
+
+Mailpilot supports environment variable substitution using `${VAR_NAME}` syntax:
+
+```yaml
+accounts:
+  - name: personal
+    imap:
+      username: ${GMAIL_USER}
+      password: ${GMAIL_APP_PASSWORD}
+
+llm_providers:
+  - name: openai
+    api_key: ${OPENAI_API_KEY}
+```
+
+<Callout type="warn">
+If an environment variable is not set, Mailpilot will fail to start with an error.
+</Callout>
+
+## Duration Format
+
+Duration values use a simple format:
+
+| Unit | Example | Description |
+|------|---------|-------------|
+| `ms` | `500ms` | Milliseconds |
+| `s` | `30s` | Seconds |
+| `m` | `5m` | Minutes |
+| `h` | `24h` | Hours |
+| `d` | `7d` | Days |
+| `w` | `2w` | Weeks |
+| `y` | `1y` | Years |
+
+**Examples:**
+```yaml
+polling_interval: 60s        # 1 minute
+processed_ttl: 24h           # 24 hours
+audit_retention: 30d         # 30 days
+session_ttl: 7d              # 1 week
+```
+
+## Complete Configuration Example
+
+```yaml
+# Global settings
+concurrency_limit: 5
+dry_run: false
+add_processing_headers: false
+
+# State/Database
+state:
+  database_path: ./data/mailpilot.db
+  processed_ttl: 24h
+  audit_retention: 30d
+  audit_subjects: false
+
+# Server & Dashboard
+server:
+  port: 8080
+  auth_token: ${AUTH_TOKEN}
+
+dashboard:
+  enabled: true
+  session_ttl: 24h
+  api_keys:
+    - name: monitoring
+      key: ${MONITORING_API_KEY}
+      permissions: [read:stats, read:activity]
+
+# Logging
+logging:
+  level: info
+  file: ./logs/mailpilot.log
+  include_subjects: false
+
+# LLM Providers
+llm_providers:
+  - name: openai
+    provider: openai
+    api_key: ${OPENAI_API_KEY}
+    model: gpt-4o-mini
+    temperature: 0.1
+
+# Default classification prompt
+default_prompt: |
+  Classify this email and return a JSON action.
+
+  Available actions:
+  - move: Move to a specific folder
+  - flag: Mark as important/starred
+  - read: Mark as read
+  - archive: Archive the email
+  - noop: No action needed
+
+  Return JSON:
+  {
+    "action": "move",
+    "folder": "Important",
+    "confidence": 0.95,
+    "reasoning": "Brief explanation"
+  }
+
+# Confidence scoring
+confidence:
+  enabled: true
+  minimum_threshold: 0.7
+  request_reasoning: true
+
+# Email Accounts
+accounts:
+  - name: personal
+    imap:
+      host: imap.gmail.com
+      port: 993
+      username: ${GMAIL_USER}
+      password: ${GMAIL_APP_PASSWORD}
+      tls: true
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify this email into:
+          - Important
+          - Social
+          - Promotions
+          - Spam
+
+    polling_interval: 60s
+    webhooks:
+      - url: https://example.com/webhook
+        events: [action_taken, error]
+
+# Retry settings
+retry:
+  enabled: true
+  max_attempts: 5
+  initial_delay: 5m
+  max_delay: 24h
+  backoff_multiplier: 2
+
+# Notifications
+notifications:
+  enabled: true
+  channels: [browser]
+  events: [error, connection_lost, dead_letter]
+  quiet_hours:
+    enabled: true
+    start: "22:00"
+    end: "08:00"
+
+# Attachments
+attachments:
+  enabled: true
+  tika_url: http://localhost:9998
+  max_size_mb: 10
+  extract_images: false
+
+# Antivirus
+antivirus:
+  enabled: false
+  host: localhost
+  port: 3310
+  on_virus_detected: quarantine
+```
+
+## Configuration Validation
+
+Mailpilot validates your configuration on startup. Common validation errors:
+
+### Missing Required Fields
+
+```
+Error: Missing required field 'accounts[0].imap.host'
+```
+
+**Solution**: Add the missing field to your configuration.
+
+### Invalid Duration Format
+
+```
+Error: Invalid duration '60' - must include unit (e.g., '60s')
+```
+
+**Solution**: Add a unit suffix: `60s`, `1m`, `24h`, etc.
+
+### Environment Variable Not Set
+
+```
+Error: Environment variable 'GMAIL_PASSWORD' is not set
+```
+
+**Solution**: Set the environment variable before starting Mailpilot:
+```bash
+export GMAIL_PASSWORD="your-password"
+```
+
+### Invalid YAML Syntax
+
+```
+Error: YAML parse error at line 42
+```
+
+**Solution**: Check YAML indentation and syntax. Use 2 spaces for indentation (not tabs).
+
+## Configuration Best Practices
+
+### 1. Use Environment Variables for Secrets
+
+**Never** commit passwords or API keys to version control:
+
+```yaml
+# Good
+api_key: ${OPENAI_API_KEY}
+password: ${GMAIL_APP_PASSWORD}
+
+# Bad - hardcoded secrets
+api_key: sk-1234567890abcdef
+password: my-actual-password
+```
+
+### 2. Start with Dry Run Mode
+
+Test your configuration without taking actions:
+
+```yaml
+dry_run: true  # Enable for testing
+```
+
+This logs what would happen without actually moving/flagging emails.
+
+### 3. Use Descriptive Account Names
+
+```yaml
+# Good
+accounts:
+  - name: personal-gmail
+  - name: work-outlook
+  - name: newsletter-account
+
+# Bad
+accounts:
+  - name: account1
+  - name: account2
+```
+
+### 4. Set Appropriate Polling Intervals
+
+Balance responsiveness with API rate limits:
+
+```yaml
+# High-priority account - check frequently
+polling_interval: 30s
+
+# Low-priority account - check less often
+polling_interval: 5m
+```
+
+### 5. Configure Audit Retention
+
+Keep audit logs for compliance or debugging:
+
+```yaml
+state:
+  audit_retention: 90d     # 90 days for compliance
+  audit_subjects: false    # Don't log email subjects (privacy)
+```
+
+### 6. Enable Retry Logic
+
+Handle temporary failures gracefully:
+
+```yaml
+retry:
+  enabled: true
+  max_attempts: 5          # Try up to 5 times
+  initial_delay: 5m        # Wait 5 minutes before first retry
+  max_delay: 24h           # Cap maximum delay
+  backoff_multiplier: 2    # Exponential backoff
+```
+
+## Testing Your Configuration
+
+### 1. Validate Syntax
+
+```bash
+# Dry run to check configuration
+pnpm start --dry-run
+
+# Or check specific config file
+pnpm start --config ./my-config.yaml --dry-run
+```
+
+### 2. Check Environment Variables
+
+```bash
+# Verify all required env vars are set
+env | grep -E "(GMAIL|OPENAI|ANTHROPIC)"
+```
+
+### 3. Monitor Logs
+
+```bash
+# Watch logs in real-time
+tail -f ./logs/mailpilot.log
+```
+
+### 4. Use the Dashboard
+
+Navigate to `http://localhost:8080` to:
+- View connection status
+- Check recent actions
+- Monitor errors
+- Test classification prompts
+
+## Configuration by Use Case
+
+### Personal Email (Single Account)
+
+```yaml
+concurrency_limit: 3
+dry_run: false
+
+llm_providers:
+  - name: openai
+    provider: openai
+    api_key: ${OPENAI_API_KEY}
+    model: gpt-4o-mini
+
+accounts:
+  - name: personal
+    imap:
+      host: imap.gmail.com
+      port: 993
+      username: ${GMAIL_USER}
+      password: ${GMAIL_APP_PASSWORD}
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify into: Important, Social, Promotions, or Spam
+
+    polling_interval: 60s
+```
+
+### Business Email (Multiple Accounts)
+
+```yaml
+concurrency_limit: 10
+
+llm_providers:
+  - name: openai-premium
+    provider: openai
+    api_key: ${OPENAI_API_KEY}
+    model: gpt-4o
+
+accounts:
+  - name: ceo-inbox
+    imap:
+      host: imap.gmail.com
+      port: 993
+      username: ${CEO_EMAIL}
+      password: ${CEO_PASSWORD}
+    folders:
+      - name: INBOX
+        llm_provider: openai-premium
+        prompt: |
+          Urgent business classification...
+    polling_interval: 30s
+
+  - name: support-inbox
+    imap:
+      host: imap.gmail.com
+      port: 993
+      username: ${SUPPORT_EMAIL}
+      password: ${SUPPORT_PASSWORD}
+    folders:
+      - name: INBOX
+        llm_provider: openai-premium
+        prompt: |
+          Support ticket classification...
+    polling_interval: 60s
+```
+
+### Privacy-Focused (Local Models)
+
+```yaml
+llm_providers:
+  - name: ollama
+    provider: ollama
+    base_url: http://localhost:11434
+    model: llama3.2:latest
+
+accounts:
+  - name: private
+    imap:
+      host: imap.protonmail.com
+      port: 1143
+      username: ${PROTON_EMAIL}
+      password: ${PROTON_BRIDGE_PASSWORD}
+      tls: true
+      tls_options:
+        rejectUnauthorized: false
+
+    folders:
+      - name: INBOX
+        llm_provider: ollama
+
+    polling_interval: 120s
+
+# No external API calls - complete privacy
+attachments:
+  enabled: false
+
+antivirus:
+  enabled: true  # Local ClamAV scanning
+```
+
+## Next Steps
+
+- [Configure global settings →](/docs/configuration/global)
+- [Set up email accounts →](/docs/configuration/accounts)
+- [Configure LLM providers →](/docs/configuration/llm)
+- [Write classification prompts →](/docs/configuration/prompts-guide)

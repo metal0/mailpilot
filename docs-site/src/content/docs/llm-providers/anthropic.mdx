@@ -1,0 +1,507 @@
+---
+title: Anthropic Claude Setup
+description: Configure Mailpilot with Anthropic Claude for advanced email classification
+---
+
+# Anthropic Claude Setup
+
+Configure Mailpilot to use Anthropic's Claude models for email classification with superior reasoning capabilities.
+
+## Prerequisites
+
+- Anthropic account
+- Anthropic API key
+- Billing configured
+
+## Supported Models
+
+| Model | Cost (per 1M tokens) | Context Window | Use Case |
+|-------|---------------------|----------------|----------|
+| **claude-3-5-sonnet-20241022** | Input: $3.00<br/>Output: $15.00 | 200K | **Recommended** - Best reasoning |
+| **claude-3-5-haiku-20241022** | Input: $0.80<br/>Output: $4.00 | 200K | Fast and cost-effective |
+| **claude-3-opus-20240229** | Input: $15.00<br/>Output: $75.00 | 200K | Maximum capability (expensive) |
+
+<Callout type="info">
+**Recommended**: Use `claude-3-5-sonnet-20241022` for complex business emails requiring nuanced understanding. Use `claude-3-5-haiku-20241022` for cost-effective high-volume processing.
+</Callout>
+
+## Step 1: Get Anthropic API Key
+
+1. Go to [Anthropic Console](https://console.anthropic.com/)
+2. Sign in or create an account
+3. Navigate to **API Keys** in settings
+4. Click **Create Key**
+5. Name it: `Mailpilot` or `Email Automation`
+6. **Copy the API key** (starts with `sk-ant-...`)
+7. Store it securely - you won't see it again
+
+<Callout type="warn">
+**Never share your API key** or commit it to version control.
+</Callout>
+
+## Step 2: Configure Billing
+
+Anthropic requires billing to be set up:
+
+1. Go to [Anthropic Billing](https://console.anthropic.com/settings/billing)
+2. Click **Add payment method**
+3. Add a credit card
+4. Set budget limits to control costs
+
+### Set Budget Limits
+
+Recommended limits:
+
+```
+- Monthly budget: $50 (prevents overspending)
+- Email alert: $25 (early warning)
+```
+
+## Step 3: Configure Mailpilot
+
+Add Anthropic to your `config.yaml`:
+
+```yaml
+llm_providers:
+  - name: anthropic
+    provider: anthropic
+    api_key: ${ANTHROPIC_API_KEY}
+    model: claude-3-5-sonnet-20241022
+    temperature: 0.1
+    max_tokens: 500
+
+accounts:
+  - name: work
+    imap:
+      host: imap.gmail.com
+      # ... imap config
+
+    folders:
+      - name: INBOX
+        llm_provider: anthropic
+        prompt: |
+          Classify this email into one of the following categories:
+          - Urgent - requires immediate attention
+          - Important - needs response within 24h
+          - Informational - for reference
+          - Low Priority - can be handled later
+
+          Return JSON: {"action": "move", "folder": "category", "confidence": 0.95}
+```
+
+## Step 4: Set Environment Variable
+
+Set your Anthropic API key:
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+Or use a `.env` file:
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+## Step 5: Test Configuration
+
+```bash
+pnpm start
+```
+
+Check the logs for:
+```
+✓ LLM Provider 'anthropic' initialized successfully
+✓ Using model: claude-3-5-sonnet-20241022
+```
+
+## Configuration Options
+
+### Basic Configuration
+
+```yaml
+llm_providers:
+  - name: anthropic
+    provider: anthropic              # Required: Provider type
+    api_key: ${ANTHROPIC_API_KEY}    # Required: Your API key
+    model: claude-3-5-sonnet-20241022  # Required: Model name
+```
+
+### Advanced Configuration
+
+```yaml
+llm_providers:
+  - name: anthropic-advanced
+    provider: anthropic
+    api_key: ${ANTHROPIC_API_KEY}
+    model: claude-3-5-sonnet-20241022
+    temperature: 0.1              # Randomness (0 = deterministic)
+    max_tokens: 500               # Max response length
+    top_p: 1.0                    # Nucleus sampling
+    top_k: 0                      # Token selection (0 = disabled)
+    timeout: 30000                # Request timeout (ms)
+```
+
+### Custom System Prompt
+
+Claude supports system prompts for consistent behavior:
+
+```yaml
+llm_providers:
+  - name: anthropic-custom
+    provider: anthropic
+    api_key: ${ANTHROPIC_API_KEY}
+    model: claude-3-5-sonnet-20241022
+    system_prompt: |
+      You are an expert email classifier for a business executive.
+      Be concise and accurate. Prioritize urgency and importance.
+      Always return valid JSON responses.
+```
+
+## Model Comparison
+
+### claude-3-5-sonnet-20241022 (Recommended)
+
+**Best for**: Complex business emails, nuanced classification
+
+```yaml
+llm_providers:
+  - name: anthropic
+    provider: anthropic
+    model: claude-3-5-sonnet-20241022
+    temperature: 0.1
+```
+
+**Pros**:
+- Outstanding reasoning capabilities
+- Excellent at understanding context and tone
+- 200K token context window
+- Strong instruction following
+- Very reliable for complex classification rules
+
+**Cons**:
+- More expensive than Haiku
+- Slower than Haiku (~2-4 seconds)
+
+**Typical cost**: ~$0.30 per 1000 emails
+
+**Use cases**:
+- Legal/compliance emails requiring careful analysis
+- Business emails with complex prioritization rules
+- Emails requiring sentiment analysis
+- Multi-language email classification
+
+### claude-3-5-haiku-20241022
+
+**Best for**: High-volume email processing
+
+```yaml
+llm_providers:
+  - name: anthropic-fast
+    provider: anthropic
+    model: claude-3-5-haiku-20241022
+    temperature: 0.1
+```
+
+**Pros**:
+- Very fast response times (~1-2 seconds)
+- Cost-effective
+- Still very capable for most classification tasks
+- 200K token context window
+
+**Cons**:
+- Slightly less capable than Sonnet for complex reasoning
+
+**Typical cost**: ~$0.08 per 1000 emails
+
+**Use cases**:
+- Personal email classification
+- High-volume newsletters
+- Simple category-based classification
+- Cost-sensitive applications
+
+### claude-3-opus-20240229
+
+**Best for**: Maximum capability (rarely needed)
+
+```yaml
+llm_providers:
+  - name: anthropic-premium
+    provider: anthropic
+    model: claude-3-opus-20240229
+    temperature: 0.1
+```
+
+**Pros**:
+- Highest reasoning capability
+- Best understanding of nuance
+
+**Cons**:
+- Very expensive (5x cost of Sonnet)
+- Slower than Sonnet
+- Overkill for most email classification tasks
+
+**Typical cost**: ~$1.50 per 1000 emails
+
+**Use cases**: Only use if Sonnet fails at your specific task.
+
+## Cost Optimization
+
+### Estimate Your Costs
+
+Calculate expected monthly costs:
+
+```
+Daily emails: 100
+Token usage per email: ~500 tokens (input + output)
+Model: claude-3-5-sonnet-20241022
+
+Input tokens: 100 × 30 × 400 = 1.2M tokens/month
+Output tokens: 100 × 30 × 100 = 300K tokens/month
+
+Input cost: 1.2M × $3.00 / 1M = $3.60
+Output cost: 300K × $15.00 / 1M = $4.50
+Total: ~$8.10/month
+```
+
+### Reduce Costs
+
+1. **Use Haiku for simple tasks**: 75% cheaper than Sonnet
+2. **Optimize prompts**: Shorter prompts = fewer input tokens
+3. **Reduce max_tokens**: Only allocate what you need
+4. **Use caching** (Prompt Caching): Reduce costs for repeated prompts
+
+Example cost-optimized configuration:
+
+```yaml
+llm_providers:
+  - name: anthropic-budget
+    provider: anthropic
+    model: claude-3-5-haiku-20241022  # Use Haiku instead of Sonnet
+    temperature: 0.1
+    max_tokens: 200                   # Reduce from 500
+```
+
+## Advanced Features
+
+### Prompt Caching
+
+Claude supports prompt caching to reduce costs for repeated prompts:
+
+```yaml
+llm_providers:
+  - name: anthropic-cached
+    provider: anthropic
+    model: claude-3-5-sonnet-20241022
+    enable_prompt_caching: true
+    cache_control:
+      type: ephemeral
+```
+
+**Benefits**:
+- 90% cost reduction on cached prompt portions
+- Faster response times
+- Ideal for repeated classification prompts
+
+### Extended Thinking
+
+Enable extended thinking for complex reasoning:
+
+```yaml
+llm_providers:
+  - name: anthropic-thinking
+    provider: anthropic
+    model: claude-3-5-sonnet-20241022
+    extended_thinking:
+      enabled: true
+      budget_tokens: 1000  # Max thinking tokens
+```
+
+**Use cases**:
+- Very complex classification rules
+- Multi-step reasoning
+- Emails requiring deep analysis
+
+### Multiple Anthropic Configurations
+
+Use different models for different purposes:
+
+```yaml
+llm_providers:
+  - name: anthropic-fast
+    provider: anthropic
+    model: claude-3-5-haiku-20241022
+    temperature: 0.1
+
+  - name: anthropic-smart
+    provider: anthropic
+    model: claude-3-5-sonnet-20241022
+    temperature: 0.1
+
+accounts:
+  - name: personal
+    folders:
+      - name: INBOX
+        llm_provider: anthropic-fast  # Fast model for personal emails
+
+  - name: work
+    folders:
+      - name: INBOX
+        llm_provider: anthropic-smart  # Smarter model for work emails
+```
+
+## Troubleshooting
+
+### "Invalid API key" or "Authentication failed"
+
+**Causes:**
+1. API key not set in environment variables
+2. API key is incorrect or expired
+3. Typo in API key
+
+**Solutions:**
+- Verify `ANTHROPIC_API_KEY` is set: `echo $ANTHROPIC_API_KEY`
+- Check for spaces or quotes in API key
+- Generate a new API key at [Anthropic Console](https://console.anthropic.com/settings/keys)
+
+### "Credit balance too low"
+
+**Cause**: Insufficient credits in Anthropic account.
+
+**Solution**:
+1. Go to [Anthropic Billing](https://console.anthropic.com/settings/billing)
+2. Add payment method
+3. Purchase credits or enable auto-recharge
+
+### "Rate limit exceeded"
+
+**Cause**: Too many requests per minute.
+
+**Solutions:**
+- Reduce polling frequency in config
+- Upgrade to higher tier plan
+- Add delays between requests
+- Contact Anthropic support for higher limits
+
+### "Model not found"
+
+**Cause**: Using incorrect or deprecated model name.
+
+**Solutions:**
+- Use current model names:
+  - ✅ `claude-3-5-sonnet-20241022`
+  - ✅ `claude-3-5-haiku-20241022`
+  - ❌ `claude-3-sonnet-20240229` (older version)
+- Check [Anthropic Models](https://docs.anthropic.com/en/docs/about-claude/models) for available models
+
+### High unexpected costs
+
+**Causes:**
+1. Using expensive model (Opus)
+2. Long email content or prompts
+3. High max_tokens setting
+
+**Solutions:**
+- Switch to `claude-3-5-haiku-20241022`
+- Reduce `max_tokens` (e.g., to 200)
+- Optimize prompts to be more concise
+- Monitor usage in [Anthropic Console](https://console.anthropic.com/settings/usage)
+
+### Slow response times
+
+**Causes:**
+1. Using slower model (Sonnet/Opus)
+2. Long prompts
+3. Network latency
+
+**Solutions:**
+- Use `claude-3-5-haiku-20241022` (fastest)
+- Reduce prompt length
+- Increase `timeout` setting
+- Check Anthropic status at [status.anthropic.com](https://status.anthropic.com/)
+
+## Monitoring Usage
+
+### Track API Usage
+
+Monitor your Anthropic usage:
+
+1. Go to [Anthropic Usage Dashboard](https://console.anthropic.com/settings/usage)
+2. View daily API costs
+3. Filter by model or time period
+4. Set up budget alerts
+
+### Mailpilot Logging
+
+Enable debug logging to track token usage:
+
+```yaml
+logging:
+  level: debug
+```
+
+Logs will show token counts per request:
+
+```
+[LLM] Classified email: input_tokens=400 output_tokens=100 cost=$0.00270
+```
+
+## Security Best Practices
+
+1. **Never commit API keys** to version control
+2. **Use environment variables** for API keys
+3. **Set budget limits** in Anthropic console
+4. **Rotate API keys** periodically
+5. **Use separate keys** for dev/prod environments
+6. **Monitor usage** for unexpected spikes
+7. **Revoke unused keys** immediately
+
+## Rate Limits
+
+Anthropic applies rate limits based on your usage tier:
+
+| Tier | Requests/minute | Tokens/minute |
+|------|----------------|---------------|
+| Tier 1 | 50 | 100,000 |
+| Tier 2 | 1,000 | 400,000 |
+| Tier 3 | 2,000 | 800,000 |
+| Tier 4+ | Higher | Higher |
+
+Your tier increases based on usage history and account age.
+
+## Claude vs Other Providers
+
+### Claude vs OpenAI
+
+**Claude advantages**:
+- Better reasoning for complex tasks
+- Larger context window (200K vs 128K)
+- More reliable instruction following
+- Better at understanding tone and nuance
+
+**OpenAI advantages**:
+- Cheaper for basic tasks (gpt-4o-mini)
+- Faster for simple classifications
+- More widely adopted
+
+### When to Choose Claude
+
+Use Claude when:
+- Emails require deep understanding
+- Complex classification rules
+- Multi-step reasoning needed
+- Accuracy is more important than cost
+- Handling sensitive business correspondence
+
+## Next Steps
+
+- [Write effective classification prompts →](/docs/configuration/prompts-guide)
+- [Configure email folders →](/docs/configuration/folders)
+- [Test in dashboard →](/docs/features/dashboard)
+
+## Additional Resources
+
+- [Anthropic API Documentation](https://docs.anthropic.com/)
+- [Claude Models Overview](https://docs.anthropic.com/en/docs/about-claude/models)
+- [Anthropic Pricing](https://www.anthropic.com/pricing)
+- [Prompt Engineering Guide](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering)

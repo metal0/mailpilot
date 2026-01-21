@@ -26,6 +26,8 @@ AI-powered email processing daemon that uses LLM classification to automatically
 
 ## Quick Start
 
+**New to Mailpilot?** Try the [Interactive Setup Wizard](https://metal0.github.io/mailpilot/docs/getting-started/installation/) to generate a customized configuration for your email provider, LLM, and use case.
+
 ```bash
 # Clone and install
 git clone https://github.com/metal0/mailpilot.git
@@ -70,18 +72,23 @@ export GMAIL_APP_PASSWORD="xxxx xxxx xxxx xxxx"
 
 ## Documentation
 
-Full documentation is available on the **[GitHub Wiki](https://github.com/metal0/mailpilot/wiki)**.
+[![Documentation](https://img.shields.io/badge/docs-metal0.github.io-blue)](https://metal0.github.io/mailpilot/)
+
+Full documentation is available at **[metal0.github.io/mailpilot](https://metal0.github.io/mailpilot/)**
+
+### Quick Links
 
 | Guide | Description |
 |-------|-------------|
-| [Installation](https://github.com/metal0/mailpilot/wiki/Installation) | Setup and requirements |
-| [Quick Start](https://github.com/metal0/mailpilot/wiki/Quick-Start) | Get running in 5 minutes |
-| [Configuration Reference](https://github.com/metal0/mailpilot/wiki/Configuration-Reference) | All configuration options |
-| [Gmail Setup](https://github.com/metal0/mailpilot/wiki/Gmail-Setup) | Gmail with App Passwords |
-| [Outlook Setup](https://github.com/metal0/mailpilot/wiki/Outlook-&-Microsoft-365) | Microsoft 365/Outlook |
-| [LLM Providers](https://github.com/metal0/mailpilot/wiki/OpenAI-Setup) | OpenAI, Ollama, Claude, etc. |
-| [Prompts Guide](https://github.com/metal0/mailpilot/wiki/Prompts-Guide) | Writing classification prompts |
-| [Troubleshooting](https://github.com/metal0/mailpilot/wiki/Troubleshooting) | Common issues and solutions |
+| [Setup Wizard](https://metal0.github.io/mailpilot/docs/getting-started/installation/) | Interactive configuration generator |
+| [Installation](https://metal0.github.io/mailpilot/docs/getting-started/installation/) | Setup and requirements |
+| [Quick Start](https://metal0.github.io/mailpilot/docs/getting-started/quick-start/) | Get running in 5 minutes |
+| [Configuration Reference](https://metal0.github.io/mailpilot/docs/configuration/) | All configuration options |
+| [Email Providers](https://metal0.github.io/mailpilot/docs/email-providers/) | Gmail, Outlook, Yahoo, iCloud, ProtonMail |
+| [LLM Providers](https://metal0.github.io/mailpilot/docs/llm-providers/) | OpenAI, Anthropic, Ollama, OpenRouter |
+| [Prompts Guide](https://metal0.github.io/mailpilot/docs/configuration/prompts-guide/) | Writing classification prompts |
+| [API Reference](https://metal0.github.io/mailpilot/docs/api/) | REST API documentation |
+| [Troubleshooting](https://metal0.github.io/mailpilot/docs/troubleshooting/) | Common issues and solutions |
 
 ## Docker Deployment
 
@@ -119,9 +126,10 @@ pnpm typecheck    # Type check
 
 ## Community
 
+- **[Documentation](https://metal0.github.io/mailpilot/)** - Full documentation site
 - **[Matrix Chat](https://matrix.to/#/#mailpilot:i0.tf)** - Join the community chat room
 - **[GitHub Issues](https://github.com/metal0/mailpilot/issues)** - Report bugs or request features
-- **[GitHub Wiki](https://github.com/metal0/mailpilot/wiki)** - Full documentation
+- **[GitHub Discussions](https://github.com/metal0/mailpilot/discussions)** - Feature requests and Q&A
 
 ## License
 

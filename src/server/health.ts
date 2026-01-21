@@ -18,6 +18,55 @@ export function setHealthConfig(config: HealthConfig): void {
 
 export const healthRouter = new Hono();
 
+/**
+ * @openapi
+ * /health:
+ *   get:
+ *     summary: Get service health status
+ *     description: Returns overall service health including account connections, dead letter queue size, and optional integration statuses (Tika, ClamAV). No authentication required.
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: Service health information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/HealthResponse'
+ *             examples:
+ *               healthy:
+ *                 summary: Healthy service
+ *                 value:
+ *                   status: "ok"
+ *                   uptime: 3600
+ *                   accounts:
+ *                     connected: 2
+ *                     total: 2
+ *                   deadLetterCount: 0
+ *                   lastProcessed: "2026-01-21T10:30:00.000Z"
+ *               with_integrations:
+ *                 summary: With Tika and ClamAV
+ *                 value:
+ *                   status: "ok"
+ *                   uptime: 7200
+ *                   accounts:
+ *                     connected: 3
+ *                     total: 3
+ *                   deadLetterCount: 5
+ *                   lastProcessed: "2026-01-21T10:30:00.000Z"
+ *                   tika:
+ *                     available: true
+ *                     url: "http://localhost:9998"
+ *                   clamav:
+ *                     available: true
+ *                     host: "localhost"
+ *                     port: 3310
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 healthRouter.get("/health", async (c) => {
   const accounts = getAccountStatuses();
   const connectedCount = accounts.filter((a) => a.connected).length;

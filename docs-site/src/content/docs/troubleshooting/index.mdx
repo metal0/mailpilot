@@ -1,0 +1,94 @@
+---
+title: Troubleshooting
+description: Common issues and solutions
+---
+
+import { MatrixChatWidget } from '@/components/MatrixChatWidget';
+
+# Troubleshooting
+
+Common issues and their solutions.
+
+## Connection Issues
+
+### IMAP Connection Failed
+
+**Symptoms:**
+- "Connection timeout" errors
+- "Authentication failed" messages
+
+**Solutions:**
+1. Verify IMAP credentials are correct
+2. Check IMAP is enabled for the account
+3. For Gmail: Use App Password, not account password
+4. For Outlook: Ensure OAuth2 is configured
+5. Check firewall/network settings
+
+### WebSocket Not Connecting
+
+**Symptoms:**
+- Dashboard doesn't update in real-time
+- "WebSocket connection failed" in console
+
+**Solutions:**
+1. Ensure server is running
+2. Check reverse proxy WebSocket support
+3. Verify no browser extensions blocking WebSockets
+
+## Processing Issues
+
+### Emails Not Being Processed
+
+**Symptoms:**
+- New emails aren't classified
+- No activity in dashboard
+
+**Solutions:**
+1. Check account is not paused
+2. Verify folder is being watched
+3. Check logs for errors
+4. Test IMAP IDLE support
+
+### LLM Errors
+
+**Symptoms:**
+- "LLM request failed" errors
+- Emails moved to dead letter queue
+
+**Solutions:**
+1. Verify API key is valid
+2. Check LLM provider status
+3. Ensure sufficient API credits
+4. Review prompt complexity
+
+## Performance Issues
+
+### Slow Processing
+
+**Solutions:**
+- Use faster LLM models (gpt-4o-mini vs gpt-4o)
+- Reduce `max_extracted_chars` for attachments
+- Increase `concurrency` setting
+- Check database size and cleanup old entries
+
+### High Memory Usage
+
+**Solutions:**
+- Restart Mailpilot periodically
+- Reduce number of concurrent accounts
+- For Ollama: Use smaller models
+
+## Getting Help
+
+Still stuck? Join our community chat for real-time help:
+
+<MatrixChatWidget />
+
+Or:
+- **GitHub Issues**: [Report bugs](https://github.com/metal0/mailpilot/issues)
+- **GitHub Discussions**: [Feature requests and Q&A](https://github.com/metal0/mailpilot/discussions)
+
+## Next Steps
+
+- [Configuration Reference →](/docs/configuration/)
+- [Dashboard Monitoring →](/docs/features/dashboard)

@@ -1,0 +1,261 @@
+---
+title: Philosophy & Positioning
+description: Mailpilot's design philosophy and unique approach
+---
+
+# Philosophy & Positioning
+
+Mailpilot is an open-source, self-hosted email processing daemon that uses AI to automatically organize and manage your inbox.
+
+## Core Principles
+
+### 1. Privacy First
+
+**Your email stays on your server.**
+
+- All processing happens locally on your infrastructure
+- No email content is sent to third-party services (except your chosen LLM provider)
+- Full control over data retention and audit logs
+- IMAP credentials never leave your server
+
+Unlike cloud email services, Mailpilot operates as a self-hosted daemon that connects directly to your email provider using standard IMAP.
+
+### 2. LLM-Powered Intelligence
+
+**Modern AI, not rule-based filters.**
+
+Traditional email filters use rigid rules:
+```
+If sender = "newsletter@example.com" then move to "Newsletters"
+```
+
+Mailpilot uses Large Language Models to understand context:
+```
+"This is a promotional email from a SaaS vendor offering a discount.
+File under Marketing/SaaS Offers for review later."
+```
+
+The LLM considers:
+- **Sender reputation and patterns**
+- **Email content and intent**
+- **Urgency and importance signals**
+- **Your custom classification preferences**
+
+### 3. Open Source
+
+**Transparent, auditable, extensible.**
+
+Mailpilot is MIT-licensed open-source software:
+
+- **No vendor lock-in**: Host it anywhere
+- **Full transparency**: Audit the code yourself
+- **Community-driven**: Contributions welcome
+- **No usage limits**: Process unlimited emails
+
+The codebase is designed for:
+- Easy self-hosting (Docker, systemd, or bare metal)
+- Clear documentation
+- Minimal dependencies
+- Production-ready stability
+
+### 4. Local or API LLMs
+
+**Choose your AI provider.**
+
+Mailpilot supports both cloud APIs and local models:
+
+**Cloud APIs** (OpenAI, Anthropic, OpenRouter):
+- State-of-the-art performance
+- Pay per token
+- Fast classification
+- No local GPU required
+
+**Local Models** (Ollama, llama.cpp):
+- Complete privacy - no external API calls
+- One-time cost (hardware)
+- Unlimited processing
+- Requires GPU for best performance
+
+Mix and match providers per account or folder.
+
+## Design Philosophy
+
+### Daemon, Not SaaS
+
+Mailpilot is a **background daemon**, not a web application:
+
+- Runs continuously in the background
+- Watches IMAP folders for new emails
+- Processes automatically without user interaction
+- Web dashboard for monitoring only (optional)
+
+This design prioritizes:
+- **Reliability**: No internet connection to a SaaS platform required
+- **Performance**: Local processing, minimal latency
+- **Privacy**: All data stays on your infrastructure
+
+### Configuration Over UI
+
+Mailpilot uses **YAML configuration** with an optional UI:
+
+```yaml
+accounts:
+  - name: personal
+    folders:
+      - name: INBOX
+        prompt: |
+          Classify personal email intelligently...
+```
+
+**Why YAML?**
+- Version control friendly (git diff, rollback)
+- Programmatically editable (CI/CD, templating)
+- Explicit and auditable
+- Portable across environments
+
+The web dashboard provides a **visual configuration editor** for those who prefer GUIs, but the source of truth is always the YAML file.
+
+### Prompts Are First-Class
+
+**You control the classification logic.**
+
+Mailpilot doesn't impose a classification scheme. Instead, you write prompts that teach the LLM your preferences:
+
+```yaml
+prompt: |
+  VIP senders (always flag and keep in INBOX):
+  - boss@company.com
+  - ceo@company.com
+
+  Rules:
+  - GitHub notifications: move to "GitHub/{repo}"
+  - Marketing emails: move to "Newsletters"
+  - Meeting invites: keep in INBOX
+```
+
+This approach enables:
+- **Infinite flexibility**: Classify however you want
+- **Continuous improvement**: Refine prompts over time
+- **Context-aware decisions**: LLMs understand nuance
+
+### Battle-Tested Components
+
+Mailpilot builds on proven technologies:
+
+- **Node.js**: Mature runtime with excellent library ecosystem
+- **IMAP protocol**: Universal email access standard
+- **SQLite**: Reliable embedded database
+- **Apache Tika**: Industry-standard document processing
+- **ClamAV**: Open-source antivirus with daily updates
+
+No bleeding-edge experiments. Just solid, production-ready software.
+
+## Unique Value Proposition
+
+### What Mailpilot Does Differently
+
+**1. Intelligent Classification at Scale**
+
+Process thousands of emails per day with LLM-powered understanding, not regex patterns.
+
+**2. Self-Hosted Control**
+
+You own the infrastructure, the data, and the processing logic.
+
+**3. Provider Flexibility**
+
+Switch between OpenAI, Anthropic, Ollama, or local models without changing your workflows.
+
+**4. Real-Time Processing**
+
+IMAP IDLE support means instant processing as emails arrive (when supported by your provider).
+
+**5. Transparent Operations**
+
+Full audit logs, processing headers, and configurable webhooks let you see exactly what happened to each email.
+
+**6. Developer-Friendly**
+
+RESTful API, webhook integrations, and SQLite database make it easy to build on top of Mailpilot.
+
+## Who Is Mailpilot For?
+
+### Ideal Users
+
+- **Privacy-conscious individuals** who want local email processing
+- **Power users** with complex email workflows
+- **Developers** who need programmatic email organization
+- **Small businesses** managing multiple accounts
+- **Self-hosters** who prefer running their own infrastructure
+
+### Not Ideal For
+
+- Users expecting a fully managed SaaS solution
+- Those uncomfortable with YAML configuration
+- Users without basic server administration skills
+- Anyone needing a mobile-first email client
+
+## Comparison to Alternatives
+
+### vs. Gmail Filters
+
+**Gmail Filters**:
+- Limited to exact string matching and sender rules
+- No understanding of context or intent
+- Manual rule creation for each pattern
+
+**Mailpilot**:
+- LLM-powered semantic understanding
+- Context-aware classification
+- Natural language prompts define behavior
+
+### vs. Email Clients with AI Features
+
+**Email Clients** (Superhuman, HEY, etc.):
+- Proprietary, cloud-hosted
+- Vendor lock-in
+- Limited customization
+
+**Mailpilot**:
+- Open-source, self-hosted
+- Full control over logic
+- Mix any LLM provider
+
+### vs. Custom Scripts
+
+**Custom Scripts**:
+- Brittle regex patterns
+- High maintenance burden
+- No semantic understanding
+
+**Mailpilot**:
+- LLM handles edge cases
+- Prompt refinement vs. code changes
+- Production-ready reliability
+
+## Future Direction
+
+Mailpilot is actively developed with a focus on:
+
+- **Enhanced LLM integrations**: More providers, better vision support
+- **Advanced automation**: Conditional workflows, multi-step actions
+- **Improved observability**: Better debugging and monitoring tools
+- **Performance optimization**: Faster processing, lower resource usage
+
+See the [Roadmap](/docs/roadmap) for detailed plans.
+
+## Get Involved
+
+Mailpilot is community-driven:
+
+- **GitHub**: [github.com/metal0/mailpilot](https://github.com/metal0/mailpilot)
+- **Matrix Chat**: [#mailpilot:i0.tf](https://matrix.to/#/#mailpilot:i0.tf)
+- **Issues**: Bug reports and feature requests welcome
+
+Contributions are encouraged - see the [Contributing Guide](/docs/development/contributing) for details.
+
+## Next Steps
+
+- [Install Mailpilot →](/docs/getting-started/installation)
+- [Write your first prompt →](/docs/configuration/prompts-guide)
+- [Explore features →](/docs/features/)

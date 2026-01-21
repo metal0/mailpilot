@@ -1,0 +1,56 @@
+---
+title: Authentication
+description: API key and session authentication
+---
+
+# Authentication
+
+Mailpilot supports two authentication methods: API keys and session cookies.
+
+## API Key Authentication
+
+### Creating API Keys
+
+Configure API keys in your `config.yaml`:
+
+```yaml
+dashboard:
+  api_keys:
+    - name: monitoring
+      key: mp_your_secret_key_here  # Min 16 characters
+      permissions:
+        - read:stats
+        - read:activity
+```
+
+### Using API Keys
+
+Include in the `Authorization` header:
+
+```bash
+curl -H "Authorization: Bearer mp_your_api_key" \
+  http://localhost:8080/api/stats
+```
+
+## Session Authentication
+
+For browser-based access, authenticate via login:
+
+```bash
+# Login
+curl -X POST http://localhost:8080/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "your_password"}'
+
+# Use session cookie for subsequent requests
+curl -b cookies.txt http://localhost:8080/api/stats
+```
+
+## Permissions
+
+See [Dashboard Documentation](/docs/features/dashboard#available-permissions) for full permission reference.
+
+## Next Steps
+
+- [API Endpoints →](/docs/api/endpoints)
+- [Configure API Keys →](/docs/configuration/server)

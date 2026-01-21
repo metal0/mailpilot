@@ -1,0 +1,92 @@
+---
+title: API Endpoints
+description: REST API endpoints reference
+---
+
+# API Endpoints
+
+Core REST API endpoints for programmatic access.
+
+## Statistics
+
+### GET /api/stats
+
+Get email processing statistics.
+
+**Authentication:** Required (`read:stats` permission)
+
+**Query Parameters:**
+- `period` (optional): `day`, `week`, `month`, `all`
+- `account` (optional): Filter by account name
+
+**Response:**
+```json
+{
+  "total_processed": 1234,
+  "by_action": {
+    "move": 890,
+    "flag": 45,
+    "read": 123
+  },
+  "by_account": {
+    "personal": 800,
+    "work": 434
+  }
+}
+```
+
+## Account Control
+
+### POST /api/accounts/:name/pause
+
+Pause email processing for an account.
+
+**Authentication:** Required (`write:accounts` permission)
+
+### POST /api/accounts/:name/resume
+
+Resume email processing.
+
+### POST /api/accounts/:name/reconnect
+
+Force IMAP reconnection.
+
+### POST /api/accounts/:name/process
+
+Manually trigger processing.
+
+## Activity Log
+
+### GET /api/activity
+
+Get audit log entries.
+
+**Authentication:** Required (`read:activity` permission)
+
+**Query Parameters:**
+- `page`: Page number
+- `pageSize`: Items per page (max 100)
+- `accountName`: Filter by account
+- `actionType`: Filter by action
+- `search`: Search subject/messageId
+- `startDate`: Filter by start timestamp (ms)
+- `endDate`: Filter by end timestamp (ms)
+
+## Configuration
+
+### GET /api/config
+
+Get current configuration.
+
+**Authentication:** Required (`read:stats` permission)
+
+### PUT /api/config
+
+Update configuration.
+
+**Authentication:** Required (`write:accounts` permission)
+
+## Next Steps
+
+- [Full Dashboard API →](/docs/features/dashboard#api-endpoints)
+- [Authentication →](/docs/api/authentication)

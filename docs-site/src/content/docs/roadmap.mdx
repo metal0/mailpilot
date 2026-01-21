@@ -1,0 +1,126 @@
+---
+title: Roadmap
+description: Planned features and improvements
+---
+
+# Roadmap
+
+Planned features and improvements for Mailpilot.
+
+## In Progress
+
+### OAuth Authentication UI Flow
+
+**Goal:** In-app OAuth consent flow for Gmail/Outlook instead of manual token generation.
+
+**Status:** Planned
+
+**Features:**
+- Click "Connect with Google/Microsoft" in dashboard
+- Auto-handle token refresh
+- Fallback to app passwords supported
+
+**Why:** Simplifies setup for non-technical users while maintaining existing OAuth backend support.
+
+---
+
+## Planned Features
+
+### Multi-Step Email Actions
+
+**Goal:** Enable complex workflows with conditional actions.
+
+**Example:**
+```yaml
+actions:
+  - if: from contains "@important-client.com"
+    then:
+      - flag
+      - move: Clients/Important
+      - webhook: https://slack.com/notify
+```
+
+### Enhanced Attachment Processing
+
+**Goal:** Better document analysis and vision capabilities.
+
+**Features:**
+- OCR for scanned documents
+- Table extraction from PDFs
+- Enhanced vision model support
+
+### Performance Improvements
+
+**Goal:** Faster processing and lower resource usage.
+
+**Targets:**
+- 50% faster classification with prompt caching
+- Reduced memory footprint
+- Better concurrency handling
+
+### Advanced Analytics
+
+**Goal:** Insights into email patterns and classification trends.
+
+**Features:**
+- Email volume trends
+- Classification accuracy metrics
+- Cost tracking per account
+- Processing time analytics
+
+---
+
+## Recently Completed
+
+### Smart Retry for Dead Letters ✅
+
+**Completed:** January 2026
+
+**Features:**
+- Automatic retry with exponential backoff
+- Configurable retry limits
+- Dashboard integration
+
+### Rule Testing Sandbox ✅
+
+**Completed:** January 2026
+
+**Features:**
+- Test prompts against sample emails
+- View full LLM prompts and responses
+- Latency measurements
+- No impact on live processing
+
+---
+
+## Feature Requests
+
+Have an idea? We'd love to hear it!
+
+- **GitHub Issues**: [Submit feature request](https://github.com/metal0/mailpilot/issues/new)
+- **Matrix Chat**: [Discuss in chat](https://matrix.to/#/#mailpilot:i0.tf)
+- **Discussions**: [Community forum](https://github.com/metal0/mailpilot/discussions)
+
+## Contributing
+
+Want to implement a feature from the roadmap?
+
+1. **Check the issue tracker** for existing work
+2. **Discuss your approach** in GitHub issues or Matrix
+3. **Submit a PR** with tests and documentation
+
+See the [Contributing Guide](/docs/development/contributing) for details.
+
+## Versioning
+
+Mailpilot follows [Semantic Versioning](https://semver.org/):
+
+- **Major (x.0.0)**: Breaking changes
+- **Minor (1.x.0)**: New features, backwards compatible
+- **Patch (1.0.x)**: Bug fixes
+
+## Next Steps
+
+- [View changelog →](/docs/changelog)
+- [Contribute code →](/docs/development/contributing)
+- [Request a feature →](https://github.com/metal0/mailpilot/issues/new)

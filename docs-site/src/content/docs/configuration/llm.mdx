@@ -1,0 +1,80 @@
+---
+title: LLM Provider Settings
+description: Configure AI providers in accounts and folders
+---
+
+# LLM Provider Settings
+
+LLM provider configuration is covered in dedicated provider guides. This page shows how to reference and use them in accounts and folders.
+
+## Provider Reference
+
+Providers are configured globally and referenced by name:
+
+```yaml
+# Global LLM provider configuration
+llm_providers:
+  - name: openai-fast
+    provider: openai
+    api_key: ${OPENAI_API_KEY}
+    model: gpt-4o-mini
+
+  - name: ollama-local
+    provider: ollama
+    base_url: http://localhost:11434
+    model: llama3.2:latest
+```
+
+See [LLM Providers](/docs/llm-providers) for detailed provider setup.
+
+## Per-Account Configuration
+
+Reference a provider for an entire account:
+
+```yaml
+accounts:
+  - name: personal
+    folders:
+      - name: INBOX
+        llm_provider: openai-fast  # Reference by name
+        prompt: |
+          Classify this email...
+```
+
+## Per-Folder Configuration
+
+Different folders can use different providers:
+
+```yaml
+accounts:
+  - name: personal
+    folders:
+      - name: INBOX
+        llm_provider: openai-fast
+        prompt: |
+          Important inbox classification...
+
+      - name: Archive
+        llm_provider: ollama-local  # Use local model for archive
+        prompt: |
+          Archive classification...
+```
+
+## Model Override
+
+Override the model for specific folders:
+
+```yaml
+folders:
+  - name: INBOX
+    llm_provider: openai-fast
+    model: gpt-4o  # Override default model
+    prompt: |
+      Classify this email...
+```
+
+## Next Steps
+
+- [Configure LLM providers →](/docs/llm-providers)
+- [Write prompts →](/docs/configuration/prompts-guide)
+- [Configure folders →](/docs/configuration/folders)

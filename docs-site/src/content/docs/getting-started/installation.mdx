@@ -1,0 +1,245 @@
+---
+title: Installation
+description: How to install Mailpilot on your system
+---
+
+import { SetupWizard } from '@/components/SetupWizard';
+
+# Installation
+
+This guide covers different methods to install Mailpilot on your system.
+
+## Interactive Setup Wizard
+
+Not sure where to start? Use our interactive wizard to generate a customized configuration:
+
+<SetupWizard />
+
+## System Requirements
+
+- **Node.js**: Version 22.0.0 or higher
+- **pnpm**: Version 10.28.0 or higher (or npm)
+- **Memory**: Minimum 512MB RAM (2GB+ recommended for local LLM models)
+- **Disk Space**: 500MB for application + data storage
+
+## Method 1: From Source
+
+Best for development and customization.
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/metal0/mailpilot.git
+cd mailpilot
+```
+
+### 2. Install Dependencies
+
+```bash
+pnpm install
+```
+
+This will install all required dependencies including the backend, dashboard, and optional tools.
+
+### 3. Create Configuration
+
+```bash
+cp config.example.yaml config.yaml
+```
+
+Edit `config.yaml` with your settings. See the [Configuration Guide](/docs/getting-started/configuration) for details.
+
+### 4. Build
+
+```bash
+pnpm build
+```
+
+This compiles TypeScript and builds the dashboard.
+
+### 5. Run
+
+```bash
+pnpm start
+```
+
+The application starts on `http://localhost:8080` by default.
+
+## Method 2: Docker
+
+Best for production deployment.
+
+### Basic Docker Setup
+
+Create a `docker-compose.yml`:
+
+```yaml
+services:
+  mailpilot:
+    image: ghcr.io/metal0/mailpilot:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./data:/app/data
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GMAIL_USER=${GMAIL_USER}
+      - GMAIL_APP_PASSWORD=${GMAIL_APP_PASSWORD}
+    restart: unless-stopped
+```
+
+Run:
+
+```bash
+docker compose up -d
+```
+
+### Full Stack with Tika + ClamAV
+
+For attachment extraction and antivirus scanning:
+
+```bash
+docker compose -f docker-compose.full.yaml up -d
+```
+
+This includes:
+- Mailpilot
+- Apache Tika (for PDF/document text extraction)
+- ClamAV (for virus scanning)
+
+### Docker Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `OPENAI_API_KEY` | Your OpenAI API key | If using OpenAI |
+| `GMAIL_USER` | Gmail email address | If using Gmail |
+| `GMAIL_APP_PASSWORD` | Gmail app password | If using Gmail |
+
+You can also use a `.env` file with docker compose.
+
+## Method 3: Pre-built Binary
+
+<Callout type="info">
+Pre-built binaries coming soon! Check [releases](https://github.com/metal0/mailpilot/releases) for availability.
+</Callout>
+
+Once available:
+
+1. Download the binary for your platform
+2. Make it executable: `chmod +x mailpilot`
+3. Create `config.yaml` in the same directory
+4. Run: `./mailpilot`
+
+## Verification
+
+After installation, verify it's working:
+
+### 1. Check the Dashboard
+
+Visit `http://localhost:8080` in your browser. You should see the Mailpilot dashboard.
+
+### 2. Check Logs
+
+```bash
+# If running from source
+tail -f logs/mailpilot.log
+
+# If running in Docker
+docker logs -f mailpilot
+```
+
+### 3. Test Configuration
+
+Use the dashboard's [Testing Sandbox](/docs/features/dashboard#testing-sandbox) to verify your classification rules.
+
+## Updating
+
+### From Source
+
+```bash
+git pull
+pnpm install
+pnpm build
+pnpm start
+```
+
+### Docker
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+## Troubleshooting Installation
+
+### Node.js Version Issues
+
+Mailpilot requires Node.js 22+. Check your version:
+
+```bash
+node --version
+```
+
+If you have an older version, install Node.js 22 or use [nvm](https://github.com/nvm-sh/nvm):
+
+```bash
+nvm install 22
+nvm use 22
+```
+
+### pnpm Not Found
+
+Install pnpm globally:
+
+```bash
+npm install -g pnpm
+```
+
+Or use corepack (included with Node.js 16.9+):
+
+```bash
+corepack enable
+corepack prepare pnpm@latest --activate
+```
+
+### Build Fails on better-sqlite3
+
+This is a native dependency. Ensure you have build tools installed:
+
+**Linux/macOS:**
+```bash
+# Debian/Ubuntu
+sudo apt-get install python3 make g++
+
+# macOS
+xcode-select --install
+```
+
+**Windows:**
+```bash
+npm install --global windows-build-tools
+```
+
+### Docker Permission Denied
+
+On Linux, you may need to add your user to the docker group:
+
+```bash
+sudo usermod -aG docker $USER
+# Log out and back in
+```
+
+## Next Steps
+
+- [Configure your email account](/docs/email-providers)
+- [Set up an LLM provider](/docs/llm-providers)
+- [Write classification rules](/docs/configuration/prompts-guide)
+
+## Getting Help
+
+If you encounter issues:
+
+1. Check the [Troubleshooting Guide](/docs/troubleshooting)
+2. Search [GitHub Issues](https://github.com/metal0/mailpilot/issues)
+3. Ask in [Matrix Chat](https://matrix.to/#/#mailpilot:i0.tf)

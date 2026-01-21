@@ -1,0 +1,68 @@
+---
+title: Developer Inbox
+description: GitHub, CI/CD, and technical notifications
+---
+
+# Developer Inbox Recipe
+
+Configuration for developers managing technical notifications.
+
+## Goal
+
+Organize:
+- GitHub PRs/Issues → GitHub/{repo}
+- CI/CD → Deploy/{status}
+- Security → Security folder
+- Newsletters → Newsletters
+
+## Configuration
+
+```yaml
+folders:
+  mode: auto_create
+
+accounts:
+  - name: dev
+    imap:
+      host: imap.gmail.com
+      port: 993
+      username: dev@company.com
+      password: ${GMAIL_APP_PASSWORD}
+    folders:
+      - name: INBOX
+        llm_provider: ollama-local
+        prompt: |
+          Classify developer email:
+          
+          High Priority (flag + keep in INBOX):
+          - PR reviews for my repositories
+          - Security advisories
+          - Production alerts
+          
+          GitHub:
+          - Issues/PRs → GitHub/{repository-name}
+          - Dependabot → Security/Dependabot
+          
+          CI/CD:
+          - Build failures → Deploy/Failed (flag)
+          - Successful builds → Deploy/Success (mark as read)
+          
+          Other:
+          - Tech newsletters → Newsletters
+          - Marketing → Archive
+
+llm_providers:
+  - name: ollama-local
+    provider: ollama
+    model: llama3.2:3b
+    base_url: http://localhost:11434
+```
+
+## Cost
+
+$0/month (local model)
+
+## Next Steps
+
+- [Install Ollama →](/docs/llm-providers/ollama)
+- [Auto-create folders →](/docs/configuration/folder-modes)

@@ -1,0 +1,60 @@
+---
+title: Business Inbox
+description: Sales and client communication
+---
+
+# Business Inbox Recipe
+
+Configuration for sales professionals managing client communication.
+
+## Goal
+
+Organize by:
+- Clients → Clients/{Name} folders
+- Leads → Leads folder
+- Invoices → Invoices folder
+- Internal → Team folder
+
+## Configuration
+
+```yaml
+folders:
+  mode: auto_create  # Automatically create client folders
+
+accounts:
+  - name: business
+    imap:
+      host: outlook.office365.com
+      port: 993
+      auth: oauth2
+      username: you@company.com
+      oauth_client_id: ${OUTLOOK_CLIENT_ID}
+      oauth_client_secret: ${OUTLOOK_CLIENT_SECRET}
+      oauth_refresh_token: ${OUTLOOK_REFRESH_TOKEN}
+    folders:
+      - name: INBOX
+        llm_provider: claude-haiku
+        prompt: |
+          Classify business email for sales workflow:
+          
+          VIP Clients (flag + keep in INBOX):
+          - @important-client.com
+          - Any email mentioning "urgent" or "ASAP"
+          
+          Categorization:
+          - Existing clients → Clients/{Company Name}
+          - New inquiries → Leads
+          - Invoices/billing → Invoices
+          - Team communication → Team
+          - Automated reports → mark as read, Archive
+
+llm_providers:
+  - name: claude-haiku
+    provider: anthropic
+    model: claude-3-haiku-20240307
+```
+
+## Next Steps
+
+- [OAuth setup →](/docs/development/oauth-setup)
+- [Folder modes →](/docs/configuration/folder-modes)

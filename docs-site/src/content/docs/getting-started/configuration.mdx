@@ -1,0 +1,308 @@
+---
+title: Configuration Basics
+description: Understanding Mailpilot's configuration structure
+---
+
+# Configuration Basics
+
+Mailpilot uses a YAML configuration file to define email accounts, LLM providers, and processing rules.
+
+## Configuration File Location
+
+By default, Mailpilot looks for `config.yaml` in the current directory:
+
+```bash
+./mailpilot          # Looks for ./config.yaml
+```
+
+You can specify a different location:
+
+```bash
+./mailpilot --config /path/to/config.yaml
+```
+
+Or set via environment variable:
+
+```bash
+export MAILPILOT_CONFIG=/path/to/config.yaml
+./mailpilot
+```
+
+## Basic Structure
+
+A minimal configuration has three main sections:
+
+```yaml
+# 1. LLM Providers
+llm_providers:
+  - name: openai
+    api_url: https://api.openai.com/v1/chat/completions
+    api_key: ${OPENAI_API_KEY}
+    default_model: gpt-4o-mini
+
+# 2. Email Accounts
+accounts:
+  - name: personal
+    imap:
+      host: imap.gmail.com
+      username: ${GMAIL_USER}
+      password: ${GMAIL_APP_PASSWORD}
+
+    # 3. Folder Processing Rules
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: "Classify this email..."
+```
+
+## Environment Variables
+
+Use `${VAR_NAME}` to reference environment variables:
+
+```yaml
+api_key: ${OPENAI_API_KEY}
+username: ${GMAIL_USER}
+password: ${GMAIL_APP_PASSWORD}
+```
+
+This keeps secrets out of your config file. Set them before running:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+export GMAIL_USER="you@gmail.com"
+```
+
+Or use a `.env` file (requires `dotenv`):
+
+```bash
+# .env
+OPENAI_API_KEY=sk-...
+GMAIL_USER=you@gmail.com
+```
+
+## Configuration Sections
+
+### LLM Providers
+
+Define LLM APIs you'll use for classification:
+
+```yaml
+llm_providers:
+  - name: openai           # Reference name
+    api_url: https://api.openai.com/v1/chat/completions
+    api_key: ${OPENAI_API_KEY}
+    default_model: gpt-4o-mini
+    timeout: 30000         # Optional: Request timeout (ms)
+```
+
+You can define multiple providers:
+
+```yaml
+llm_providers:
+  - name: openai
+    api_url: https://api.openai.com/v1/chat/completions
+    api_key: ${OPENAI_API_KEY}
+    default_model: gpt-4o-mini
+
+  - name: ollama
+    api_url: http://localhost:11434/v1/chat/completions
+    default_model: llama3.2
+```
+
+See [LLM Providers](/docs/llm-providers) for detailed setup guides.
+
+### Email Accounts
+
+Define email accounts to process:
+
+```yaml
+accounts:
+  - name: personal          # Account identifier
+    imap:
+      host: imap.gmail.com
+      port: 993             # Default: 993 for TLS
+      username: ${GMAIL_USER}
+      password: ${GMAIL_APP_PASSWORD}
+      tls: true             # Default: true
+```
+
+You can process multiple accounts:
+
+```yaml
+accounts:
+  - name: personal
+    imap:
+      host: imap.gmail.com
+      username: ${GMAIL_USER}
+      password: ${GMAIL_PASS}
+
+  - name: work
+    imap:
+      host: outlook.office365.com
+      username: ${WORK_USER}
+      password: ${WORK_PASS}
+```
+
+See [Email Providers](/docs/email-providers) for provider-specific setup.
+
+### Folder Processing Rules
+
+Define which folders to process and how:
+
+```yaml
+accounts:
+  - name: personal
+    imap: # ...
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        model: gpt-4o-mini    # Optional: Override default
+        prompt: |
+          Classify this email into categories...
+```
+
+Each folder can have:
+- **Different LLM providers/models**
+- **Custom prompts**
+- **Processing modes** (classify, move, flag, etc.)
+
+See [Folder Modes](/docs/configuration/folder-modes) for details.
+
+## Global Settings
+
+Optional global configuration:
+
+```yaml
+# Server settings
+server:
+  port: 8080
+  host: localhost
+  dashboard_enabled: true
+
+# Logging
+logging:
+  level: info            # debug, info, warn, error
+  file: logs/mailpilot.log
+
+# Polling
+polling_interval: 60s    # Check for new emails every 60 seconds
+```
+
+## Complete Example
+
+Here's a complete configuration with all common options:
+
+```yaml
+# Global settings
+server:
+  port: 8080
+  dashboard_enabled: true
+
+logging:
+  level: info
+
+polling_interval: 60s
+
+# LLM Providers
+llm_providers:
+  - name: openai
+    api_url: https://api.openai.com/v1/chat/completions
+    api_key: ${OPENAI_API_KEY}
+    default_model: gpt-4o-mini
+
+  - name: ollama
+    api_url: http://localhost:11434/v1/chat/completions
+    default_model: llama3.2
+
+# Email Accounts
+accounts:
+  - name: personal
+    imap:
+      host: imap.gmail.com
+      port: 993
+      username: ${GMAIL_USER}
+      password: ${GMAIL_APP_PASSWORD}
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify this email into ONE category:
+          - important: Urgent emails
+          - newsletters: Marketing emails
+          - social: Social notifications
+          - receipts: Purchase confirmations
+
+          Return JSON:
+          {
+            "action": "move",
+            "folder": "category",
+            "confidence": 0.95
+          }
+
+  - name: work
+    imap:
+      host: outlook.office365.com
+      username: ${WORK_USER}
+      password: ${WORK_PASS}
+
+    folders:
+      - name: INBOX
+        llm_provider: ollama      # Use local Ollama for work emails
+        model: llama3.2
+        prompt: |
+          Classify work emails by priority...
+```
+
+## Validation
+
+Mailpilot validates your configuration on startup. Common errors:
+
+### Missing Required Fields
+
+```
+Error: accounts[0].imap.host is required
+```
+
+Make sure all required fields are present.
+
+### Invalid LLM Provider Reference
+
+```
+Error: Folder 'INBOX' references unknown provider 'openai2'
+```
+
+The `llm_provider` name must match a defined provider.
+
+### Environment Variable Not Set
+
+```
+Error: Environment variable OPENAI_API_KEY is not set
+```
+
+Set all referenced environment variables before starting.
+
+## Configuration Testing
+
+Test your configuration without processing emails:
+
+```bash
+# Dry run mode (coming soon)
+./mailpilot --dry-run --config config.yaml
+```
+
+Or use the dashboard's **Testing Sandbox** to test prompts safely.
+
+## Next Steps
+
+- [Email Provider Setup](/docs/email-providers) - Configure Gmail, Outlook, etc.
+- [LLM Providers](/docs/llm-providers) - Set up OpenAI, Ollama, Anthropic
+- [Configuration Reference](/docs/configuration) - Complete configuration options
+- [Prompts Guide](/docs/configuration/prompts-guide) - Write effective classification prompts
+
+## Advanced Topics
+
+- [Multi-Account Setup](/docs/recipes/multi-account) - Managing multiple email accounts
+- [Per-Folder LLM Models](/docs/configuration/folders) - Use different models for different folders
+- [Webhooks](/docs/features/webhooks) - Trigger external actions on classification
+- [Attachment Processing](/docs/features/attachments) - Extract and analyze attachments

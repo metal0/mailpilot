@@ -1,0 +1,352 @@
+---
+title: Generic IMAP Setup
+description: Configure Mailpilot with any IMAP-compatible email server
+---
+
+# Generic IMAP Setup
+
+Mailpilot works with any email provider that supports IMAP. This guide covers configuration for providers not explicitly documented.
+
+## Prerequisites
+
+You'll need the following information from your email provider:
+
+- **IMAP server hostname** (e.g., `imap.example.com`)
+- **IMAP port** (usually 993 for TLS, 143 for STARTTLS)
+- **Username** (usually your full email address)
+- **Password** or app-specific password
+- **TLS/SSL settings**
+
+## Finding Your IMAP Settings
+
+Most email providers document their IMAP settings. Search for:
+- `[provider name] IMAP settings`
+- `[provider name] email client setup`
+- Check your provider's support documentation
+
+Common places to find settings:
+- Email provider's help/support section
+- Account settings page
+- Email client configuration guides
+
+## Basic Configuration
+
+```yaml
+accounts:
+  - name: myemail
+    imap:
+      host: imap.example.com      # IMAP server hostname
+      port: 993                    # IMAP port (993 for TLS)
+      username: ${EMAIL_USER}      # Your email address or username
+      password: ${EMAIL_PASSWORD}  # Your password
+      tls: true                    # Enable TLS (recommended)
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify this email...
+```
+
+## Configuration Options
+
+### Connection Settings
+
+```yaml
+imap:
+  host: imap.example.com          # Required: IMAP server hostname
+  port: 993                        # Required: IMAP port
+  username: ${EMAIL_USER}          # Required: Login username
+  password: ${EMAIL_PASSWORD}      # Required: Password
+  tls: true                        # Enable TLS encryption (default: true)
+  timeout: 30000                   # Connection timeout in ms (default: 30000)
+  keepalive: true                  # Keep connection alive (default: true)
+```
+
+### TLS/SSL Options
+
+For standard TLS (port 993):
+```yaml
+imap:
+  host: imap.example.com
+  port: 993
+  tls: true
+```
+
+For STARTTLS (port 143):
+```yaml
+imap:
+  host: imap.example.com
+  port: 143
+  tls: true
+  starttls: true
+```
+
+For unencrypted (not recommended):
+```yaml
+imap:
+  host: imap.example.com
+  port: 143
+  tls: false
+```
+
+<Callout type="warn">
+**Never use unencrypted IMAP in production.** Your email credentials and content will be transmitted in plaintext.
+</Callout>
+
+### Self-Signed Certificates
+
+If your email server uses a self-signed certificate:
+
+```yaml
+imap:
+  host: mail.mycompany.com
+  port: 993
+  tls: true
+  tls_options:
+    rejectUnauthorized: false     # Accept self-signed certificates
+```
+
+<Callout type="warn">
+Only disable certificate verification for servers you trust with self-signed certificates.
+</Callout>
+
+## Common IMAP Ports
+
+| Port | Protocol | Description |
+|------|----------|-------------|
+| **993** | IMAP over TLS | Standard TLS-encrypted IMAP (recommended) |
+| **143** | IMAP with STARTTLS | Plain IMAP with STARTTLS upgrade |
+| **143** | Plain IMAP | Unencrypted IMAP (not recommended) |
+
+## Popular Self-Hosted Providers
+
+### FastMail
+
+```yaml
+accounts:
+  - name: fastmail
+    imap:
+      host: imap.fastmail.com
+      port: 993
+      username: ${FASTMAIL_USER}
+      password: ${FASTMAIL_APP_PASSWORD}
+```
+
+FastMail requires [app-specific passwords](https://www.fastmail.help/hc/en-us/articles/360058752854).
+
+### Mailfence
+
+```yaml
+accounts:
+  - name: mailfence
+    imap:
+      host: imap.mailfence.com
+      port: 993
+      username: ${MAILFENCE_USER}
+      password: ${MAILFENCE_PASSWORD}
+```
+
+### Mailbox.org
+
+```yaml
+accounts:
+  - name: mailbox
+    imap:
+      host: imap.mailbox.org
+      port: 993
+      username: ${MAILBOX_USER}
+      password: ${MAILBOX_PASSWORD}
+```
+
+### Posteo
+
+```yaml
+accounts:
+  - name: posteo
+    imap:
+      host: posteo.de
+      port: 993
+      username: ${POSTEO_USER}
+      password: ${POSTEO_PASSWORD}
+```
+
+### Self-Hosted (Dovecot, Courier, etc.)
+
+```yaml
+accounts:
+  - name: selfhosted
+    imap:
+      host: mail.yourdomain.com
+      port: 993
+      username: ${EMAIL_USER}
+      password: ${EMAIL_PASSWORD}
+      tls: true
+```
+
+## Testing Your Configuration
+
+### 1. Verify IMAP Settings
+
+Test IMAP connection with `openssl`:
+
+```bash
+openssl s_client -connect imap.example.com:993 -crlf
+```
+
+You should see:
+```
+* OK IMAP4 server ready
+```
+
+Type `a1 LOGIN username password` to test authentication (replace with your credentials).
+
+### 2. Start Mailpilot
+
+```bash
+pnpm start
+```
+
+### 3. Check Dashboard
+
+Visit `http://localhost:8080` and verify:
+- Health Status shows IMAP as "Connected"
+- No connection errors in logs
+
+## Troubleshooting
+
+### "Connection refused" or "Connection timeout"
+
+**Causes:**
+- Incorrect hostname or port
+- Firewall blocking the connection
+- IMAP service not running
+
+**Solutions:**
+- Verify `host` and `port` settings
+- Test connection with `openssl s_client`
+- Check firewall rules allow outbound connections to IMAP port
+- Contact your email provider
+
+### "Certificate verify failed"
+
+**Cause:** SSL/TLS certificate validation failed.
+
+**Solutions:**
+```yaml
+imap:
+  tls_options:
+    rejectUnauthorized: false    # For self-signed certificates only
+    # OR
+    ca: /path/to/ca-certificate.pem  # Provide CA certificate
+```
+
+### "Authentication failed"
+
+**Causes:**
+- Incorrect username or password
+- App password required
+- IMAP access disabled
+
+**Solutions:**
+- Verify credentials
+- Generate an app-specific password if required
+- Enable IMAP in email account settings
+- Check with your email provider
+
+### "Login disabled" or "IMAP not available"
+
+**Cause:** IMAP access is disabled for your account.
+
+**Solution:**
+- Check account settings to enable IMAP
+- Contact your email provider's support
+- Some providers require IMAP to be explicitly enabled
+
+## Advanced Configuration
+
+### Custom Authentication
+
+Some servers require specific authentication methods:
+
+```yaml
+imap:
+  host: imap.example.com
+  port: 993
+  username: ${EMAIL_USER}
+  password: ${EMAIL_PASSWORD}
+  authMethod: PLAIN  # or LOGIN, XOAUTH2, etc.
+```
+
+### Connection Pool Settings
+
+For high-volume email processing:
+
+```yaml
+imap:
+  host: imap.example.com
+  port: 993
+  # Connection pool
+  maxConnections: 5      # Max concurrent connections
+  keepalive: true        # Keep connections alive
+  timeout: 60000         # Longer timeout for busy servers
+```
+
+### Proxy Support
+
+If you need to connect through a proxy:
+
+```yaml
+imap:
+  host: imap.example.com
+  port: 993
+  proxy:
+    host: proxy.example.com
+    port: 8080
+    type: socks5  # or http
+```
+
+## Security Considerations
+
+1. **Always use TLS** when possible (port 993)
+2. **Use environment variables** for credentials
+3. **Generate app passwords** when supported
+4. **Monitor account activity** for suspicious logins
+5. **Rotate passwords** regularly
+6. **Use strong, unique passwords**
+
+## Environment Variables
+
+Set credentials as environment variables:
+
+```bash
+export EMAIL_USER="you@example.com"
+export EMAIL_PASSWORD="your-secure-password"
+```
+
+Or use a `.env` file:
+
+```bash
+EMAIL_USER=you@example.com
+EMAIL_PASSWORD=your-secure-password
+```
+
+Never commit passwords to version control!
+
+## Next Steps
+
+- [Configure LLM provider](/docs/llm-providers)
+- [Write classification rules](/docs/configuration/prompts-guide)
+- [Test in dashboard](/docs/features/dashboard)
+
+## Getting Help
+
+If you're having trouble configuring a specific email provider:
+
+1. Check the provider's IMAP documentation
+2. Search [GitHub Issues](https://github.com/metal0/mailpilot/issues)
+3. Ask in [Matrix Chat](https://matrix.to/#/#mailpilot:i0.tf)
+4. Create an [issue](https://github.com/metal0/mailpilot/issues/new) with:
+   - Email provider name
+   - IMAP settings you tried
+   - Error messages from logs

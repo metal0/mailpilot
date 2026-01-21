@@ -1,0 +1,14 @@
+# Mailpilot Documentation - robots.txt
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://metal0.github.io/mailpilot/sitemap.xml
+
+# Crawl delay (be nice to the server)
+Crawl-delay: 1
+
+# Disallow indexing of assets
+Disallow: /_next/
+Disallow: /api/

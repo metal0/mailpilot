@@ -1,0 +1,321 @@
+---
+title: Yahoo Mail Setup
+description: Configure Mailpilot with Yahoo Mail using app passwords
+---
+
+# Yahoo Mail Setup
+
+Configure Mailpilot to work with Yahoo Mail accounts.
+
+## Prerequisites
+
+- Yahoo Mail account
+- IMAP access (enabled by default)
+- App password (required - Yahoo disabled regular password authentication)
+
+## Step 1: Generate App Password
+
+<Callout type="warn">
+**You cannot use your regular Yahoo password!** Yahoo requires app-specific passwords for IMAP access.
+</Callout>
+
+1. Sign in to your [Yahoo Account Security](https://login.yahoo.com/account/security) page
+2. Click **Generate app password** or **Manage app passwords**
+3. Select **Other App** from the dropdown
+4. Enter a custom name: `Mailpilot` or `Email Automation`
+5. Click **Generate**
+6. **Copy the 16-character password** displayed (you won't see it again)
+
+The app password looks like: `abcd efgh ijkl mnop` (remove spaces when using)
+
+## Step 2: Verify IMAP is Enabled
+
+IMAP is usually enabled by default in Yahoo Mail. To verify:
+
+1. Sign in to [Yahoo Mail](https://mail.yahoo.com/)
+2. Click ⚙️ **Settings** → **More Settings**
+3. Go to **Mailboxes**
+4. Ensure IMAP access is enabled
+
+## Step 3: Configure Mailpilot
+
+Add Yahoo Mail to your `config.yaml`:
+
+```yaml
+accounts:
+  - name: yahoo
+    imap:
+      host: imap.mail.yahoo.com
+      port: 993
+      username: ${YAHOO_USER}        # your.email@yahoo.com
+      password: ${YAHOO_APP_PASSWORD}  # 16-character app password
+      tls: true
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify this email...
+```
+
+## Step 4: Set Environment Variables
+
+Set your Yahoo credentials:
+
+```bash
+export YAHOO_USER="your.email@yahoo.com"
+export YAHOO_APP_PASSWORD="abcdefghijklmnop"  # No spaces!
+```
+
+Or use a `.env` file:
+
+```bash
+YAHOO_USER=your.email@yahoo.com
+YAHOO_APP_PASSWORD=abcdefghijklmnop
+```
+
+<Callout type="info">
+Remove spaces from the app password when setting the environment variable.
+</Callout>
+
+## Step 5: Test Connection
+
+```bash
+pnpm start
+```
+
+Check the dashboard at `http://localhost:8080` for connection status.
+
+## IMAP Server Settings
+
+| Setting | Value |
+|---------|-------|
+| **IMAP Server** | `imap.mail.yahoo.com` |
+| **Port** | 993 |
+| **Encryption** | TLS/SSL |
+| **Username** | Your full Yahoo email address |
+| **Password** | App-specific password (not regular password) |
+
+## Yahoo Mail Folder Names
+
+Yahoo uses standard IMAP folder names:
+
+| IMAP Folder Name | Yahoo Mail Folder |
+|------------------|-------------------|
+| `INBOX` | Inbox |
+| `Sent` | Sent |
+| `Drafts` | Draft |
+| `Trash` | Trash |
+| `Bulk Mail` | Spam |
+| `Archive` | Archive |
+
+## Multiple Yahoo Accounts
+
+Process multiple Yahoo accounts:
+
+```yaml
+accounts:
+  - name: personal
+    imap:
+      host: imap.mail.yahoo.com
+      username: ${YAHOO_PERSONAL_USER}
+      password: ${YAHOO_PERSONAL_APP_PASSWORD}
+
+  - name: work
+    imap:
+      host: imap.mail.yahoo.com
+      username: ${YAHOO_WORK_USER}
+      password: ${YAHOO_WORK_APP_PASSWORD}
+```
+
+Set separate environment variables for each account.
+
+## Troubleshooting
+
+### "Username and password not accepted"
+
+**Causes:**
+1. Using regular Yahoo password instead of app password
+2. App password has spaces in it
+3. Incorrect username format
+
+**Solutions:**
+- Generate a new [app password](https://login.yahoo.com/account/security)
+- Use the 16-character app password **without spaces**
+- Ensure username is your full email address (e.g., `you@yahoo.com`)
+- Update `YAHOO_APP_PASSWORD` environment variable
+
+### "IMAP access is disabled"
+
+**Cause**: IMAP is disabled in Yahoo Mail settings.
+
+**Solution**:
+1. Go to [Yahoo Mail Settings → Mailboxes](https://mail.yahoo.com/)
+2. Enable IMAP access
+3. Save changes and restart Mailpilot
+
+### "Too many login attempts"
+
+**Cause**: Yahoo has temporarily blocked access due to multiple failed login attempts.
+
+**Solution**:
+1. Wait 10-15 minutes before retrying
+2. Verify your app password is correct
+3. Check for security alerts in your Yahoo account
+4. Generate a fresh app password if needed
+
+### Connection timeout
+
+**Cause**: Firewall blocking port 993 or Yahoo server issues.
+
+**Solution**:
+```yaml
+imap:
+  host: imap.mail.yahoo.com
+  port: 993
+  timeout: 60000  # Increase timeout to 60 seconds
+  keepalive: true
+```
+
+### "Certificate verify failed"
+
+**Cause**: SSL/TLS certificate validation issue.
+
+**Solution**:
+This is rare with Yahoo. If it occurs:
+```yaml
+imap:
+  host: imap.mail.yahoo.com
+  port: 993
+  tls: true
+  tls_options:
+    minVersion: 'TLSv1.2'
+```
+
+### "Please try again later"
+
+**Cause**: Yahoo is experiencing service issues or rate-limiting.
+
+**Solution**:
+- Check [Yahoo Mail Status](https://www.yahoo.com/status) for outages
+- Reduce polling frequency in config
+- Wait a few minutes and retry
+
+## Yahoo-Specific Considerations
+
+### Rate Limits
+
+Yahoo applies rate limits to IMAP connections:
+- **Connection limit**: ~10-15 concurrent connections
+- **Throttling**: Aggressive polling may trigger temporary blocks
+
+To avoid issues:
+```yaml
+polling_interval: 120s  # Poll every 2 minutes
+
+accounts:
+  - name: yahoo
+    imap:
+      host: imap.mail.yahoo.com
+      keepalive: true
+      timeout: 60000
+```
+
+### App Password Management
+
+- **Revoke unused app passwords** regularly in [Account Security](https://login.yahoo.com/account/security)
+- **Generate separate app passwords** for different applications
+- **Never share** app passwords or commit them to version control
+
+### Yahoo Mail Plus
+
+If you have Yahoo Mail Plus (paid account):
+- IMAP access works the same way
+- No additional configuration needed
+- Same app password requirements apply
+
+## Security Best Practices
+
+1. **Always use app passwords** - never your main Yahoo password
+2. **Enable 2-Step Verification** on your Yahoo account
+3. **Monitor sign-in activity** in [Account Security](https://login.yahoo.com/account/security)
+4. **Rotate app passwords** periodically (every 3-6 months)
+5. **Revoke unused app passwords** when you stop using an application
+6. **Use environment variables** for credentials
+7. **Never commit passwords** to version control
+
+## Advanced Configuration
+
+### Custom Folder Processing
+
+Process specific Yahoo folders with different settings:
+
+```yaml
+accounts:
+  - name: yahoo
+    imap:
+      host: imap.mail.yahoo.com
+      username: ${YAHOO_USER}
+      password: ${YAHOO_APP_PASSWORD}
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        model: gpt-4o-mini
+        prompt: |
+          Classify inbox emails...
+
+      - name: Bulk Mail
+        llm_provider: ollama  # Use local model for spam folder
+        model: llama3.2
+        prompt: |
+          Review spam classifications...
+```
+
+### Connection Pooling
+
+For high-volume processing:
+
+```yaml
+imap:
+  host: imap.mail.yahoo.com
+  port: 993
+  maxConnections: 5      # Max concurrent connections
+  keepalive: true        # Keep connections alive
+  timeout: 60000         # 60 second timeout
+```
+
+## Testing IMAP Connection Manually
+
+Verify IMAP settings with `openssl`:
+
+```bash
+openssl s_client -connect imap.mail.yahoo.com:993 -crlf
+```
+
+You should see:
+```
+* OK IMAP4rev1 Server ready
+```
+
+Test authentication (replace with your credentials):
+```
+a1 LOGIN your.email@yahoo.com your-app-password
+```
+
+Successful login shows:
+```
+a1 OK LOGIN completed
+```
+
+## Next Steps
+
+- [Configure LLM provider](/docs/llm-providers)
+- [Write classification prompts](/docs/configuration/prompts-guide)
+- [Test rules in dashboard](/docs/features/dashboard)
+
+## Additional Resources
+
+- [Yahoo Mail Help - IMAP Settings](https://help.yahoo.com/kb/SLN4075.html)
+- [Yahoo Account Security](https://login.yahoo.com/account/security)
+- [Yahoo Mail Status](https://www.yahoo.com/status)

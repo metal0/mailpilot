@@ -1,0 +1,175 @@
+---
+title: Development
+description: Developer guide for contributing to Mailpilot
+---
+
+import { Cards, Card } from 'fumadocs-ui/components/card';
+
+# Development
+
+Resources for developers working on Mailpilot or building integrations.
+
+## Development Guides
+
+<Cards>
+  <Card
+    title="Database Schema"
+    description="SQLite database structure, migrations, and queries"
+    href="/docs/development/database"
+  />
+  <Card
+    title="E2E Testing"
+    description="End-to-end testing with real IMAP and LLM providers"
+    href="/docs/development/testing"
+  />
+  <Card
+    title="AI Testing"
+    description="LLM-powered test generation and validation"
+    href="/docs/development/ai-testing"
+  />
+  <Card
+    title="OAuth Setup"
+    description="Configure OAuth for Gmail and other providers"
+    href="/docs/development/oauth-setup"
+  />
+  <Card
+    title="Contributing"
+    description="How to contribute code, documentation, and tests"
+    href="/docs/development/contributing"
+  />
+  <Card
+    title="Benchmarks"
+    description="Performance benchmarks and optimization strategies"
+    href="/docs/development/benchmarks"
+  />
+</Cards>
+
+## Getting Started
+
+### Prerequisites
+
+- **Node.js**: v22+ required
+- **pnpm**: v10.28.0+
+- **TypeScript**: v5.4+
+- **Git**: Version control
+
+### Clone and Install
+
+```bash
+git clone https://github.com/metal0/mailpilot.git
+cd mailpilot
+pnpm install
+```
+
+### Project Structure
+
+```
+mailpilot/
+├── src/                  # Backend source code
+│   ├── server/          # HTTP server and API
+│   ├── services/        # Core email processing logic
+│   ├── lib/             # Shared utilities
+│   └── types/           # TypeScript type definitions
+├── dashboard/           # Svelte frontend
+├── docs-site/           # Documentation site (fumadocs)
+├── docs/                # Developer documentation
+├── scripts/             # Utility scripts
+└── tests/               # E2E tests
+```
+
+### Development Commands
+
+```bash
+# Backend development
+pnpm dev                 # Start with hot reload
+
+# Frontend dashboard
+cd dashboard
+pnpm dev                 # Runs on port 8085
+
+# Documentation site
+cd docs-site
+pnpm dev                 # Runs on port 3001
+
+# Testing
+pnpm test                # Run E2E tests
+pnpm test:unit           # Run unit tests
+
+# Build
+pnpm build               # Build backend and dashboard
+pnpm build:docker        # Build Docker image
+```
+
+## Code Style
+
+### TypeScript
+
+- **Strict mode enabled**: No implicit `any`, strict null checks
+- **ESLint**: Configured with recommended rules
+- **Prettier**: Code formatting enforced
+
+### Conventions
+
+- **Naming**: camelCase for variables/functions, PascalCase for classes/types
+- **Async/await**: Preferred over `.then()` chains
+- **Error handling**: Always use try/catch for async operations
+- **Comments**: JSDoc for public APIs, inline for complex logic
+
+### Example
+
+```typescript
+/**
+ * Process an email using the configured LLM provider
+ * @param email - The email to process
+ * @param config - Account configuration
+ * @returns Classified actions
+ */
+async function processEmail(
+  email: IMAPEmail,
+  config: AccountConfig
+): Promise<ClassifiedActions> {
+  try {
+    // Build prompt from email content
+    const prompt = buildPrompt(email, config);
+
+    // Call LLM
+    const response = await llm.classify(prompt);
+
+    // Parse and validate actions
+    return validateActions(response);
+  } catch (error) {
+    logger.error('Email processing failed', { error });
+    throw new ProcessingError('Classification failed', { cause: error });
+  }
+}
+```
+
+## Testing Philosophy
+
+- **E2E tests**: Test against real IMAP servers and LLM providers
+- **Integration tests**: Test service interactions
+- **Unit tests**: Test individual functions and utilities
+- **AI-assisted testing**: Use LLMs to generate test cases
+
+See [E2E Testing](/docs/development/testing) and [AI Testing](/docs/development/ai-testing) for details.
+
+## Contributing
+
+We welcome contributions! See the [Contributing Guide](/docs/development/contributing) for:
+
+- Code contribution workflow
+- Pull request guidelines
+- Documentation standards
+- Issue reporting
+
+## Community
+
+- **GitHub**: [github.com/metal0/mailpilot](https://github.com/metal0/mailpilot)
+- **Matrix Chat**: [#mailpilot:i0.tf](https://matrix.to/#/#mailpilot:i0.tf)
+- **Issues**: [Bug reports and feature requests](https://github.com/metal0/mailpilot/issues)
+
+## Next Steps
+
+- [Set up your development environment →](/docs/development/contributing)
+- [Run E2E tests →](/docs/development/testing)
+- [Explore the database schema →](/docs/development/database)

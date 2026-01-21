@@ -1,0 +1,343 @@
+---
+title: Prompts Guide
+description: Write effective email classification prompts
+---
+
+import { ConfigSandbox } from '@/components/ConfigSandbox';
+
+# Prompts Guide
+
+Learn how to write effective classification prompts for Mailpilot.
+
+## How Prompts Work
+
+Your prompt is the first part of what gets sent to the LLM. Mailpilot automatically appends:
+- The list of allowed/existing folders (based on your folder mode)
+- The allowed action types (if you've restricted them)
+- The JSON response schema
+- The email content to classify
+
+**You only need to write classification instructions.** Don't include available actions or JSON format—it's handled automatically.
+
+## Basic Prompt Example
+
+```yaml
+default_prompt: |
+  You are an email classifier. Organize emails to help maintain inbox zero.
+
+  Guidelines:
+  - Important emails from real people: keep in INBOX or flag
+  - Newsletters and marketing: move to "Newsletters"
+  - Order confirmations and receipts: move to "Receipts"
+  - Social notifications: move to "Social"
+  - Suspicious or unwanted: mark as spam
+```
+
+That's it. The system adds everything else.
+
+## What Gets Auto-Injected
+
+When your prompt is sent to the LLM, Mailpilot appends these sections automatically:
+
+### Folders
+
+Based on your `folders.mode` setting:
+- **Predefined mode:** "You may ONLY move emails to these folders: ..."
+- **Auto-create mode:** "These folders already exist. Prefer using existing folders: ..."
+
+### Allowed Actions
+
+If your account has `allowed_actions` configured:
+- "You may ONLY use these action types: move, read, noop"
+- "DO NOT use these action types: delete, spam"
+
+### Response Format
+
+Always appended:
+```json
+{
+  "actions": [
+    {
+      "type": "move" | "spam" | "flag" | "read" | "delete" | "noop",
+      "folder": "string (required for move action)",
+      "flags": ["string array (required for flag action)"],
+      "reason": "string (optional, for audit log)"
+    }
+  ]
+}
+```
+
+### Confidence and Reasoning
+
+When confidence scoring is enabled:
+```json
+{
+  "actions": [...],
+  "confidence": 0.95,
+  "reasoning": "Brief explanation of classification"
+}
+```
+
+Low-confidence classifications are routed to the dead letter queue for manual review.
+
+## Action Types Reference
+
+| Type | Required Fields | Description |
+|------|-----------------|-------------|
+| `move` | `folder` | Move email to specified folder |
+| `spam` | - | Mark as spam and move to spam folder |
+| `flag` | `flags` | Add flags (see below) |
+| `read` | - | Mark email as read |
+| `delete` | - | Delete the email |
+| `noop` | - | No action (leave as-is) |
+
+### Flag Values
+
+- `Flagged` - Star/flag the email
+- `Seen` - Mark as read
+- `Answered` - Mark as replied
+- `Draft` - Mark as draft
+- `Deleted` - Mark for deletion
+
+### Multiple Actions
+
+The LLM can return multiple actions:
+```json
+{
+  "actions": [
+    {"type": "move", "folder": "Work/Important"},
+    {"type": "flag", "flags": ["Flagged"]},
+    {"type": "read"}
+  ]
+}
+```
+
+## Writing Good Prompts
+
+### 1. Define the Role
+
+Tell the LLM what kind of inbox it's managing:
+
+```
+You are an email classifier for a professional inbox.
+Your job is to organize emails while ensuring nothing important is missed.
+```
+
+### 2. Set Classification Rules
+
+Be specific about how to handle different email types:
+
+```
+Rules:
+- Emails from @company.com are work-related
+- Marketing emails go to "Newsletters"
+- GitHub notifications go to "GitHub"
+- Calendar invites stay in INBOX
+```
+
+### 3. Define Priorities
+
+Help the LLM understand what matters:
+
+```
+Priority rules:
+- Emails from boss@company.com are always important—flag them
+- Urgent keywords: "ASAP", "deadline", "critical"
+- Team standup notes can be marked as read
+```
+
+## Example Prompts
+
+### Personal Email
+
+```yaml
+default_prompt: |
+  Classify personal email.
+
+  Categories:
+  - Shopping: Orders, shipping, receipts
+  - Newsletters: Subscriptions and marketing
+  - Social: Social media notifications
+  - Important: Urgent personal matters
+
+  Rules:
+  - Family emails: flag, keep in INBOX
+  - Order confirmations: move to Shopping
+  - Marketing: move to Newsletters
+  - Social notifications: move to Social
+```
+
+### Developer Inbox
+
+```yaml
+default_prompt: |
+  Classify for a developer inbox.
+
+  Categories:
+  - GitHub: Pull requests, issues, CI notifications
+  - Deploy: Deployment and infrastructure alerts
+  - Security: Security advisories, vulnerability reports
+  - Newsletters: Tech newsletters and digests
+
+  Rules:
+  - PRs/issues from my repos: flag
+  - CI failures: flag, move to Deploy
+  - Security alerts: flag, move to Security
+  - Dependabot: move to Security
+  - Weekly digests: move to Newsletters
+```
+
+### Business Inbox
+
+```yaml
+default_prompt: |
+  Classify email for a sales professional.
+
+  Categories:
+  - Clients: Client communications
+  - Leads: Prospect inquiries
+  - Invoices: Billing and payments
+  - Reports: Automated reports
+
+  Rules:
+  - Existing clients: flag, keep in INBOX
+  - New inquiries: flag, move to Leads
+  - Invoices: move to Invoices
+  - Automated reports: mark as read, move to Reports
+  - Meeting requests: keep in INBOX
+```
+
+## Advanced Techniques
+
+### VIP Sender List
+
+```yaml
+default_prompt: |
+  VIP senders (always flag and keep in INBOX):
+  - boss@company.com
+  - ceo@company.com
+  - Any @important-client.com address
+
+  All other emails follow normal classification rules.
+```
+
+### Multi-Factor Analysis
+
+```yaml
+default_prompt: |
+  Analyze each email considering:
+  1. Sender: Human or automated system?
+  2. Urgency: Requires immediate attention?
+  3. Action needed: Needs a response?
+  4. Content type: Transactional, marketing, or personal?
+
+  Decision matrix:
+  - Human + Urgent + Action needed = flag, keep in INBOX
+  - Human + Not urgent = move to appropriate folder
+  - Automated + Important = move to relevant folder
+  - Automated + Marketing = move to Newsletters
+```
+
+### Conditional Flagging
+
+```yaml
+default_prompt: |
+  Flag emails that:
+  - Mention deadlines in the next 48 hours
+  - Contain words: urgent, ASAP, immediately, critical
+  - Are replies to threads you started
+
+  Flagged emails can still be moved to appropriate folders.
+```
+
+## Tips for Local Models
+
+Smaller models (7B parameters) work better with simpler prompts:
+
+```yaml
+default_prompt: |
+  Classify email by type.
+
+  - Marketing/newsletters -> Newsletters
+  - Orders/receipts -> Receipts
+  - Important/urgent -> flag
+  - Everything else -> appropriate folder
+```
+
+**Tips:**
+- Keep prompts under 300 words
+- Use simple, direct instructions
+- Fewer categories work better
+- Avoid complex reasoning chains
+
+## Testing Your Prompts
+
+### Use the Dashboard Sandbox
+
+The best way to test prompts is with the **Sandbox** tab:
+
+1. Navigate to the **Sandbox** tab
+2. Enter or modify your classification prompt
+3. Enter a sample email
+4. Configure folder mode and allowed actions
+5. Click **Run Test**
+
+The sandbox shows:
+- **Actions tab:** Classified actions, confidence, reasoning
+- **Prompt tab:** Full prompt sent to LLM
+- **Raw Response tab:** Raw LLM response and token usage
+
+### Enable Debug Logging
+
+```yaml
+logging:
+  level: debug
+```
+
+### Use Dry Run Mode
+
+```yaml
+dry_run: true
+```
+
+Actions are logged but not executed.
+
+## Troubleshooting
+
+### Wrong Folder Names
+
+**Problem:** LLM uses folders not in your allowed list
+
+**Solution:** In predefined mode, the system tells the LLM which folders are allowed. If it still uses wrong names, make your classification rules clearer.
+
+### Inconsistent Results
+
+**Problem:** Same email type gets different classifications
+
+**Solution:** Add explicit examples:
+```
+Examples:
+- "Your Amazon order has shipped" -> Receipts
+- "Weekly Tech Digest" -> Newsletters
+```
+
+### Actions Not Executing
+
+**Problem:** LLM returns actions that don't run
+
+**Possible causes:**
+- Action type not in `allowed_actions`
+- Folder doesn't exist (predefined mode)
+- Check logs for "Blocked disallowed action"
+
+## Interactive Configuration Sandbox
+
+Test your configuration and prompts in the browser before deploying:
+
+<ConfigSandbox />
+
+## Next Steps
+
+- [Folder modes →](/docs/configuration/folder-modes)
+- [Configure accounts →](/docs/configuration/accounts)
+- [Test in dashboard →](/docs/features/dashboard)

@@ -1,0 +1,11 @@
+{
+  "title": "LLM Providers",
+  "pages": [
+    "index",
+    "openai",
+    "ollama",
+    "anthropic",
+    "openrouter",
+    "local-models"
+  ]
+}

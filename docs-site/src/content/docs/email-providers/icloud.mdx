@@ -1,0 +1,390 @@
+---
+title: iCloud Mail Setup
+description: Configure Mailpilot with Apple iCloud Mail using app-specific passwords
+---
+
+# iCloud Mail Setup
+
+Configure Mailpilot to work with Apple iCloud Mail (@icloud.com, @me.com, @mac.com).
+
+## Prerequisites
+
+- Apple ID with iCloud Mail enabled
+- 2-Factor Authentication enabled (required for app-specific passwords)
+- IMAP access (enabled by default)
+
+## Supported iCloud Domains
+
+iCloud Mail supports multiple email domains:
+- `@icloud.com` - Primary iCloud email domain
+- `@me.com` - Legacy MobileMe domain
+- `@mac.com` - Legacy .Mac domain
+
+All use the same IMAP server configuration.
+
+## Step 1: Enable 2-Factor Authentication
+
+App-specific passwords require 2FA to be enabled on your Apple ID.
+
+1. Go to [Apple ID Account](https://appleid.apple.com/)
+2. Sign in with your Apple ID
+3. Navigate to **Security** section
+4. If 2FA is not enabled, click **Turn On Two-Factor Authentication**
+5. Follow the prompts to set up 2FA
+
+## Step 2: Generate App-Specific Password
+
+<Callout type="warn">
+**Never use your Apple ID password!** App-specific passwords are required for third-party apps like Mailpilot.
+</Callout>
+
+1. Go to [Apple ID Account](https://appleid.apple.com/)
+2. Sign in with your Apple ID
+3. In the **Security** section, find **App-Specific Passwords**
+4. Click **Generate Password...**
+5. Enter a label: `Mailpilot` or `Email Automation`
+6. Click **Create**
+7. **Copy the password** displayed (format: `xxxx-xxxx-xxxx-xxxx`)
+
+<Callout type="info">
+The app-specific password is shown only once. Store it securely or you'll need to generate a new one.
+</Callout>
+
+## Step 3: Configure Mailpilot
+
+Add iCloud Mail to your `config.yaml`:
+
+```yaml
+accounts:
+  - name: icloud
+    imap:
+      host: imap.mail.me.com
+      port: 993
+      username: ${ICLOUD_USER}        # your.email@icloud.com
+      password: ${ICLOUD_APP_PASSWORD}  # App-specific password
+      tls: true
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify this email...
+```
+
+## Step 4: Set Environment Variables
+
+Set your iCloud credentials:
+
+```bash
+export ICLOUD_USER="your.email@icloud.com"
+export ICLOUD_APP_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+```
+
+Or use a `.env` file:
+
+```bash
+ICLOUD_USER=your.email@icloud.com
+ICLOUD_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
+```
+
+<Callout type="info">
+You can include or omit the hyphens in the app-specific password - both work.
+</Callout>
+
+## Step 5: Test Connection
+
+```bash
+pnpm start
+```
+
+Check the dashboard at `http://localhost:8080` for connection status.
+
+## IMAP Server Settings
+
+| Setting | Value |
+|---------|-------|
+| **IMAP Server** | `imap.mail.me.com` |
+| **Port** | 993 |
+| **Encryption** | TLS/SSL |
+| **Username** | Your full iCloud email address |
+| **Password** | App-specific password (not Apple ID password) |
+
+<Callout type="info">
+All iCloud email domains (@icloud.com, @me.com, @mac.com) use the same IMAP server: `imap.mail.me.com`
+</Callout>
+
+## iCloud Mail Folder Names
+
+iCloud uses standard IMAP folder names:
+
+| IMAP Folder Name | iCloud Mail Folder |
+|------------------|-------------------|
+| `INBOX` | Inbox |
+| `Sent Messages` | Sent |
+| `Drafts` | Drafts |
+| `Deleted Messages` | Trash |
+| `Junk` | Junk |
+| `Archive` | Archive |
+
+## Multiple iCloud Accounts
+
+Process multiple iCloud accounts (if you have multiple Apple IDs):
+
+```yaml
+accounts:
+  - name: personal
+    imap:
+      host: imap.mail.me.com
+      username: ${ICLOUD_PERSONAL_USER}
+      password: ${ICLOUD_PERSONAL_APP_PASSWORD}
+
+  - name: work
+    imap:
+      host: imap.mail.me.com
+      username: ${ICLOUD_WORK_USER}
+      password: ${ICLOUD_WORK_APP_PASSWORD}
+```
+
+Set separate environment variables for each account.
+
+## Troubleshooting
+
+### "Username and password not accepted"
+
+**Causes:**
+1. Using Apple ID password instead of app-specific password
+2. 2-Factor Authentication not enabled
+3. Incorrect email format
+4. App-specific password expired or revoked
+
+**Solutions:**
+- Generate a new [app-specific password](https://appleid.apple.com/)
+- Ensure 2FA is enabled on your Apple ID
+- Use your full email address (e.g., `you@icloud.com`)
+- Verify the app-specific password is correct
+- Check that you didn't accidentally revoke the password
+
+### "IMAP is disabled for this account"
+
+**Cause**: IMAP access is disabled in iCloud Mail settings.
+
+**Solution**:
+1. Sign in to [iCloud.com](https://www.icloud.com/)
+2. Go to **Account Settings**
+3. Ensure Mail is enabled
+4. IMAP is enabled by default - contact Apple Support if disabled
+
+### "Account temporarily locked"
+
+**Cause**: Multiple failed login attempts triggered Apple's security protection.
+
+**Solution**:
+1. Wait 15-30 minutes before retrying
+2. Check your Apple ID account for security alerts
+3. Verify you're using the correct app-specific password
+4. Generate a fresh app-specific password if needed
+5. Visit [iforgot.apple.com](https://iforgot.apple.com) if locked
+
+### Connection timeout
+
+**Cause**: Firewall blocking port 993 or iCloud server issues.
+
+**Solution**:
+```yaml
+imap:
+  host: imap.mail.me.com
+  port: 993
+  timeout: 60000  # Increase timeout to 60 seconds
+  keepalive: true
+```
+
+### "Certificate verify failed"
+
+**Cause**: SSL/TLS certificate validation issue.
+
+**Solution**:
+This is rare with iCloud. If it occurs:
+```yaml
+imap:
+  host: imap.mail.me.com
+  port: 993
+  tls: true
+  tls_options:
+    minVersion: 'TLSv1.2'
+```
+
+### "Too many simultaneous connections"
+
+**Cause**: iCloud limits concurrent IMAP connections (typically 15-20).
+
+**Solution**:
+- Close other email clients accessing the same account
+- Reduce `polling_interval` in your config
+- Use separate app-specific passwords for different applications
+
+## iCloud-Specific Considerations
+
+### App-Specific Password Management
+
+You can manage your app-specific passwords at [appleid.apple.com](https://appleid.apple.com/):
+
+- **View active passwords**: See which apps have access
+- **Revoke passwords**: Click the **x** next to a password to revoke it
+- **Generate new passwords**: Create new passwords as needed
+
+Each password shows:
+- Name you gave it (e.g., "Mailpilot")
+- Creation date
+- No expiration (unless revoked manually)
+
+### Rate Limits
+
+iCloud applies rate limits to IMAP connections:
+- **Connection limit**: ~15-20 concurrent connections
+- **Throttling**: Aggressive polling may trigger temporary blocks
+
+To avoid issues:
+```yaml
+polling_interval: 120s  # Poll every 2 minutes
+
+accounts:
+  - name: icloud
+    imap:
+      host: imap.mail.me.com
+      keepalive: true
+      timeout: 60000
+```
+
+### iCloud+ Features
+
+If you have iCloud+ (paid storage plan):
+- IMAP access works the same way
+- "Hide My Email" addresses work with IMAP
+- Custom domain emails use the same server
+- Same app-specific password requirements
+
+### Custom Domain Email
+
+If you use a custom domain with iCloud Mail:
+
+```yaml
+accounts:
+  - name: custom-domain
+    imap:
+      host: imap.mail.me.com
+      port: 993
+      username: ${CUSTOM_DOMAIN_USER}  # you@yourdomain.com
+      password: ${ICLOUD_APP_PASSWORD}  # Same app-specific password
+```
+
+## Security Best Practices
+
+1. **Always use app-specific passwords** - never your Apple ID password
+2. **Keep 2FA enabled** on your Apple ID
+3. **Monitor sign-in activity** in [Apple ID Security](https://appleid.apple.com/)
+4. **Revoke unused passwords** when you stop using an application
+5. **Use environment variables** for credentials
+6. **Never commit passwords** to version control
+7. **Rotate app-specific passwords** periodically
+
+## Advanced Configuration
+
+### Per-Folder Settings
+
+Process different iCloud folders with different settings:
+
+```yaml
+accounts:
+  - name: icloud
+    imap:
+      host: imap.mail.me.com
+      username: ${ICLOUD_USER}
+      password: ${ICLOUD_APP_PASSWORD}
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        model: gpt-4o-mini
+        prompt: |
+          Classify inbox emails...
+
+      - name: Junk
+        llm_provider: ollama  # Use local model for junk folder
+        model: llama3.2
+        prompt: |
+          Review spam classifications...
+
+      - name: Archive
+        llm_provider: openai
+        model: gpt-4o-mini
+        prompt: |
+          Organize archived emails...
+```
+
+### Connection Pool Settings
+
+For high-volume email processing:
+
+```yaml
+imap:
+  host: imap.mail.me.com
+  port: 993
+  maxConnections: 5      # Max concurrent connections
+  keepalive: true        # Keep connections alive
+  timeout: 60000         # 60 second timeout
+```
+
+## Testing IMAP Connection Manually
+
+Verify IMAP settings with `openssl`:
+
+```bash
+openssl s_client -connect imap.mail.me.com:993 -crlf
+```
+
+You should see:
+```
+* OK iCloud IMAP4 service ready
+```
+
+Test authentication (replace with your credentials):
+```
+a1 LOGIN your.email@icloud.com xxxx-xxxx-xxxx-xxxx
+```
+
+Successful login shows:
+```
+a1 OK LOGIN completed
+```
+
+## Migrating from Other Email Providers
+
+If you're migrating from another provider to iCloud:
+
+1. **Forward emails** from old provider to iCloud (temporary)
+2. **Update configuration** with iCloud settings
+3. **Generate new app-specific password** for Mailpilot
+4. **Test thoroughly** before removing old provider config
+5. **Update environment variables** with iCloud credentials
+
+## Hide My Email Integration
+
+If you use Apple's "Hide My Email" feature:
+
+- Each hide-my-email address appears as a separate folder in IMAP
+- These are aliased to your main inbox
+- Classification rules apply to the main INBOX folder
+- Replies maintain the hide-my-email address
+
+## Next Steps
+
+- [Configure LLM provider](/docs/llm-providers)
+- [Write classification prompts](/docs/configuration/prompts-guide)
+- [Test rules in dashboard](/docs/features/dashboard)
+
+## Additional Resources
+
+- [iCloud Mail Settings](https://support.apple.com/en-us/HT202304)
+- [App-Specific Passwords](https://support.apple.com/en-us/HT204397)
+- [Two-Factor Authentication for Apple ID](https://support.apple.com/en-us/HT204915)
+- [iCloud System Status](https://www.apple.com/support/systemstatus/)

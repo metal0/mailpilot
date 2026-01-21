@@ -1,0 +1,553 @@
+---
+title: Local Models Setup
+description: Deploy custom local LLM models for complete control and privacy
+---
+
+# Local Models Setup
+
+Configure Mailpilot with custom local LLM deployments using various frameworks and tools.
+
+<Callout type="info">
+**For advanced users**: This guide covers custom local model deployments. If you're new to local LLMs, start with [Ollama](/docs/llm-providers/ollama) instead.
+</Callout>
+
+## Overview
+
+Local models give you:
+- ✅ **Complete privacy** - data never leaves your server
+- ✅ **No API costs** - zero per-request fees
+- ✅ **Offline operation** - works without internet
+- ✅ **Full control** - customize models and parameters
+- ❌ **Hardware requirements** - needs powerful GPU
+- ❌ **Setup complexity** - technical knowledge required
+- ❌ **Maintenance burden** - updates, optimization, troubleshooting
+
+## Deployment Options
+
+### 1. Ollama (Recommended)
+
+**Easiest local deployment**. See [Ollama Setup Guide](/docs/llm-providers/ollama).
+
+### 2. vLLM
+
+**High-performance inference** for production deployments.
+
+### 3. llama.cpp
+
+**CPU-optimized** inference with minimal dependencies.
+
+### 4. Text Generation WebUI (oobabooga)
+
+**Web interface** for model management and testing.
+
+### 5. LocalAI
+
+**OpenAI-compatible API** for local models.
+
+### 6. Custom OpenAI-Compatible Servers
+
+**Any service** implementing the OpenAI API spec.
+
+## vLLM Setup
+
+vLLM provides high-throughput, memory-efficient inference.
+
+### Install vLLM
+
+```bash
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install vLLM
+pip install vllm
+
+# Or with CUDA support
+pip install vllm[cuda]
+```
+
+### Start vLLM Server
+
+```bash
+# Start server with Llama 3.1 8B
+python -m vllm.entrypoints.openai.api_server \
+  --model meta-llama/Meta-Llama-3.1-8B-Instruct \
+  --port 8000 \
+  --host 0.0.0.0
+```
+
+### Configure Mailpilot
+
+```yaml
+llm_providers:
+  - name: vllm
+    provider: openai  # vLLM is OpenAI-compatible
+    base_url: http://localhost:8000/v1
+    api_key: dummy  # Not used, but required field
+    model: meta-llama/Meta-Llama-3.1-8B-Instruct
+    temperature: 0.1
+```
+
+**Pros**:
+- Very fast inference
+- Efficient GPU memory usage
+- Supports batching
+- Production-ready
+
+**Cons**:
+- Requires GPU
+- More complex setup than Ollama
+- Requires Python environment
+
+## llama.cpp Setup
+
+llama.cpp runs models on CPU with good performance.
+
+### Install llama.cpp
+
+```bash
+# Clone repository
+git clone https://github.com/ggerganov/llama.cpp
+cd llama.cpp
+
+# Build
+make
+
+# Build with CUDA (optional)
+make LLAMA_CUDA=1
+```
+
+### Download Model
+
+```bash
+# Download GGUF model
+wget https://huggingface.co/TheBloke/Llama-2-7B-Chat-GGUF/resolve/main/llama-2-7b-chat.Q4_K_M.gguf
+```
+
+### Start Server
+
+```bash
+./server \
+  -m llama-2-7b-chat.Q4_K_M.gguf \
+  --host 0.0.0.0 \
+  --port 8080 \
+  -c 2048
+```
+
+### Configure Mailpilot
+
+```yaml
+llm_providers:
+  - name: llamacpp
+    provider: openai  # llama.cpp server is OpenAI-compatible
+    base_url: http://localhost:8080/v1
+    api_key: dummy
+    model: llama-2-7b-chat
+    temperature: 0.1
+```
+
+**Pros**:
+- Works on CPU (no GPU required)
+- Minimal dependencies
+- Supports many model formats (GGUF)
+- Quantization for smaller memory usage
+
+**Cons**:
+- Slower than GPU inference
+- Manual model conversion needed
+- Command-line only
+
+## Text Generation WebUI (oobabooga)
+
+Feature-rich web interface for running models.
+
+### Install
+
+```bash
+# Clone repository
+git clone https://github.com/oobabooga/text-generation-webui
+cd text-generation-webui
+
+# Run setup script
+./start_linux.sh  # or start_windows.bat, start_macos.sh
+```
+
+### Start Server
+
+1. Launch WebUI: `./start_linux.sh`
+2. Download model in the **Model** tab
+3. Load model
+4. Enable **API** in **Settings** → **Extensions**
+5. Restart with API enabled
+
+### Configure Mailpilot
+
+```yaml
+llm_providers:
+  - name: oobabooga
+    provider: openai  # Uses OpenAI-compatible API
+    base_url: http://localhost:5000/v1
+    api_key: dummy
+    model: your-model-name
+    temperature: 0.1
+```
+
+**Pros**:
+- User-friendly web interface
+- Easy model management
+- Supports many model formats
+- Built-in testing tools
+
+**Cons**:
+- Higher resource usage
+- Slower than dedicated servers
+- More dependencies
+
+## LocalAI
+
+OpenAI-compatible API for local models.
+
+### Install LocalAI
+
+**Docker (recommended)**:
+
+```bash
+docker run -p 8080:8080 \
+  -v $PWD/models:/models \
+  localai/localai:latest
+```
+
+**Binary**:
+
+```bash
+# Download binary
+wget https://github.com/mudler/LocalAI/releases/download/v2.0.0/local-ai-Linux-x86_64
+chmod +x local-ai-Linux-x86_64
+
+# Run
+./local-ai-Linux-x86_64
+```
+
+### Configure Model
+
+Create `models/llama.yaml`:
+
+```yaml
+name: llama-3.1
+model: meta-llama-3.1-8b-instruct
+backend: llama-cpp
+parameters:
+  temperature: 0.1
+  top_p: 0.9
+```
+
+### Configure Mailpilot
+
+```yaml
+llm_providers:
+  - name: localai
+    provider: openai
+    base_url: http://localhost:8080/v1
+    api_key: dummy
+    model: llama-3.1
+    temperature: 0.1
+```
+
+**Pros**:
+- Drop-in OpenAI replacement
+- Supports multiple backends
+- Docker deployment
+- Simple configuration
+
+**Cons**:
+- Extra abstraction layer
+- May be slower than native backends
+
+## Custom OpenAI-Compatible Server
+
+Any server implementing OpenAI's API works:
+
+```yaml
+llm_providers:
+  - name: custom
+    provider: openai
+    base_url: http://your-server:port/v1
+    api_key: ${YOUR_API_KEY}  # If required
+    model: your-model-name
+    temperature: 0.1
+```
+
+## Hardware Recommendations
+
+### CPU-Only Deployment
+
+**Minimum**:
+- 16GB RAM
+- Modern x64 CPU (8+ cores)
+
+**Recommended**:
+- 32GB RAM
+- High-end CPU (16+ cores)
+- Fast SSD
+
+**Models**: 3B-7B parameters (quantized)
+
+### GPU Deployment
+
+**Entry-Level**:
+- NVIDIA RTX 3060 (12GB VRAM)
+- 16GB system RAM
+- Models: 7B-13B parameters
+
+**Mid-Range**:
+- NVIDIA RTX 4070 (12GB VRAM) or 4090 (24GB VRAM)
+- 32GB system RAM
+- Models: 13B-34B parameters
+
+**High-End**:
+- NVIDIA A100 (40GB VRAM) or H100 (80GB VRAM)
+- 64GB+ system RAM
+- Models: 70B+ parameters
+
+## Model Selection
+
+### Small Models (3B-7B)
+
+**Examples**:
+- Llama 3.2 3B
+- Phi-3 Mini
+- Mistral 7B
+
+**Use cases**:
+- Personal email classification
+- Low-volume processing
+- CPU-only deployments
+
+### Medium Models (8B-13B)
+
+**Examples**:
+- Llama 3.1 8B
+- Mistral 7B (instruct)
+- Vicuna 13B
+
+**Use cases**:
+- Business email classification
+- Moderate volume
+- GPU recommended
+
+### Large Models (30B-70B)
+
+**Examples**:
+- Llama 3.1 70B
+- Mixtral 8x7B
+
+**Use cases**:
+- Complex classification rules
+- High accuracy requirements
+- High-end GPU required
+
+## Quantization
+
+Reduce model size and memory usage with quantization:
+
+| Quantization | Size Reduction | Quality Loss | Use Case |
+|--------------|----------------|--------------|----------|
+| **Q4_K_M** | 4-bit | Minimal | Recommended |
+| **Q5_K_M** | 5-bit | Very low | High quality |
+| **Q8_0** | 8-bit | Negligible | Maximum quality |
+| **Q2_K** | 2-bit | Significant | Testing only |
+
+**Example**: Llama 3.1 8B
+- FP16: 16GB
+- Q4_K_M: 4.7GB
+- Q2_K: 2.5GB
+
+## Performance Tuning
+
+### Context Window
+
+Reduce context window for faster inference:
+
+```yaml
+llm_providers:
+  - name: local
+    # ...
+    context_length: 2048  # Reduce from default 4096
+```
+
+### Batch Processing
+
+Process multiple emails simultaneously:
+
+```yaml
+llm_providers:
+  - name: local
+    # ...
+    batch_size: 8  # Process 8 emails at once
+```
+
+### Thread Count (CPU)
+
+Optimize CPU thread usage:
+
+```bash
+# llama.cpp
+./server -m model.gguf -t 8  # Use 8 threads
+```
+
+### GPU Layers
+
+Offload layers to GPU (hybrid CPU+GPU):
+
+```bash
+# llama.cpp
+./server -m model.gguf -ngl 35  # Offload 35 layers to GPU
+```
+
+## Monitoring
+
+### Resource Usage
+
+Monitor system resources:
+
+```bash
+# CPU and RAM
+htop
+
+# GPU (NVIDIA)
+nvidia-smi -l 1
+
+# GPU (AMD)
+rocm-smi -l 1
+```
+
+### Inference Speed
+
+Measure tokens per second:
+
+```bash
+# Most servers log this automatically
+[INFO] Generated 150 tokens in 2.5s (60 tokens/sec)
+```
+
+**Target**: 20+ tokens/sec for good UX
+
+## Troubleshooting
+
+### Out of Memory (OOM)
+
+**Causes:**
+1. Model too large for GPU/RAM
+2. Context window too large
+3. Batch size too large
+
+**Solutions:**
+- Use smaller model
+- Use quantized model (Q4 instead of Q8)
+- Reduce context length
+- Reduce batch size
+- Close other applications
+
+### Slow Inference
+
+**Causes:**
+1. CPU-only inference
+2. Large model
+3. High context window
+
+**Solutions:**
+- Enable GPU acceleration
+- Use smaller/quantized model
+- Reduce context length
+- Increase thread count (CPU)
+
+### Model Crashes
+
+**Causes:**
+1. Incompatible model format
+2. Corrupted download
+3. Insufficient resources
+
+**Solutions:**
+- Re-download model
+- Verify model compatibility with backend
+- Check logs for specific errors
+- Ensure enough RAM/VRAM
+
+## Security & Privacy
+
+### Network Security
+
+**Bind to localhost only**:
+
+```bash
+# Secure - only accessible from local machine
+./server --host 127.0.0.1
+
+# Insecure - accessible from network
+./server --host 0.0.0.0  # Don't use in production!
+```
+
+### Authentication
+
+Add authentication if exposing to network:
+
+```yaml
+# Use nginx proxy with auth
+llm_providers:
+  - name: local
+    base_url: http://localhost:8080/v1
+    api_key: ${SECURE_API_KEY}
+```
+
+### Data Retention
+
+Local models process data in memory only:
+- No data sent to external servers
+- No persistent logging of prompts/responses (by default)
+- Data deleted after processing
+
+## Cost Comparison
+
+### Setup Costs
+
+| Component | Cost |
+|-----------|------|
+| **GPU** (RTX 4070) | $600 |
+| **RAM** (32GB) | $100 |
+| **Storage** (1TB SSD) | $80 |
+| **Total** | ~$780 |
+
+### Operating Costs
+
+- **Electricity**: ~$5-15/month (GPU running 24/7)
+- **Maintenance**: $0 (self-managed)
+
+### Break-Even Analysis
+
+vs OpenAI gpt-4o-mini:
+- Monthly API cost: ~$10-50
+- Break-even: 8-78 months
+
+vs Anthropic Claude Sonnet:
+- Monthly API cost: ~$30-200
+- Break-even: 4-26 months
+
+**Local makes sense if**:
+- High email volume (>10K emails/month)
+- Privacy is critical
+- Long-term usage (2+ years)
+
+## Next Steps
+
+- [Write effective classification prompts →](/docs/configuration/prompts-guide)
+- [Configure email folders →](/docs/configuration/folders)
+- [Test in dashboard →](/docs/features/dashboard)
+
+## Additional Resources
+
+- [vLLM Documentation](https://docs.vllm.ai/)
+- [llama.cpp GitHub](https://github.com/ggerganov/llama.cpp)
+- [Text Generation WebUI](https://github.com/oobabooga/text-generation-webui)
+- [LocalAI Documentation](https://localai.io/basics/getting_started/)
+- [Hugging Face Models](https://huggingface.co/models)

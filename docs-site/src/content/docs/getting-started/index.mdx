@@ -1,0 +1,96 @@
+---
+title: Getting Started
+description: Get Mailpilot up and running in minutes
+---
+
+# Getting Started with Mailpilot
+
+Mailpilot is an AI-powered email processing daemon that automatically organizes, flags, and manages your inbox using LLM classification.
+
+## What You'll Need
+
+Before you begin, ensure you have:
+
+- **Node.js 22+** installed on your system
+- **pnpm** package manager (or npm)
+- **Email account with IMAP access** (Gmail, Outlook, etc.)
+- **LLM API key** (OpenAI, Anthropic, or access to Ollama)
+
+## Installation Options
+
+Choose the method that works best for you:
+
+<Cards>
+  <Card title="From Source" href="/docs/getting-started/installation#from-source">
+    Clone the repository and build from source. Best for development.
+  </Card>
+  <Card title="Docker" href="/docs/getting-started/installation#docker">
+    Run with Docker or Docker Compose. Easiest for production deployment.
+  </Card>
+  <Card title="Pre-built Binary" href="/docs/getting-started/installation#binary">
+    Download and run the pre-built executable (coming soon).
+  </Card>
+</Cards>
+
+## Quick Start (5 minutes)
+
+The fastest way to get started:
+
+```bash
+# 1. Clone and install
+git clone https://github.com/metal0/mailpilot.git
+cd mailpilot
+pnpm install
+
+# 2. Configure
+cp config.example.yaml config.yaml
+# Edit config.yaml with your email and LLM settings
+
+# 3. Build and run
+pnpm build
+pnpm start
+```
+
+Visit `http://localhost:8080` to access the dashboard.
+
+## Next Steps
+
+<Steps>
+  <Step>
+    ### Configure Your Email Account
+
+    Set up IMAP access for [Gmail](/docs/email-providers/gmail), [Outlook](/docs/email-providers/outlook), or [another provider](/docs/email-providers).
+  </Step>
+
+  <Step>
+    ### Choose an LLM Provider
+
+    Configure [OpenAI](/docs/llm-providers/openai), [Ollama](/docs/llm-providers/ollama), [Anthropic](/docs/llm-providers/anthropic), or another provider.
+  </Step>
+
+  <Step>
+    ### Write Classification Rules
+
+    Learn how to write effective [classification prompts](/docs/configuration/prompts-guide) for your inbox.
+  </Step>
+
+  <Step>
+    ### Test and Deploy
+
+    Use the [dashboard sandbox](/docs/features/dashboard#testing-sandbox) to test rules before production.
+  </Step>
+</Steps>
+
+## Key Features
+
+- **Smart LLM Classification** - Uses any OpenAI-compatible API with confidence scoring and multi-action support
+- **Multi-Account Management** - Process unlimited email accounts with per-account settings
+- **Real-Time Dashboard** - Modern web interface with live updates and activity logs
+- **Privacy-First Design** - Email content never stored or logged
+- **Works With Any IMAP Server** - Gmail, Outlook, FastMail, self-hosted
+
+## Need Help?
+
+- [Troubleshooting Guide](/docs/troubleshooting)
+- [Matrix Chat](https://matrix.to/#/#mailpilot:i0.tf)
+- [GitHub Issues](https://github.com/metal0/mailpilot/issues)
