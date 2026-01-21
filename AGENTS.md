@@ -2,7 +2,7 @@
 
 This document describes how Mailpilot uses AI/LLM services for email classification and processing.
 
-> **Note:** User-facing documentation is available on the [GitHub Wiki](https://github.com/metal0/mailpilot/wiki). This file contains technical details for developers.
+> **Note:** User-facing documentation is available at [metal0.github.io/mailpilot](https://metal0.github.io/mailpilot/). This file contains technical details for developers.
 
 ## CRITICAL: Testing Requirements
 
@@ -453,7 +453,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/status
 2. **Implement the feature** with full requirements:
    - Complete, working implementation (no placeholders)
    - Unit tests for new functionality
-   - Documentation updates (AGENTS.md, README, Wiki as applicable)
+   - Documentation updates (AGENTS.md, README, docs-site/ as applicable)
 
 3. **Before creating PR**, verify:
    - `pnpm lint && pnpm typecheck && pnpm build` passes
@@ -549,7 +549,7 @@ When modifying prompt building or response parsing:
 ### Documentation
 Update these docs when LLM behavior changes:
 - `AGENTS.md` - This file, for technical details
-- GitHub Wiki - User-facing LLM provider setup guides
+- `docs-site/src/content/docs/llm-providers/` - User-facing LLM provider setup guides
 - `docs/dashboard.md` - If API endpoints change
 
 ### Documentation Accuracy (CRITICAL)
