@@ -69,6 +69,7 @@ import * as tls from "node:tls";
 import {
   probeImapPort,
   probeTlsCertificate,
+  probeStarttlsCertificate,
   detectImapProvider,
   type CertificateInfo,
 } from "../imap/probe.js";
@@ -1337,14 +1338,52 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
               });
             }
           } else {
-            // STARTTLS - can't probe certificate directly
-            logger.warn("Cannot probe certificate for STARTTLS - requires IMAP protocol negotiation");
-            return c.json({
-              success: false,
-              error: `Self-signed certificate detected. STARTTLS connections don't support certificate inspection in this interface. Use direct TLS on port 993 instead, or manually inspect the certificate using: openssl s_client -starttls imap -connect ${body.host}:${body.port || 143}`,
-              errorCode,
-              rawError: errorMessage,
-            });
+            // STARTTLS - probe certificate using STARTTLS protocol
+            logger.info("Probing certificate via STARTTLS");
+            try {
+              const starttlsProbe = await probeStarttlsCertificate(body.host, body.port || 143);
+              if (starttlsProbe.certificateInfo) {
+                const fingerprint = starttlsProbe.certificateInfo.fingerprint256;
+                const isTrusted = trustedFingerprints.some(fp =>
+                  fp.replace(/^sha256:/i, "").toUpperCase() === fingerprint.toUpperCase()
+                );
+
+                if (!isTrusted) {
+                  return c.json({
+                    success: false,
+                    error: userFriendlyError,
+                    errorCode,
+                    certificateInfo: starttlsProbe.certificateInfo,
+                    requiresCertificateTrust: true,
+                    rawError: errorMessage,
+                  });
+                } else {
+                  userFriendlyError = "Certificate is already trusted, but connection still failed. Check other connection settings.";
+                  return c.json({
+                    success: false,
+                    error: userFriendlyError,
+                    errorCode,
+                    rawError: errorMessage,
+                  });
+                }
+              } else {
+                logger.warn("STARTTLS certificate probe returned no certificate info");
+                return c.json({
+                  success: false,
+                  error: "Self-signed certificate detected, but couldn't retrieve certificate details via STARTTLS.",
+                  errorCode,
+                  rawError: errorMessage,
+                });
+              }
+            } catch (starttlsError) {
+              logger.warn("STARTTLS certificate probe failed", { error: starttlsError });
+              return c.json({
+                success: false,
+                error: `Self-signed certificate detected. Failed to probe certificate via STARTTLS. You can manually inspect it using: openssl s_client -starttls imap -connect ${body.host}:${body.port || 143}`,
+                errorCode,
+                rawError: errorMessage,
+              });
+            }
           }
         } else if (errorMessage.includes("certificate") || errorMessage.includes("CERT_")) {
           errorCode = "CERTIFICATE_ERROR";
