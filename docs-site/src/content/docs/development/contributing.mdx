@@ -1,0 +1,377 @@
+---
+title: Contributing
+description: How to contribute code, documentation, and tests
+---
+
+# Contributing Guide
+
+Thank you for considering contributing to Mailpilot! This document outlines the process for contributing code, documentation, and tests.
+
+## Getting Started
+
+### Prerequisites
+
+- **Node.js**: v22+
+- **pnpm**: v10.28.0+
+- **Git**: For version control
+- **TypeScript**: v5.4+ (installed via pnpm)
+
+### Fork and Clone
+
+```bash
+# Fork the repository on GitHub, then:
+git clone https://github.com/YOUR_USERNAME/mailpilot.git
+cd mailpilot
+
+# Add upstream remote
+git remote add upstream https://github.com/metal0/mailpilot.git
+
+# Install dependencies
+pnpm install
+```
+
+### Development Workflow
+
+```bash
+# Create a feature branch
+git checkout -b feature/your-feature-name
+
+# Make your changes
+# ...
+
+# Run tests
+pnpm test
+
+# Build to check for errors
+pnpm build
+
+# Commit with conventional commits
+git commit -m "feat: add email filtering support"
+
+# Push and create PR
+git push origin feature/your-feature-name
+```
+
+## Code Contributions
+
+### Code Style
+
+Mailpilot uses:
+- **ESLint**: For linting
+- **Prettier**: For code formatting
+- **TypeScript strict mode**: No implicit `any`, strict null checks
+
+Before committing, ensure:
+```bash
+# Lint code
+pnpm lint
+
+# Format code
+pnpm format
+
+# Type-check
+pnpm typecheck
+```
+
+### Commit Message Convention
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**Types:**
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, no logic change)
+- `refactor`: Code refactoring
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks
+
+**Examples:**
+```
+feat(llm): add support for Claude 3.5 Sonnet
+
+Adds support for Anthropic's new Claude 3.5 Sonnet model with vision capabilities.
+
+Closes #123
+```
+
+```
+fix(imap): handle connection timeout gracefully
+
+Prevents crash when IMAP server doesn't respond within timeout period.
+```
+
+### Pull Request Process
+
+1. **Create an issue first** - Discuss your proposed changes
+2. **Keep PRs focused** - One feature/fix per PR
+3. **Write tests** - All new code should have tests
+4. **Update documentation** - Document new features
+5. **Request review** - Tag maintainers for review
+
+**PR Template:**
+
+```markdown
+## Description
+Brief description of changes
+
+## Type of Change
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change
+- [ ] Documentation update
+
+## Testing
+- [ ] E2E tests added/updated
+- [ ] Unit tests added/updated
+- [ ] Manual testing completed
+
+## Checklist
+- [ ] Code follows project style
+- [ ] Self-review completed
+- [ ] Documentation updated
+- [ ] No breaking changes (or documented)
+```
+
+## Documentation Contributions
+
+### Documentation Structure
+
+Documentation is written in MDX (Markdown + JSX) using fumadocs:
+
+```
+docs-site/src/content/docs/
+├── getting-started/
+├── email-providers/
+├── llm-providers/
+├── configuration/
+├── features/
+└── development/
+```
+
+### Writing Documentation
+
+**Style Guidelines:**
+
+1. **Be concise** - Get to the point quickly
+2. **Use examples** - Show, don't just tell
+3. **Link related docs** - Help users discover content
+4. **Use callouts** - Highlight warnings and tips
+
+**Example:**
+
+```mdx
+---
+title: Feature Name
+description: Brief description
+---
+
+# Feature Name
+
+Introduction paragraph explaining the feature.
+
+## Basic Usage
+
+```yaml
+config_example: true
+```
+
+<Callout type="info">
+This is a helpful tip for users.
+</Callout>
+
+## Next Steps
+
+- [Related page →](/docs/related)
+```
+
+### Testing Documentation
+
+```bash
+cd docs-site
+pnpm dev  # Preview at http://localhost:3001
+```
+
+Check for:
+- No broken links
+- Code examples work
+- Images display correctly
+- Navigation is logical
+
+## Testing Contributions
+
+### Running Tests
+
+```bash
+# All tests
+pnpm test
+
+# E2E tests only
+pnpm test:e2e
+
+# Unit tests only
+pnpm test:unit
+
+# Watch mode
+pnpm test:watch
+```
+
+### Writing Tests
+
+#### E2E Tests (Playwright)
+
+```typescript
+import { test, expect } from '@playwright/test';
+
+test.describe('Feature Name', () => {
+  test('should do something', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('h1')).toContainText('Mailpilot');
+  });
+});
+```
+
+See [E2E Testing Guide](/docs/development/testing) for details.
+
+#### Unit Tests
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { myFunction } from './my-module';
+
+describe('myFunction', () => {
+  it('should return expected result', () => {
+    expect(myFunction('input')).toBe('expected');
+  });
+});
+```
+
+## Community Guidelines
+
+### Code of Conduct
+
+- **Be respectful** - Treat everyone with respect
+- **Be constructive** - Provide helpful feedback
+- **Be patient** - Remember maintainers are volunteers
+- **Be collaborative** - Work together toward solutions
+
+### Reporting Issues
+
+**Good Issue:**
+```markdown
+## Bug Description
+Dashboard shows "undefined" instead of account name
+
+## Steps to Reproduce
+1. Add new account
+2. Navigate to dashboard
+3. Observe account name shows "undefined"
+
+## Expected Behavior
+Account name should display correctly
+
+## Environment
+- Mailpilot version: 1.2.3
+- OS: Ubuntu 22.04
+- Node.js: v22.0.0
+```
+
+**Feature Request:**
+```markdown
+## Feature Request
+Support for ProtonMail Bridge
+
+## Problem
+ProtonMail users can't use Mailpilot without setting up Bridge manually.
+
+## Proposed Solution
+Add ProtonMail Bridge as a provider preset with documentation.
+
+## Alternatives
+Could document manual Bridge setup, but preset would be easier.
+```
+
+### Getting Help
+
+- **Matrix Chat**: [#mailpilot:i0.tf](https://matrix.to/#/#mailpilot:i0.tf)
+- **GitHub Issues**: For bug reports and feature requests
+- **Discussions**: For questions and general discussion
+
+## Development Resources
+
+### Useful Commands
+
+```bash
+# Backend development
+pnpm dev                  # Start with hot reload
+pnpm build                # Build for production
+pnpm start                # Run production build
+
+# Dashboard development
+cd dashboard
+pnpm dev                  # Svelte dev server
+pnpm build                # Build for production
+
+# Documentation
+cd docs-site
+pnpm dev                  # Fumadocs dev server
+pnpm build                # Build static site
+
+# Database
+pnpm seed:test            # Seed test data
+sqlite3 ./data/mailpilot.db  # Open database
+
+# Testing
+pnpm test:e2e:headed      # E2E with visible browser
+pnpm test:e2e:debug       # E2E with inspector
+```
+
+### Project Architecture
+
+- **Backend**: Node.js + TypeScript + Hono
+- **Frontend**: Svelte + Vite + TypeScript
+- **Database**: SQLite + better-sqlite3
+- **Docs**: Next.js + fumadocs + MDX
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/server/index.ts` | HTTP server entry point |
+| `src/services/imap.ts` | IMAP connection management |
+| `src/services/classifier.ts` | LLM classification logic |
+| `src/lib/llm/*.ts` | LLM provider implementations |
+| `dashboard/src/routes/` | Svelte dashboard routes |
+| `docs-site/src/content/docs/` | Documentation pages |
+
+## Release Process
+
+Releases are managed by maintainers:
+
+1. Version bump in `package.json`
+2. Update `CHANGELOG.md`
+3. Create git tag: `v1.2.3`
+4. Push tag: `git push origin v1.2.3`
+5. GitHub Actions builds and publishes
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the MIT License.
+
+## Questions?
+
+Join the [Matrix chat](https://matrix.to/#/#mailpilot:i0.tf) or open a [GitHub Discussion](https://github.com/metal0/mailpilot/discussions).
+
+## Next Steps
+
+- [Set up development environment →](/docs/development/)
+- [Run E2E tests →](/docs/development/testing)
+- [Explore the codebase →](https://github.com/metal0/mailpilot)
