@@ -1,0 +1,279 @@
+---
+title: Gmail Setup
+description: Configure Mailpilot with Gmail using app passwords
+---
+
+# Gmail Setup
+
+Configure Mailpilot to work with Gmail accounts (personal Gmail or Google Workspace).
+
+## Prerequisites
+
+- Gmail account (personal or Google Workspace)
+- 2-Factor Authentication enabled (required for app passwords)
+- IMAP access enabled (usually enabled by default)
+
+## Step 1: Enable 2-Factor Authentication
+
+App passwords require 2FA to be enabled on your Google account.
+
+1. Go to [Google Account Security](https://myaccount.google.com/security)
+2. Under "Signing in to Google", click **2-Step Verification**
+3. Follow the prompts to enable 2FA if not already enabled
+
+## Step 2: Generate App Password
+
+<Callout type="warn">
+**Never use your regular Gmail password!** App passwords are specifically designed for third-party apps like Mailpilot.
+</Callout>
+
+1. Go to [App Passwords](https://myaccount.google.com/apppasswords)
+2. Select app: **Mail**
+3. Select device: **Other (Custom name)**
+4. Enter name: `Mailpilot` or `Email Classifier`
+5. Click **Generate**
+6. **Copy the 16-character password** (shown without spaces)
+
+The app password looks like: `abcd efgh ijkl mnop` (16 characters with spaces, but use without spaces in config)
+
+## Step 3: Enable IMAP (if needed)
+
+Gmail usually has IMAP enabled by default. To verify:
+
+1. Open [Gmail Settings](https://mail.google.com/mail/u/0/#settings/fwdandpop)
+2. Click the **Forwarding and POP/IMAP** tab
+3. Under **IMAP Access**, select **Enable IMAP**
+4. Click **Save Changes**
+
+## Step 4: Configure Mailpilot
+
+Add Gmail to your `config.yaml`:
+
+```yaml
+accounts:
+  - name: personal
+    imap:
+      host: imap.gmail.com
+      port: 993
+      username: ${GMAIL_USER}           # your.email@gmail.com
+      password: ${GMAIL_APP_PASSWORD}   # 16-character app password
+      tls: true
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify this email...
+```
+
+## Step 5: Set Environment Variables
+
+Set your Gmail credentials as environment variables:
+
+```bash
+export GMAIL_USER="your.email@gmail.com"
+export GMAIL_APP_PASSWORD="abcdefghijklmnop"  # No spaces!
+```
+
+Or create a `.env` file:
+
+```bash
+GMAIL_USER=your.email@gmail.com
+GMAIL_APP_PASSWORD=abcdefghijklmnop
+```
+
+<Callout type="info">
+Remove spaces from the app password when setting the environment variable.
+</Callout>
+
+## Step 6: Test Connection
+
+Start Mailpilot and verify the connection:
+
+```bash
+pnpm start
+```
+
+Check the dashboard at `http://localhost:8080`:
+- Health Status should show Gmail as "Connected"
+- Logs should show successful IMAP connection
+
+## Gmail Labels vs Folders
+
+Gmail uses "labels" instead of traditional folders. In IMAP, labels appear as folders.
+
+### Creating Folders (Labels)
+
+Mailpilot can automatically create Gmail labels when moving emails:
+
+```yaml
+folders:
+  - name: INBOX
+    prompt: |
+      {
+        "action": "move",
+        "folder": "Important",  # Creates "Important" label if it doesn't exist
+        "confidence": 0.95
+      }
+```
+
+### Common Gmail Folder Names
+
+| IMAP Folder Name | Gmail Label |
+|------------------|-------------|
+| `INBOX` | Inbox |
+| `[Gmail]/All Mail` | All Mail |
+| `[Gmail]/Sent Mail` | Sent |
+| `[Gmail]/Drafts` | Drafts |
+| `[Gmail]/Spam` | Spam |
+| `[Gmail]/Trash` | Trash |
+| `Important` | Important (custom label) |
+
+## Multiple Gmail Accounts
+
+You can process multiple Gmail accounts:
+
+```yaml
+accounts:
+  - name: personal
+    imap:
+      host: imap.gmail.com
+      username: ${GMAIL_PERSONAL_USER}
+      password: ${GMAIL_PERSONAL_APP_PASSWORD}
+
+  - name: work
+    imap:
+      host: imap.gmail.com
+      username: ${GMAIL_WORK_USER}
+      password: ${GMAIL_WORK_APP_PASSWORD}
+```
+
+Set separate environment variables for each account.
+
+## Google Workspace Accounts
+
+Google Workspace (G Suite) accounts work the same way:
+
+```yaml
+accounts:
+  - name: workspace
+    imap:
+      host: imap.gmail.com
+      port: 993
+      username: ${WORKSPACE_USER}       # you@yourcompany.com
+      password: ${WORKSPACE_APP_PASSWORD}
+```
+
+**Note**: Some Google Workspace admins may restrict IMAP access. Contact your admin if you encounter access issues.
+
+## Troubleshooting
+
+### "Username and password not accepted"
+
+**Cause**: Using your regular Gmail password instead of an app password.
+
+**Solution**:
+1. Generate a new [app password](https://myaccount.google.com/apppasswords)
+2. Use the 16-character app password (without spaces)
+3. Update `GMAIL_APP_PASSWORD` environment variable
+
+### "IMAP access is disabled for your account"
+
+**Cause**: IMAP is disabled in Gmail settings.
+
+**Solution**:
+1. Go to [Gmail Settings → Forwarding and POP/IMAP](https://mail.google.com/mail/u/0/#settings/fwdandpop)
+2. Enable IMAP
+3. Save changes and restart Mailpilot
+
+### "Please log in via your web browser"
+
+**Cause**: Google detected suspicious activity and locked IMAP access.
+
+**Solution**:
+1. Check your email for a Google security alert
+2. Confirm it was you trying to access your account
+3. Visit [https://accounts.google.com/DisplayUnlockCaptcha](https://accounts.google.com/DisplayUnlockCaptcha)
+4. Click "Continue" to unlock your account
+5. Wait a few minutes and retry
+
+### "Too many simultaneous connections"
+
+**Cause**: Gmail limits concurrent IMAP connections (usually 15).
+
+**Solution**:
+- Close other email clients accessing the same account
+- Reduce `polling_interval` in your config
+- Use separate app passwords for different applications
+
+### Connection timeout or slow performance
+
+**Cause**: Gmail's IMAP server may be slow or rate-limiting.
+
+**Solution**:
+```yaml
+imap:
+  host: imap.gmail.com
+  timeout: 60000  # Increase timeout to 60 seconds
+  keepalive: true # Keep connection alive
+```
+
+## Advanced Configuration
+
+### Per-Folder Settings
+
+Process different Gmail folders with different settings:
+
+```yaml
+accounts:
+  - name: personal
+    imap:
+      host: imap.gmail.com
+      username: ${GMAIL_USER}
+      password: ${GMAIL_APP_PASSWORD}
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        model: gpt-4o-mini
+        prompt: |
+          Classify inbox emails...
+
+      - name: "[Gmail]/All Mail"
+        llm_provider: ollama  # Use cheaper local model for archive
+        model: llama3.2
+        prompt: |
+          Archive classification...
+```
+
+### Filtering by Gmail Labels
+
+You can target specific Gmail labels:
+
+```yaml
+folders:
+  - name: Important  # Process "Important" label
+    llm_provider: openai
+    prompt: |
+      Further classify important emails...
+```
+
+## Security Best Practices
+
+1. **Never commit app passwords** to version control
+2. **Use environment variables** for credentials
+3. **Rotate app passwords** periodically
+4. **Revoke unused app passwords** in [Google Account settings](https://myaccount.google.com/apppasswords)
+5. **Monitor account activity** for suspicious logins
+
+## Next Steps
+
+- [Configure LLM provider](/docs/llm-providers)
+- [Write classification prompts](/docs/configuration/prompts-guide)
+- [Test rules in dashboard](/docs/features/dashboard)
+
+## Additional Resources
+
+- [Gmail IMAP Settings](https://support.google.com/mail/answer/7126229)
+- [Google App Passwords](https://support.google.com/accounts/answer/185833)
+- [Gmail API Limits](https://developers.google.com/gmail/api/reference/quota)

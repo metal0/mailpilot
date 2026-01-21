@@ -1,0 +1,279 @@
+---
+title: Outlook & Microsoft 365 Setup
+description: Configure Mailpilot with Outlook.com, Hotmail, and Microsoft 365
+---
+
+# Outlook & Microsoft 365 Setup
+
+Configure Mailpilot with Microsoft email services: Outlook.com, Hotmail.com, Live.com, and Microsoft 365 (Office 365).
+
+## Supported Microsoft Services
+
+- **Outlook.com** - @outlook.com, @hotmail.com, @live.com
+- **Microsoft 365** - Business and Enterprise accounts
+- **Exchange Online** - Office 365 Exchange
+
+## Prerequisites
+
+- Microsoft account or Microsoft 365 account
+- IMAP access enabled (may need admin approval for Microsoft 365)
+
+## Step 1: Enable IMAP Access
+
+### For Outlook.com/Hotmail
+
+IMAP is usually enabled by default. To verify:
+
+1. Sign in to [Outlook.com](https://outlook.live.com/)
+2. Click ⚙️ **Settings** → **View all Outlook settings**
+3. Go to **Mail** → **Sync email**
+4. Under **POP and IMAP**, ensure **Let devices and apps use IMAP** is checked
+5. Click **Save**
+
+### For Microsoft 365 / Office 365
+
+**Individual users:**
+1. Sign in to [Office 365](https://outlook.office.com/)
+2. Click ⚙️ **Settings** → **View all Outlook settings**
+3. Go to **Mail** → **Sync email**
+4. Enable IMAP access
+
+**Administrators:**
+
+IMAP may be disabled organization-wide. Admins can enable it:
+
+1. Go to [Microsoft 365 Admin Center](https://admin.microsoft.com/)
+2. Navigate to **Settings** → **Org settings** → **Services**
+3. Click **Modern authentication**
+4. Ensure IMAP is enabled for the organization
+
+## Step 2: Configure Mailpilot
+
+Add Outlook to your `config.yaml`:
+
+```yaml
+accounts:
+  - name: outlook
+    imap:
+      host: outlook.office365.com
+      port: 993
+      username: ${OUTLOOK_USER}        # your.email@outlook.com
+      password: ${OUTLOOK_PASSWORD}    # Your account password
+      tls: true
+
+    folders:
+      - name: INBOX
+        llm_provider: openai
+        prompt: |
+          Classify this email...
+```
+
+## Step 3: Set Environment Variables
+
+Set your Outlook credentials:
+
+```bash
+export OUTLOOK_USER="your.email@outlook.com"
+export OUTLOOK_PASSWORD="your-password"
+```
+
+Or use a `.env` file:
+
+```bash
+OUTLOOK_USER=your.email@outlook.com
+OUTLOOK_PASSWORD=your-password
+```
+
+<Callout type="warn">
+**Outlook.com**: Use your regular account password (not an app password)
+
+**Microsoft 365 with MFA**: You may need to use an app password or OAuth
+</Callout>
+
+## Step 4: Test Connection
+
+```bash
+pnpm start
+```
+
+Check the dashboard at `http://localhost:8080` for connection status.
+
+## IMAP Server Settings
+
+| Service | IMAP Server | Port | TLS |
+|---------|-------------|------|-----|
+| Outlook.com / Hotmail | `outlook.office365.com` | 993 | Yes |
+| Microsoft 365 | `outlook.office365.com` | 993 | Yes |
+| Custom Exchange | `mail.yourcompany.com` | 993 | Yes |
+
+## Microsoft 365 / Office 365
+
+### Standard Configuration
+
+```yaml
+accounts:
+  - name: work
+    imap:
+      host: outlook.office365.com
+      port: 993
+      username: ${M365_USER}        # you@yourcompany.com
+      password: ${M365_PASSWORD}
+      tls: true
+```
+
+### With Multi-Factor Authentication (MFA)
+
+If your organization requires MFA, you have two options:
+
+#### Option 1: App Password (if supported)
+
+Some organizations allow app passwords:
+
+1. Go to [My Account → Security](https://mysignins.microsoft.com/security-info)
+2. Click **+ Add method** → **App password**
+3. Enter a name (e.g., "Mailpilot")
+4. Copy the generated password
+
+```yaml
+imap:
+  host: outlook.office365.com
+  username: ${M365_USER}
+  password: ${M365_APP_PASSWORD}  # Use app password, not regular password
+```
+
+#### Option 2: OAuth 2.0 (coming soon)
+
+OAuth support is planned for future releases. Track progress in [Issue #XX](https://github.com/metal0/mailpilot/issues/).
+
+## Folder Names
+
+Outlook uses standard IMAP folder names:
+
+| IMAP Folder Name | Outlook Folder |
+|------------------|----------------|
+| `INBOX` | Inbox |
+| `Sent Items` | Sent |
+| `Drafts` | Drafts |
+| `Deleted Items` | Deleted |
+| `Junk Email` | Junk |
+| `Archive` | Archive |
+
+## Multiple Microsoft Accounts
+
+Process multiple Outlook/Microsoft accounts:
+
+```yaml
+accounts:
+  - name: personal
+    imap:
+      host: outlook.office365.com
+      username: ${OUTLOOK_PERSONAL_USER}
+      password: ${OUTLOOK_PERSONAL_PASSWORD}
+
+  - name: work
+    imap:
+      host: outlook.office365.com
+      username: ${M365_WORK_USER}
+      password: ${M365_WORK_PASSWORD}
+```
+
+## Troubleshooting
+
+### "Login failed" or "Authentication error"
+
+**Causes:**
+1. Incorrect username or password
+2. IMAP disabled in account settings
+3. MFA requires app password
+4. Microsoft 365 admin blocked IMAP
+
+**Solutions:**
+- Verify credentials are correct
+- [Enable IMAP access](#step-1-enable-imap-access)
+- Use app password if MFA is enabled
+- Contact Microsoft 365 admin to enable IMAP
+
+### "IMAP is disabled for this organization"
+
+**Cause**: Your Microsoft 365 administrator has disabled IMAP.
+
+**Solution**: Contact your IT admin to enable IMAP for your account or organization.
+
+### Connection timeout
+
+**Cause**: Firewall blocking port 993 or server issues.
+
+**Solution**:
+```yaml
+imap:
+  host: outlook.office365.com
+  timeout: 60000  # Increase timeout
+  port: 993
+```
+
+### "Too many connections"
+
+**Cause**: Outlook limits concurrent IMAP connections (typically 15-20).
+
+**Solution**:
+- Close other email clients
+- Reduce polling frequency
+- Use a dedicated account for automation
+
+## Custom Exchange Server
+
+For on-premises Exchange or custom Exchange Online setup:
+
+```yaml
+accounts:
+  - name: exchange
+    imap:
+      host: mail.yourcompany.com    # Your Exchange server
+      port: 993
+      username: ${EXCHANGE_USER}
+      password: ${EXCHANGE_PASSWORD}
+      tls: true
+```
+
+Check with your IT admin for the correct IMAP server address.
+
+## Rate Limits and Throttling
+
+Microsoft applies rate limits to IMAP connections:
+
+- **Connection limit**: ~15-20 concurrent connections
+- **Throttling**: Aggressive polling may trigger throttling
+
+To avoid issues:
+
+```yaml
+polling_interval: 120s  # Poll every 2 minutes instead of 1 minute
+
+accounts:
+  - name: outlook
+    imap:
+      host: outlook.office365.com
+      # Connection settings
+      keepalive: true
+      timeout: 60000
+```
+
+## Security Best Practices
+
+1. **Enable MFA** on your Microsoft account
+2. **Use app passwords** when available
+3. **Monitor sign-in activity** in [My Account → Security](https://mysignins.microsoft.com/security-info)
+4. **Rotate passwords** regularly
+5. **Review connected apps** periodically
+
+## Next Steps
+
+- [Configure LLM provider](/docs/llm-providers)
+- [Write classification prompts](/docs/configuration/prompts-guide)
+- [Test in dashboard](/docs/features/dashboard)
+
+## Additional Resources
+
+- [Outlook.com IMAP Settings](https://support.microsoft.com/account-billing/pop-imap-and-smtp-settings-8361e398-8af4-4e97-b147-6c6c4ac95353)
+- [Microsoft 365 IMAP](https://learn.microsoft.com/exchange/clients-and-mobile-in-exchange-online/pop3-and-imap4/enable-or-disable-pop3-or-imap4-access)
+- [Exchange Online Limits](https://learn.microsoft.com/office365/servicedescriptions/exchange-online-service-description/exchange-online-limits#imap4-limits)

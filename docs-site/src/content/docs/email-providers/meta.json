@@ -1,0 +1,12 @@
+{
+  "title": "Email Providers",
+  "pages": [
+    "index",
+    "gmail",
+    "outlook",
+    "yahoo",
+    "icloud",
+    "protonmail",
+    "generic-imap"
+  ]
+}
