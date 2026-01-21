@@ -77,6 +77,7 @@ export function probeTlsCertificate(
         }
       });
 
+      // CRITICAL: Attach error handler immediately to prevent uncaught exceptions
       socket.on("error", (error: NodeJS.ErrnoException) => {
         // Try again without validation to get certificate info for self-signed certs
         if (error.code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" ||

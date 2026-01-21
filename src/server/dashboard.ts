@@ -1220,6 +1220,13 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         ...(Object.keys(tlsOptions).length > 0 ? { tls: tlsOptions } : {}),
       });
 
+      // CRITICAL: Attach error handler immediately to prevent uncaught exceptions
+      // ImapFlow can emit error events during TLS handshake before connect() rejects
+      client.on("error", (error: Error) => {
+        // Just log - the actual error will be caught by the try/catch around connect()
+        logger.debug("ImapFlow error event during test connection", { error: error.message });
+      });
+
       // Set a timeout for the connection test (use object to track state across async boundary)
       const state = { timedOut: false };
       const timeout = setTimeout(() => {
