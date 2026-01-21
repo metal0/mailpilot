@@ -125,13 +125,40 @@ export function probeTlsCertificate(
             }
           });
 
-          unsafeSocket.on("error", () => {
+          unsafeSocket.on("error", (_unsafeError) => {
+            // Try to get certificate even if there was an error
+            const cert = unsafeSocket.getPeerCertificate();
             cleanup();
-            resolve({
-              success: false,
-              error: error.message,
-              errorCode: error.code || "CERT_ERROR",
-            });
+
+            if (cert.fingerprint256) {
+              const isSelfSigned = error.code === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
+                error.code === "SELF_SIGNED_CERT_IN_CHAIN" ||
+                error.message.includes("self-signed");
+              const subjectObj = cert.subject as { CN?: string; O?: string } | undefined;
+              const issuerObj = cert.issuer as { CN?: string; O?: string } | undefined;
+
+              resolve({
+                success: false,
+                error: isSelfSigned ? "Self-signed certificate" : error.message,
+                errorCode: error.code ?? "CERT_ERROR",
+                certificateInfo: {
+                  fingerprint256: cert.fingerprint256,
+                  subject: typeof cert.subject === "string" ? cert.subject :
+                    (subjectObj?.CN ?? subjectObj?.O ?? "Unknown"),
+                  issuer: typeof cert.issuer === "string" ? cert.issuer :
+                    (issuerObj?.CN ?? issuerObj?.O ?? "Unknown"),
+                  validFrom: cert.valid_from,
+                  validTo: cert.valid_to,
+                  selfSigned: isSelfSigned,
+                },
+              });
+            } else {
+              resolve({
+                success: false,
+                error: error.message,
+                errorCode: error.code || "CERT_ERROR",
+              });
+            }
           });
         } else {
           cleanup();
