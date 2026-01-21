@@ -94,7 +94,7 @@ export function probeTlsCertificate(
             cleanup();
             try { unsafeSocket.destroy(); } catch { /* ignore */ }
 
-            if (cert) {
+            if (cert.fingerprint256) {
               const isSelfSigned = error.code === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
                 error.code === "SELF_SIGNED_CERT_IN_CHAIN" ||
                 error.message.includes("self-signed");
