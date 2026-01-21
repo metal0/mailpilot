@@ -1,0 +1,375 @@
+---
+title: Global Settings
+description: Top-level configuration options for Mailpilot
+---
+
+# Global Settings
+
+Top-level configuration options that apply to all accounts and overall Mailpilot behavior.
+
+## Configuration Options
+
+### Concurrency & Performance
+
+```yaml
+concurrency_limit: 5
+dry_run: false
+add_processing_headers: false
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `concurrency_limit` | integer | `5` | Maximum emails to process concurrently |
+| `dry_run` | boolean | `false` | Log actions without executing them |
+| `add_processing_headers` | boolean | `false` | Add X-Mailpilot headers to processed emails |
+
+<Callout type="info">
+**Note**: `polling_interval` has moved to per-account configuration. See [Account Settings](/docs/configuration/accounts#polling-interval).
+</Callout>
+
+### State & Database
+
+Database and audit log configuration:
+
+```yaml
+state:
+  database_path: ./data/mailpilot.db
+  processed_ttl: 24h
+  audit_retention: 30d
+  audit_subjects: false
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `database_path` | string | `./data/mailpilot.db` | SQLite database file path |
+| `processed_ttl` | duration | `24h` | How long to remember processed email IDs |
+| `audit_retention` | duration | `30d` | How long to keep audit/activity logs |
+| `audit_subjects` | boolean | `false` | Include email subjects in audit logs |
+
+### Logging
+
+Application logging configuration:
+
+```yaml
+logging:
+  level: info
+  file: ./logs/mailpilot.log
+  include_subjects: false
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `level` | string | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `file` | string | - | Optional log file path (in addition to stdout) |
+| `include_subjects` | boolean | `false` | Include email subjects in logs |
+
+<Callout type="warn">
+**Privacy**: Set `audit_subjects: false` and `include_subjects: false` to avoid logging email subjects for privacy compliance.
+</Callout>
+
+## Dry Run Mode
+
+Test your configuration without taking actions:
+
+```yaml
+dry_run: true
+```
+
+In dry run mode:
+- ✅ Emails are classified
+- ✅ Actions are logged
+- ❌ No emails are moved, flagged, or modified
+- ✅ Dashboard shows what would happen
+
+**Use cases:**
+- Testing new classification prompts
+- Verifying configuration changes
+- Debugging classification logic
+
+**Example output:**
+```
+[DRY RUN] Would move email "Meeting reminder" to folder "Important"
+[DRY RUN] Would flag email "Q4 Report" as important
+[DRY RUN] Would mark email "Newsletter" as read
+```
+
+## Processing Headers
+
+Add `X-Mailpilot-*` headers to processed emails:
+
+```yaml
+add_processing_headers: true
+```
+
+Headers added:
+```
+X-Mailpilot-Processed: true
+X-Mailpilot-Action: move
+X-Mailpilot-Folder: Important
+X-Mailpilot-Confidence: 0.95
+X-Mailpilot-Timestamp: 2024-01-15T10:30:00Z
+```
+
+**Use cases:**
+- Audit trail for processed emails
+- Debugging classification decisions
+- Integration with email filters
+
+<Callout type="warn">
+These headers are visible to email recipients if you forward processed emails. Disable for privacy.
+</Callout>
+
+## Concurrency Limit
+
+Control how many emails are processed simultaneously:
+
+```yaml
+concurrency_limit: 5  # Process up to 5 emails at once
+```
+
+**Guidelines:**
+
+| Email Volume | Recommended Concurrency |
+|--------------|------------------------|
+| < 100/day | 3-5 |
+| 100-1000/day | 5-10 |
+| > 1000/day | 10-20 |
+
+**Factors to consider:**
+- **API rate limits**: Higher concurrency may hit provider rate limits
+- **System resources**: More concurrency needs more CPU/memory
+- **Cost**: More concurrent requests to paid APIs = higher costs
+
+## Database Configuration
+
+### Database Path
+
+```yaml
+state:
+  database_path: ./data/mailpilot.db
+```
+
+**Options:**
+- Relative path: `./data/mailpilot.db` (current directory)
+- Absolute path: `/var/lib/mailpilot/mailpilot.db`
+- Home directory: `~/mailpilot/mailpilot.db`
+
+### Processed TTL
+
+How long to remember email IDs to avoid reprocessing:
+
+```yaml
+state:
+  processed_ttl: 24h
+```
+
+**Recommendations:**
+
+| Use Case | TTL |
+|----------|-----|
+| Testing/Development | `1h` - `6h` |
+| Personal Email | `24h` |
+| Business Email | `7d` |
+| High Volume | `30d` |
+
+Shorter TTL = less database size, but risk of reprocessing emails.
+
+### Audit Retention
+
+How long to keep activity logs:
+
+```yaml
+state:
+  audit_retention: 30d
+```
+
+**Compliance guidelines:**
+
+| Requirement | Retention |
+|-------------|-----------|
+| GDPR compliance | `30d` minimum |
+| SOC 2 audit | `90d` |
+| Financial services | `7y` |
+
+## Log Levels
+
+Configure application logging verbosity:
+
+```yaml
+logging:
+  level: info
+```
+
+### Log Level Comparison
+
+| Level | What's Logged | Use Case |
+|-------|--------------|----------|
+| `error` | Errors only | Production (minimal) |
+| `warn` | Warnings + errors | Production (standard) |
+| `info` | General info + above | Production (recommended) |
+| `debug` | Detailed debug info | Development, troubleshooting |
+
+### Log Output
+
+**Console only** (default):
+```yaml
+logging:
+  level: info
+```
+
+**Console + File**:
+```yaml
+logging:
+  level: info
+  file: ./logs/mailpilot.log
+```
+
+**File rotation** (handled by external tool):
+```bash
+# Use logrotate or similar
+/var/log/mailpilot.log {
+    daily
+    rotate 7
+    compress
+    missingok
+}
+```
+
+## Privacy Considerations
+
+### Email Subject Logging
+
+```yaml
+state:
+  audit_subjects: false
+
+logging:
+  include_subjects: false
+```
+
+**When to disable** (recommended):
+- Personal email with sensitive content
+- GDPR/privacy compliance required
+- Health/financial information in emails
+
+**When to enable**:
+- Development/debugging
+- Audit requirements mandate subject logging
+- Low-sensitivity email accounts
+
+### Database Security
+
+Protect your database file:
+
+```bash
+# Set restrictive permissions
+chmod 600 ./data/mailpilot.db
+
+# Encrypt filesystem (Linux)
+sudo cryptsetup luksFormat /dev/sdX
+```
+
+## Performance Tuning
+
+### High Volume Configuration
+
+For processing 1000+ emails per day:
+
+```yaml
+concurrency_limit: 15
+state:
+  database_path: /fast-ssd/mailpilot.db
+  processed_ttl: 7d
+  audit_retention: 30d
+logging:
+  level: warn  # Reduce log volume
+  file: ./logs/mailpilot.log
+```
+
+### Low Resource Configuration
+
+For small VPS or Raspberry Pi:
+
+```yaml
+concurrency_limit: 2
+state:
+  processed_ttl: 6h
+  audit_retention: 7d
+logging:
+  level: info
+```
+
+## Examples
+
+### Minimal Configuration
+
+```yaml
+concurrency_limit: 3
+dry_run: false
+```
+
+### Production Configuration
+
+```yaml
+concurrency_limit: 10
+dry_run: false
+add_processing_headers: true
+
+state:
+  database_path: /var/lib/mailpilot/mailpilot.db
+  processed_ttl: 7d
+  audit_retention: 90d
+  audit_subjects: false
+
+logging:
+  level: info
+  file: /var/log/mailpilot/mailpilot.log
+  include_subjects: false
+```
+
+### Development Configuration
+
+```yaml
+concurrency_limit: 1
+dry_run: true  # Safety first!
+add_processing_headers: true
+
+state:
+  database_path: ./dev-data/mailpilot.db
+  processed_ttl: 1h
+  audit_retention: 7d
+  audit_subjects: true  # OK for dev
+
+logging:
+  level: debug  # Verbose logging
+  include_subjects: true
+```
+
+## Troubleshooting
+
+### Database Locked Errors
+
+**Cause**: Multiple Mailpilot instances accessing the same database.
+
+**Solution**: Use separate database files or ensure only one instance runs.
+
+### Disk Space Issues
+
+**Cause**: Large audit logs or long retention periods.
+
+**Solution**:
+```yaml
+state:
+  audit_retention: 7d  # Reduce retention
+```
+
+Or clean up old logs:
+```bash
+sqlite3 mailpilot.db "DELETE FROM audit_log WHERE created_at < datetime('now', '-30 days')"
+```
+
+## Next Steps
+
+- [Configure server and dashboard →](/docs/configuration/server)
+- [Set up email accounts →](/docs/configuration/accounts)
+- [Configure LLM providers →](/docs/configuration/llm)

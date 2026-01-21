@@ -1,0 +1,487 @@
+---
+title: Server & Dashboard
+description: HTTP server and web dashboard configuration
+---
+
+# Server & Dashboard Configuration
+
+Configure Mailpilot's HTTP server and web dashboard.
+
+## Server Settings
+
+Basic HTTP server configuration:
+
+```yaml
+server:
+  port: 8080
+  auth_token: ${AUTH_TOKEN}
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `port` | integer | `8080` | HTTP server port |
+| `auth_token` | string | - | Optional token for API authentication |
+
+## Dashboard Settings
+
+Web dashboard configuration:
+
+```yaml
+dashboard:
+  enabled: true
+  session_secret: ${SESSION_SECRET}
+  session_ttl: 24h
+  api_keys:
+    - name: monitoring
+      key: ${API_KEY}
+      permissions: [read:stats, read:activity]
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable web dashboard |
+| `session_secret` | string | auto-generated | Secret for session encryption |
+| `session_ttl` | duration | `24h` | Login session duration |
+| `api_keys` | array | `[]` | API keys for programmatic access |
+
+## API Keys
+
+API keys allow programmatic access to the dashboard API without browser login.
+
+### Configuration
+
+```yaml
+dashboard:
+  api_keys:
+    - name: monitoring
+      key: mp_1234567890abcdef
+      permissions:
+        - read:stats
+        - read:activity
+
+    - name: automation
+      key: ${AUTOMATION_API_KEY}
+      permissions:
+        - read:*
+        - write:stats
+```
+
+### API Key Options
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `name` | string | Yes | Human-readable key name |
+| `key` | string | Yes | API key (min 16 characters) |
+| `permissions` | array | No | List of permissions (default: `[read:stats]`) |
+
+### Permissions Reference
+
+**Read Permissions:**
+
+| Permission | Description |
+|------------|-------------|
+| `read:stats` | View statistics |
+| `read:activity` | View activity logs |
+| `read:logs` | View application logs |
+| `read:export` | Export data |
+| `read:accounts` | View account configuration |
+| `read:*` | All read permissions |
+
+**Write Permissions:**
+
+| Permission | Description |
+|------------|-------------|
+| `write:stats` | Modify statistics |
+| `write:activity` | Modify activity logs |
+| `write:logs` | Modify application logs |
+| `write:export` | Modify export settings |
+| `write:accounts` | Modify account configuration |
+| `write:*` | All write permissions |
+
+**Special Permissions:**
+
+| Permission | Description |
+|------------|-------------|
+| `*` | Full access (all read + write) |
+
+## Using API Keys
+
+### HTTP Headers
+
+```bash
+curl -H "Authorization: Bearer mp_1234567890abcdef" \
+  http://localhost:8080/api/stats
+```
+
+### JavaScript/TypeScript
+
+```typescript
+const response = await fetch('http://localhost:8080/api/stats', {
+  headers: {
+    'Authorization': 'Bearer mp_1234567890abcdef'
+  }
+});
+
+const stats = await response.json();
+```
+
+### Python
+
+```python
+import requests
+
+headers = {'Authorization': 'Bearer mp_1234567890abcdef'}
+response = requests.get('http://localhost:8080/api/stats', headers=headers)
+stats = response.json()
+```
+
+## Session Management
+
+### Session TTL
+
+Configure how long dashboard sessions remain active:
+
+```yaml
+dashboard:
+  session_ttl: 24h  # 24 hours
+```
+
+**Recommended values:**
+
+| Use Case | TTL |
+|----------|-----|
+| Personal laptop | `7d` - `30d` |
+| Shared computer | `4h` - `8h` |
+| Public computer | `30m` - `1h` |
+| Production server | `24h` |
+
+### Session Secret
+
+Auto-generated on first run, or provide your own:
+
+```yaml
+dashboard:
+  session_secret: ${SESSION_SECRET}
+```
+
+<Callout type="warn">
+**Security**: Use a strong, random session secret. Generate one:
+
+```bash
+openssl rand -base64 32
+```
+</Callout>
+
+## Port Configuration
+
+### Default Port (8080)
+
+```yaml
+server:
+  port: 8080
+```
+
+Access: `http://localhost:8080`
+
+### Custom Port
+
+```yaml
+server:
+  port: 3000
+```
+
+Access: `http://localhost:3000`
+
+### Privileged Ports (< 1024)
+
+Requires root or capabilities:
+
+```bash
+# Option 1: Run as root (not recommended)
+sudo pnpm start
+
+# Option 2: Set capabilities (Linux)
+sudo setcap 'cap_net_bind_service=+ep' /usr/bin/node
+```
+
+Or use port forwarding:
+```bash
+# Forward 80 → 8080
+sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080
+```
+
+## Reverse Proxy Setup
+
+### nginx
+
+```nginx
+server {
+    listen 80;
+    server_name mailpilot.example.com;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### Apache
+
+```apache
+<VirtualHost *:80>
+    ServerName mailpilot.example.com
+
+    ProxyPreserveHost On
+    ProxyPass / http://localhost:8080/
+    ProxyPassReverse / http://localhost:8080/
+</VirtualHost>
+```
+
+### Caddy
+
+```caddyfile
+mailpilot.example.com {
+    reverse_proxy localhost:8080
+}
+```
+
+## SSL/TLS (HTTPS)
+
+Mailpilot doesn't handle SSL directly. Use a reverse proxy:
+
+### nginx with Let's Encrypt
+
+```bash
+# Install certbot
+sudo apt install certbot python3-certbot-nginx
+
+# Get certificate
+sudo certbot --nginx -d mailpilot.example.com
+```
+
+Updated nginx config:
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name mailpilot.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/mailpilot.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mailpilot.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        # ... proxy headers
+    }
+}
+
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    server_name mailpilot.example.com;
+    return 301 https://$server_name$request_uri;
+}
+```
+
+## Authentication
+
+### Token-Based Auth
+
+Protect API endpoints with a token:
+
+```yaml
+server:
+  auth_token: ${AUTH_TOKEN}
+```
+
+Requests must include:
+```bash
+curl -H "Authorization: Bearer ${AUTH_TOKEN}" \
+  http://localhost:8080/api/stats
+```
+
+### Dashboard Login
+
+The dashboard requires login by default. Credentials are set on first visit.
+
+### Disable Authentication (Development Only)
+
+```yaml
+dashboard:
+  enabled: true
+  # No auth_token or api_keys
+```
+
+<Callout type="warn">
+**Never** disable authentication in production or when exposed to the internet!
+</Callout>
+
+## Firewall Configuration
+
+### Allow Local Access Only
+
+```bash
+# Linux (iptables)
+sudo iptables -A INPUT -p tcp --dport 8080 -s 127.0.0.1 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 8080 -j DROP
+
+# macOS (pf)
+echo "block in proto tcp to port 8080" | sudo pfctl -f -
+
+# Windows Firewall
+New-NetFirewallRule -DisplayName "Block Mailpilot External" `
+  -Direction Inbound -LocalPort 8080 -Protocol TCP -Action Block
+```
+
+### Allow Specific IP
+
+```bash
+# Allow from 192.168.1.100
+sudo iptables -A INPUT -p tcp --dport 8080 -s 192.168.1.100 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 8080 -j DROP
+```
+
+## Monitoring & Health Checks
+
+### Health Endpoint
+
+```bash
+curl http://localhost:8080/health
+```
+
+Response:
+```json
+{
+  "status": "healthy",
+  "uptime": 86400,
+  "accounts": {
+    "personal": "connected",
+    "work": "connected"
+  },
+  "database": "ok"
+}
+```
+
+### Prometheus Metrics
+
+```bash
+curl http://localhost:8080/metrics
+```
+
+Response:
+```
+# HELP mailpilot_emails_processed_total Total emails processed
+# TYPE mailpilot_emails_processed_total counter
+mailpilot_emails_processed_total{account="personal"} 1234
+
+# HELP mailpilot_classification_duration_seconds Classification duration
+# TYPE mailpilot_classification_duration_seconds histogram
+mailpilot_classification_duration_seconds_bucket{le="0.5"} 100
+```
+
+## Examples
+
+### Minimal Dashboard
+
+```yaml
+server:
+  port: 8080
+
+dashboard:
+  enabled: true
+```
+
+### Production Setup
+
+```yaml
+server:
+  port: 8080
+  auth_token: ${AUTH_TOKEN}
+
+dashboard:
+  enabled: true
+  session_secret: ${SESSION_SECRET}
+  session_ttl: 24h
+  api_keys:
+    - name: monitoring
+      key: ${MONITORING_KEY}
+      permissions: [read:stats, read:activity, read:logs]
+
+    - name: automation
+      key: ${AUTOMATION_KEY}
+      permissions: [read:*, write:stats]
+```
+
+### Development Setup
+
+```yaml
+server:
+  port: 3000  # Different port to avoid conflicts
+
+dashboard:
+  enabled: true
+  session_ttl: 7d  # Long session for dev convenience
+```
+
+### Disabled Dashboard
+
+```yaml
+dashboard:
+  enabled: false
+```
+
+Access only via API.
+
+## Troubleshooting
+
+### Port Already in Use
+
+**Error**: `EADDRINUSE: address already in use :::8080`
+
+**Solutions:**
+1. Change port in config
+2. Kill process using the port:
+   ```bash
+   # Find process
+   lsof -i :8080
+
+   # Kill it
+   kill -9 <PID>
+   ```
+
+### Can't Access Dashboard
+
+**Causes:**
+1. Firewall blocking port
+2. Dashboard disabled
+3. Wrong URL
+
+**Solutions:**
+- Check firewall rules
+- Verify `dashboard.enabled: true`
+- Try `http://localhost:8080` and `http://127.0.0.1:8080`
+
+### API Key Not Working
+
+**Causes:**
+1. Wrong permission
+2. Typo in key
+3. Missing `Bearer` prefix
+
+**Solutions:**
+```bash
+# Correct format
+curl -H "Authorization: Bearer mp_your_key_here" ...
+
+# Not this
+curl -H "Authorization: mp_your_key_here" ...
+```
+
+## Next Steps
+
+- [Configure email accounts →](/docs/configuration/accounts)
+- [Set up LLM providers →](/docs/configuration/llm)
+- [View dashboard features →](/docs/features/dashboard)
