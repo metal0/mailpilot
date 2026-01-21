@@ -1154,7 +1154,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         const tlsProbe = await probeTlsCertificate(body.host, body.port || 993);
 
         // Log probe result for debugging
-        log.info("TLS probe result", {
+        logger.info("TLS probe result", {
           success: tlsProbe.success,
           hasCertInfo: !!tlsProbe.certificateInfo,
           error: tlsProbe.error,
@@ -1168,7 +1168,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
             fp.replace(/^sha256:/i, "").toUpperCase() === fingerprint.toUpperCase()
           );
 
-          log.info("Certificate trust check", {
+          logger.info("Certificate trust check", {
             fingerprint,
             isTrusted,
             trustedCount: trustedFingerprints.length,
@@ -1290,7 +1290,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
               }
             }
           } catch (probeError) {
-            log.warn("Failed to probe certificate after self-signed error", { probeError });
+            logger.warn("Failed to probe certificate after self-signed error", { probeError });
           }
         } else if (errorMessage.includes("certificate") || errorMessage.includes("CERT_")) {
           errorCode = "CERTIFICATE_ERROR";

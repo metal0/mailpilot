@@ -209,6 +209,149 @@ describe("IMAP Probing", () => {
         expect(result.errorCode).toBeDefined();
       }, 5000);
     });
+
+    describe("self-signed certificate handling", () => {
+      let mockTlsSocket: any;
+      let tlsConnectSpy: any;
+
+      beforeEach(() => {
+        // Mock TLS socket behavior
+        mockTlsSocket = {
+          on: vi.fn(),
+          destroy: vi.fn(),
+          getPeerCertificate: vi.fn(),
+        };
+        tlsConnectSpy = vi.spyOn(tls, "connect");
+      });
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      it("should retrieve certificate info even when unsafeSocket encounters an error", async () => {
+        // #given - Mock a self-signed cert error followed by successful cert retrieval
+        let socketErrorHandler: any;
+        let unsafeSocketErrorHandler: any;
+
+        tlsConnectSpy.mockImplementation((options: any, callback?: () => void) => {
+          const socket = {
+            on: vi.fn((event: string, handler: any) => {
+              if (event === "error") {
+                if (options.rejectUnauthorized === true) {
+                  // First socket - trigger self-signed error
+                  socketErrorHandler = handler;
+                  setTimeout(() => {
+                    const error = new Error("self-signed certificate") as NodeJS.ErrnoException;
+                    error.code = "DEPTH_ZERO_SELF_SIGNED_CERT";
+                    socketErrorHandler(error);
+                  }, 10);
+                } else {
+                  // Unsafe socket - also has error but has cert
+                  unsafeSocketErrorHandler = handler;
+                  setTimeout(() => {
+                    const error = new Error("self-signed certificate");
+                    unsafeSocketErrorHandler(error);
+                  }, 10);
+                }
+              }
+              return socket;
+            }),
+            destroy: vi.fn(),
+            getPeerCertificate: vi.fn(() => ({
+              fingerprint256: "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99",
+              subject: { CN: "test.example.com", O: "Test Org" },
+              issuer: { CN: "test.example.com", O: "Test Org" },
+              valid_from: "Jan  1 00:00:00 2024 GMT",
+              valid_to: "Dec 31 23:59:59 2025 GMT",
+            })),
+          };
+          if (callback && options.rejectUnauthorized === false) {
+            // Unsafe socket connects
+            setTimeout(callback, 5);
+          }
+          return socket;
+        });
+
+        // #when
+        const result = await probeTlsCertificate("test.example.com", 993, 1000);
+
+        // #then
+        expect(result.success).toBe(false);
+        expect(result.certificateInfo).toBeDefined();
+        expect(result.certificateInfo?.fingerprint256).toBe("AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99");
+        expect(result.certificateInfo?.selfSigned).toBe(true);
+        expect(result.error).toBe("Self-signed certificate");
+        expect(result.errorCode).toBe("DEPTH_ZERO_SELF_SIGNED_CERT");
+      }, 5000);
+
+      it("should handle case where unsafeSocket error occurs before cert retrieval", async () => {
+        // #given - Mock immediate error on unsafeSocket without cert
+        tlsConnectSpy.mockImplementation((options: any) => {
+          const socket = {
+            on: vi.fn((event: string, handler: any) => {
+              if (event === "error") {
+                setTimeout(() => {
+                  const error = new Error("self-signed certificate") as NodeJS.ErrnoException;
+                  error.code = "DEPTH_ZERO_SELF_SIGNED_CERT";
+                  handler(error);
+                }, 10);
+              }
+              return socket;
+            }),
+            destroy: vi.fn(),
+            getPeerCertificate: vi.fn(() => ({})), // Empty cert object
+          };
+          return socket;
+        });
+
+        // #when
+        const result = await probeTlsCertificate("test.example.com", 993, 1000);
+
+        // #then
+        expect(result.success).toBe(false);
+        expect(result.certificateInfo).toBeUndefined();
+        expect(result.errorCode).toBeDefined();
+      }, 5000);
+
+      it("should mark certificate as self-signed when error code indicates it", async () => {
+        // #given - Mock self-signed cert error
+        tlsConnectSpy.mockImplementation((options: any, callback?: () => void) => {
+          const socket = {
+            on: vi.fn((event: string, handler: any) => {
+              if (event === "error") {
+                if (options.rejectUnauthorized === false && callback) {
+                  // Unsafe socket succeeds
+                  setTimeout(callback, 5);
+                } else {
+                  // Initial socket fails with self-signed error
+                  setTimeout(() => {
+                    const error = new Error("self-signed certificate") as NodeJS.ErrnoException;
+                    error.code = "DEPTH_ZERO_SELF_SIGNED_CERT";
+                    handler(error);
+                  }, 10);
+                }
+              }
+              return socket;
+            }),
+            destroy: vi.fn(),
+            getPeerCertificate: vi.fn(() => ({
+              fingerprint256: "12:34:56:78",
+              subject: "test",
+              issuer: "test",
+              valid_from: "Jan  1 00:00:00 2024 GMT",
+              valid_to: "Dec 31 23:59:59 2025 GMT",
+            })),
+          };
+          return socket;
+        });
+
+        // #when
+        const result = await probeTlsCertificate("test.example.com", 993, 1000);
+
+        // #then
+        expect(result.certificateInfo?.selfSigned).toBe(true);
+      }, 5000);
+    });
   });
 });
 
