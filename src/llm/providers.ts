@@ -206,13 +206,13 @@ async function checkStaleProviders(): Promise<void> {
   logger.debug("Checking stale providers", { count: staleProviders.length });
 
   for (const provider of staleProviders) {
-    const healthy = await testConnection(provider, provider.default_model);
-    updateProviderHealth(provider.name, healthy);
+    const result = await testConnection(provider, provider.default_model);
+    updateProviderHealth(provider.name, result.success);
 
-    if (healthy) {
+    if (result.success) {
       logger.debug("Provider health check passed", { provider: provider.name });
     } else {
-      logger.warn("Provider health check failed", { provider: provider.name });
+      logger.warn("Provider health check failed", { provider: provider.name, error: result.error });
     }
   }
 }

@@ -70,10 +70,7 @@ import {
   probeImapPort,
   probeTlsCertificate,
   detectImapProvider,
-  type PortProbeResult,
   type CertificateInfo,
-  type TlsProbeResult,
-  type ImapProviderInfo as ProbeImapProviderInfo,
 } from "../imap/probe.js";
 
 // Helper to build and broadcast current stats to all WebSocket clients
@@ -102,12 +99,7 @@ function broadcastCurrentStats(): void {
   });
 }
 
-interface ImapProviderInfo {
-  name: string;
-  type: "gmail" | "outlook" | "yahoo" | "icloud" | "fastmail" | "generic";
-  requiresOAuth: boolean;
-  oauthSupported: boolean;
-}
+// ImapProviderInfo type - used for IMAP preset results
 
 interface ImapPreset {
   name: string;
@@ -1123,10 +1115,10 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         tls: Object.keys(tlsOptions).length > 0 ? tlsOptions : undefined,
       });
 
-      // Set a timeout for the connection test
-      let timedOut = false;
+      // Set a timeout for the connection test (use object to track state across async boundary)
+      const state = { timedOut: false };
       const timeout = setTimeout(() => {
-        timedOut = true;
+        state.timedOut = true;
         client.close();
       }, 15000);
 
@@ -1163,7 +1155,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         let errorCode = "CONNECTION_FAILED";
         let userFriendlyError = errorMessage;
 
-        if (timedOut) {
+        if (state.timedOut) {
           errorCode = "TIMEOUT";
           userFriendlyError = "Connection timed out after 15 seconds. Check if the host and port are correct and the server is reachable.";
         } else if (errorMessage.includes("self-signed") || errorMessage.includes("SELF_SIGNED")) {
@@ -1281,7 +1273,7 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
         ];
 
         for (const pattern of patterns) {
-          yamlContent = yamlContent.replace(pattern, (match, prefix, value) => {
+          yamlContent = yamlContent.replace(pattern, (match: string, prefix: string, value: string) => {
             // Don't mask if the value is already masked or looks like an env var
             if (value === "********" || value.includes("${") || value.trim() === "") {
               return match;
@@ -1313,7 +1305,8 @@ export function createDashboardRouter(options: DashboardRouterOptions): Hono {
 
     try {
       const body = await c.req.json<{ yaml: string; reload?: boolean }>();
-      let { yaml: yamlContent, reload = true } = body;
+      let yamlContent = body.yaml;
+      const reload = body.reload ?? true;
 
       // Read the original config file to restore masked values
       const originalYaml = readFileSync(configPath, "utf-8");

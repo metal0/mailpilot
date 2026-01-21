@@ -57,16 +57,18 @@ export function probeTlsCertificate(
         const cert = socket?.getPeerCertificate();
         cleanup();
         if (cert && cert.fingerprint256) {
+          const subjectObj = cert.subject as { CN?: string; O?: string } | undefined;
+          const issuerObj = cert.issuer as { CN?: string; O?: string } | undefined;
           resolve({
             success: true,
             certificateInfo: {
               fingerprint256: cert.fingerprint256,
               subject: typeof cert.subject === "string" ? cert.subject :
-                (cert.subject?.CN || cert.subject?.O || "Unknown"),
+                (subjectObj?.CN ?? subjectObj?.O ?? "Unknown"),
               issuer: typeof cert.issuer === "string" ? cert.issuer :
-                (cert.issuer?.CN || cert.issuer?.O || "Unknown"),
-              validFrom: cert.valid_from || "",
-              validTo: cert.valid_to || "",
+                (issuerObj?.CN ?? issuerObj?.O ?? "Unknown"),
+              validFrom: cert.valid_from ?? "",
+              validTo: cert.valid_to ?? "",
               selfSigned: false,
             },
           });
@@ -96,19 +98,21 @@ export function probeTlsCertificate(
               const isSelfSigned = error.code === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
                 error.code === "SELF_SIGNED_CERT_IN_CHAIN" ||
                 error.message.includes("self-signed");
+              const subjectObj = cert.subject as { CN?: string; O?: string } | undefined;
+              const issuerObj = cert.issuer as { CN?: string; O?: string } | undefined;
 
               resolve({
                 success: false,
                 error: isSelfSigned ? "Self-signed certificate" : error.message,
-                errorCode: error.code || "CERT_ERROR",
+                errorCode: error.code ?? "CERT_ERROR",
                 certificateInfo: {
                   fingerprint256: cert.fingerprint256,
                   subject: typeof cert.subject === "string" ? cert.subject :
-                    (cert.subject?.CN || cert.subject?.O || "Unknown"),
+                    (subjectObj?.CN ?? subjectObj?.O ?? "Unknown"),
                   issuer: typeof cert.issuer === "string" ? cert.issuer :
-                    (cert.issuer?.CN || cert.issuer?.O || "Unknown"),
-                  validFrom: cert.valid_from || "",
-                  validTo: cert.valid_to || "",
+                    (issuerObj?.CN ?? issuerObj?.O ?? "Unknown"),
+                  validFrom: cert.valid_from ?? "",
+                  validTo: cert.valid_to ?? "",
                   selfSigned: isSelfSigned,
                 },
               });
@@ -284,28 +288,61 @@ export interface ImapProviderInfo {
   oauthSupported: boolean;
 }
 
-export function detectImapProvider(host: string): ImapProviderInfo {
-  const hostLower = host.toLowerCase();
+/**
+ * Check if hostname matches a domain exactly or is a subdomain of it.
+ * E.g., matchesDomain("mail.me.com", "me.com") returns true,
+ *       matchesDomain("maliciousme.com", "me.com") returns false.
+ */
+function matchesDomain(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
 
-  if (hostLower.includes("gmail") || hostLower.includes("google")) {
+/**
+ * Extract a normalized hostname from a host string.
+ * Handles both plain hostnames and URLs.
+ */
+function normalizeHostname(host: string): string {
+  let hostname = host.toLowerCase().trim();
+
+  // If it looks like a URL, parse it
+  if (hostname.includes("://")) {
+    try {
+      const url = new URL(hostname);
+      hostname = url.hostname;
+    } catch {
+      // If URL parsing fails, continue with original value
+    }
+  }
+
+  // Strip trailing dots (FQDN normalization)
+  hostname = hostname.replace(/\.+$/, "");
+
+  return hostname;
+}
+
+export function detectImapProvider(host: string): ImapProviderInfo {
+  const hostname = normalizeHostname(host);
+
+  // Brand-based matching (safe to use includes for these non-TLD-like strings)
+  if (hostname.includes("gmail") || hostname.includes("google")) {
     return {
       name: "Gmail",
       type: "gmail",
-      requiresOAuth: false, // App passwords work
+      requiresOAuth: false,
       oauthSupported: true,
     };
   }
 
-  if (hostLower.includes("outlook") || hostLower.includes("office365") || hostLower.includes("microsoft")) {
+  if (hostname.includes("outlook") || hostname.includes("office365") || hostname.includes("microsoft")) {
     return {
       name: "Microsoft Outlook",
       type: "outlook",
-      requiresOAuth: false, // App passwords work for personal accounts
+      requiresOAuth: false,
       oauthSupported: true,
     };
   }
 
-  if (hostLower.includes("yahoo")) {
+  if (hostname.includes("yahoo")) {
     return {
       name: "Yahoo Mail",
       type: "yahoo",
@@ -314,7 +351,7 @@ export function detectImapProvider(host: string): ImapProviderInfo {
     };
   }
 
-  if (hostLower.includes("fastmail")) {
+  if (hostname.includes("fastmail")) {
     return {
       name: "Fastmail",
       type: "fastmail",
@@ -323,7 +360,7 @@ export function detectImapProvider(host: string): ImapProviderInfo {
     };
   }
 
-  if (hostLower.includes("zoho")) {
+  if (hostname.includes("zoho")) {
     return {
       name: "Zoho Mail",
       type: "zoho",
@@ -332,7 +369,12 @@ export function detectImapProvider(host: string): ImapProviderInfo {
     };
   }
 
-  if (hostLower.includes("icloud") || hostLower.includes("apple") || hostLower.includes("me.com")) {
+  // Domain-based matching (use proper domain suffix checking for actual domains)
+  if (hostname.includes("icloud") ||
+      hostname.includes("apple") ||
+      matchesDomain(hostname, "me.com") ||
+      matchesDomain(hostname, "icloud.com") ||
+      matchesDomain(hostname, "mac.com")) {
     return {
       name: "iCloud Mail",
       type: "icloud",
