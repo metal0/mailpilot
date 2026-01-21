@@ -9,6 +9,15 @@ import {
   type TlsProbeResult,
 } from "../../src/imap/probe.js";
 
+// Mock TLS module for certificate testing
+vi.mock("node:tls", async () => {
+  const actual = await vi.importActual<typeof tls>("node:tls");
+  return {
+    ...actual,
+    connect: vi.fn(),
+  };
+});
+
 describe("IMAP Probing", () => {
   describe("detectImapProvider", () => {
     describe("Gmail detection", () => {
@@ -212,7 +221,6 @@ describe("IMAP Probing", () => {
 
     describe("self-signed certificate handling", () => {
       let mockTlsSocket: any;
-      let tlsConnectSpy: any;
 
       beforeEach(() => {
         // Mock TLS socket behavior
@@ -221,11 +229,12 @@ describe("IMAP Probing", () => {
           destroy: vi.fn(),
           getPeerCertificate: vi.fn(),
         };
-        tlsConnectSpy = vi.spyOn(tls, "connect");
+        // Reset the mock before each test
+        vi.mocked(tls.connect).mockReset();
       });
 
       afterEach(() => {
-        vi.restoreAllMocks();
+        vi.clearAllMocks();
       });
 
       it("should retrieve certificate info even when unsafeSocket encounters an error", async () => {
@@ -233,7 +242,7 @@ describe("IMAP Probing", () => {
         let socketErrorHandler: any;
         let unsafeSocketErrorHandler: any;
 
-        tlsConnectSpy.mockImplementation((options: any, callback?: () => void) => {
+        vi.mocked(tls.connect).mockImplementation((options: any, callback?: () => void) => {
           const socket = {
             on: vi.fn((event: string, handler: any) => {
               if (event === "error") {
@@ -286,7 +295,7 @@ describe("IMAP Probing", () => {
 
       it("should handle case where unsafeSocket error occurs before cert retrieval", async () => {
         // #given - Mock immediate error on unsafeSocket without cert
-        tlsConnectSpy.mockImplementation((options: any) => {
+        vi.mocked(tls.connect).mockImplementation((options: any) => {
           const socket = {
             on: vi.fn((event: string, handler: any) => {
               if (event === "error") {
@@ -315,7 +324,7 @@ describe("IMAP Probing", () => {
 
       it("should mark certificate as self-signed when error code indicates it", async () => {
         // #given - Mock self-signed cert error
-        tlsConnectSpy.mockImplementation((options: any, callback?: () => void) => {
+        vi.mocked(tls.connect).mockImplementation((options: any, callback?: () => void) => {
           const socket = {
             on: vi.fn((event: string, handler: any) => {
               if (event === "error") {
