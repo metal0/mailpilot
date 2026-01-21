@@ -6,10 +6,13 @@ import type { TableOfContents } from 'fumadocs-core/server';
 
 const mdxSource = createMDXSource(docs, meta);
 
+// Handle both function and array API for compatibility
+const files = typeof mdxSource.files === 'function' ? mdxSource.files() : mdxSource.files;
+
 export const source = loader({
   baseUrl: '/docs',
   source: {
-    files: mdxSource.files(),
+    files,
   },
 });
 
