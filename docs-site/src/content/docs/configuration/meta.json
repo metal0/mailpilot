@@ -1,0 +1,16 @@
+{
+  "title": "Configuration",
+  "pages": [
+    "index",
+    "global",
+    "server",
+    "accounts",
+    "llm",
+    "folders",
+    "prompts-guide",
+    "folder-modes",
+    "notifications",
+    "attachments",
+    "antivirus"
+  ]
+}
