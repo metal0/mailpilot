@@ -20,7 +20,7 @@ import YAML from 'yaml';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PROJECT_ROOT = path.resolve(__dirname, '../../../..');
+const PROJECT_ROOT = path.resolve(__dirname, '../../..');
 const ROUTES_DIR = path.join(PROJECT_ROOT, 'src/server');
 const OUTPUT_FILE = path.join(__dirname, '../../public/openapi.json');
 

@@ -1,5 +1,6 @@
 {
   "title": "LLM Providers",
+  "icon": "Brain",
   "pages": [
     "index",
     "openai",
