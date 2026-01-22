@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { DocsPage, DocsBody } from 'fumadocs-ui/page';
 import { notFound } from 'next/navigation';
 import defaultMdxComponents from 'fumadocs-ui/mdx';
+import { Step, Steps } from 'fumadocs-ui/components/steps';
 import { SetupWizard } from '@/components/SetupWizard';
 import { ConfigSandbox } from '@/components/ConfigSandbox';
 import { MatrixChatWidget } from '@/components/MatrixChatWidget';
@@ -21,7 +22,7 @@ export default async function Page(props: {
   return (
     <DocsPage toc={data.toc} full={data.full}>
       <DocsBody>
-        <MDX components={{ ...defaultMdxComponents, SetupWizard, ConfigSandbox, MatrixChatWidget }} />
+        <MDX components={{ ...defaultMdxComponents, Step, Steps, SetupWizard, ConfigSandbox, MatrixChatWidget }} />
       </DocsBody>
     </DocsPage>
   );
