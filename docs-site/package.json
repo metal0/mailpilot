@@ -22,7 +22,7 @@
     "fumadocs-core": "^15.4.0",
     "fumadocs-ui": "^15.4.0",
     "fumadocs-mdx": "^11.5.0",
-    "lucide-react": "^0.469.0",
+    "lucide-react": "^0.562.0",
     "yaml": "^2.8.0",
     "zod": "^3.22.0",
     "sharp": "^0.33.0",
