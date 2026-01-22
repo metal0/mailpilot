@@ -5,6 +5,8 @@ import type { ReactNode } from 'react';
 
 const inter = Inter({ subsets: ['latin'] });
 
+const basePath = process.env.VERCEL ? '' : (process.env.NODE_ENV === 'production' ? '/mailpilot' : '');
+
 export default function Layout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={inter.className} suppressHydrationWarning>
@@ -14,6 +16,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             enabled: true,
             options: {
               type: 'static',
+              api: `${basePath}/api/search`,
             },
           }}
         >
