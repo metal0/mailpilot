@@ -51,7 +51,7 @@
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.6.0",
     "cookie": "^1.0.3",
-    "hono": "^4.11.4",
+    "hono": "^4.11.7",
     "imapflow": "^1.2.6",
     "mailparser": "^3.9.1",
     "pdfjs-dist": "^5.4.530",
